@@ -1,0 +1,118 @@
+<!doctype html>
+<!--
+  Impressum & Datenschutz — Pinnwand (Standalone-Vorlage).
+  HINWEIS für Betreiber/Forker: Die Betreiber-/Kontakt-Angaben sind Platzhalter
+  ([…]). Vor der Veröffentlichung mit den eigenen, real erforderlichen Angaben
+  füllen. Es werden bewusst KEINE personenbezogenen Daten hartcodiert
+  (Sage-Protokol-Konvention: keine PII im Code).
+-->
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Impressum &amp; Datenschutz — Pinnwand</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; max-width: 820px; margin: 40px auto;
+      padding: 20px; line-height: 1.6; color: #e6edf3; background: #0b1116; }
+    a { color: #5dd6a0; }
+    h1, h2, h3 { color: #f3efe6; }
+    h2 { margin-top: 1.8em; }
+    .section { margin-bottom: 32px; }
+    .back { display: inline-block; margin-bottom: 1.4rem; color: #8b98a8; text-decoration: none; }
+    .back:hover { color: #5dd6a0; }
+    code { background: rgba(255,255,255,0.08); padding: 0.1em 0.35em; border-radius: 4px; }
+    .placeholder { color: #e0a24a; }
+  </style>
+</head>
+<body>
+  <a class="back" href="./index.html">← zurück zur Pinnwand</a>
+  <h1>Impressum &amp; Datenschutz</h1>
+
+  <div class="section">
+    <h2>Impressum</h2>
+    <p>
+      Angaben gemäß § 5 DDG (Digitale-Dienste-Gesetz) / § 18 Abs. 2 MStV:<br>
+      Klaus Nitzsche<br>
+      Märchenweg 14, 21077 Hamburg, Deutschland<br>
+      Kontakt: <a href="mailto:klaus-nitzsche@t-online.de">klaus-nitzsche@t-online.de</a>
+    </p>
+    <p><strong>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV:</strong> Klaus Nitzsche (Anschrift wie oben).</p>
+    <p>
+      <em>Hinweis für Forker:</em> Wer diese Pinnwand kopiert und selbst
+      veröffentlicht, ersetzt die obigen Betreiber-/Kontakt-Angaben durch die
+      eigenen, real erforderlichen Angaben (Impressumspflicht je nach Land,
+      z. B. § 5 DDG / § 18 MStV in Deutschland).
+    </p>
+  </div>
+
+  <div class="section">
+    <h2>Datenschutz</h2>
+    <p>
+      <strong>Verantwortlicher</strong> im Sinne der DSGVO: Klaus Nitzsche,
+      Märchenweg 14, 21077 Hamburg, Deutschland —
+      <a href="mailto:klaus-nitzsche@t-online.de">klaus-nitzsche@t-online.de</a>.
+    </p>
+    <p>
+      Die Pinnwand ist eine <strong>server-lose</strong> Anwendung: kein eigener
+      Anwendungs-Server, kein Nutzerkonto, keine Analyse- oder Tracking-Software.
+      Es werden keine personenbezogenen Daten an den Betreiber übertragen.
+    </p>
+
+    <h3>Hosting</h3>
+    <p>
+      Diese Seite wird über <strong>GitHub Pages</strong> (GitHub Inc.)
+      ausgeliefert. Beim Aufruf werden technisch notwendige Zugriffsdaten
+      (z. B. IP-Adresse, Browser-Angaben) an GitHub übertragen; es gelten deren
+      Datenschutzbestimmungen.
+    </p>
+
+    <h3>Was lokal im Browser bleibt</h3>
+    <ul>
+      <li>
+        <strong>Deine Identität</strong> (ein Schlüsselpaar = deine „Spore") liegt
+        in <code>localStorage</code> — nur auf deinem Gerät. Daraus wird dein
+        öffentlicher Kurz-Name auf der Pinnwand gebildet.
+      </li>
+      <li>
+        Ein optionaler <strong>API-Schlüssel</strong> für den Cloud-KI-Richter wird
+        nur mit deinem Häkchen „auf diesem Gerät merken" lokal gespeichert
+        (<code>localStorage</code>, Klartext, nur dein Gerät); ohne Häkchen bleibt
+        er nur im Speicher. Er verlässt dein Gerät <strong>nur</strong> Richtung des
+        gewählten Anbieters — nie an den Betreiber, nie an Dritte.
+      </li>
+    </ul>
+
+    <h3>Öffentlichkeit der Pinnwand (wichtig)</h3>
+    <p>
+      Was du „aufs Brett legst", geht als signierte Notiz an öffentliche
+      <strong>Nostr-Relays</strong>. <strong>Diese Zettel sind öffentlich</strong> —
+      jeder, der diese Relays liest, kann sie sehen. Keine garantierte
+      Haltbarkeit, kein Spam-Schutz. Schreibe nichts Privates aufs Brett.
+    </p>
+
+    <h3>Verbindungen zu Dritten (nur auf deine Aktion)</h3>
+    <ul>
+      <li><strong>Nostr-Relays:</strong> das geborgte „dumme Brett" als Medium —
+        trägt deine signierten Zettel weiter.</li>
+      <li><strong>Embedding-Modell:</strong> beim Einschalten der Bedeutungs-Sortierung
+        wird ein KI-Modell einmalig von einem öffentlichen CDN geladen.</li>
+      <li><strong>KI-Richter:</strong> entweder lokal im Browser (WebLLM, gratis, lädt
+        das Modell einmalig) oder Cloud (Claude, eigener Schlüssel) — nur, wenn du es
+        bewusst auslöst.</li>
+    </ul>
+
+    <p>
+      Es findet <strong>keine eigenständige Datensammlung</strong> statt. Jede
+      Außenverbindung ist benannt, sichtbar und durch dich ausgelöst.
+    </p>
+  </div>
+
+  <div class="section">
+    <h2>Urheberrecht</h2>
+    <p>
+      Pinnwand — Teil des SBKIM-Protokolls. Quelltext und Aufbau:
+      <a href="https://github.com/lausiklauskn-png/Sage-Protokol">Sage·Protokol</a>.
+    </p>
+  </div>
+</body>
+</html>

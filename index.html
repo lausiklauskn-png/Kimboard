@@ -1,0 +1,1371 @@
+<!DOCTYPE html>
+<!--
+  ╔═════════════════════════════════════════════════════════════════╗
+  ║  Kimboard — semantische Pinnwand + SBKIM-Endknoten              ║
+  ║  eigenständige, installierbare PWA · v0.1 · 2026                 ║
+  ║  Server-los · keine Tracker · privater Schlüssel bleibt lokal.   ║
+  ║  https://github.com/lausiklauskn-png/Kimboard                    ║
+  ╚═════════════════════════════════════════════════════════════════╝
+  Kopiert aus Sage·Protokol/pinnwand + Endknoten-Stack nach dem Kim-Bell-
+  Muster (Modul 01/02/04/05/05b/07/15/16/17/23 byte-1:1, Drift-Guard im Test).
+-->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kimboard — semantische Pinnwand (SBKIM-Endknoten)</title>
+<meta name="description" content="Kimboard — semantische Pinnwand: Frage→Antwort über ein geborgtes dummes Brett (Nostr), nach Bedeutung sortiert. Server-los, ein SBKIM-Endknoten.">
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#0e1620">
+<link rel="icon" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Kimboard">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  :root {
+    --bg: #0b1116; --panel: #141c26; --panel2: #1c2734;
+    --ink: #e8eef4; --dim: #8b98a8; --line: #283543;
+    --accent: #5dd6a0; --warn: #e0a24a; --bad: #e06a5a;
+    --mine: #6aa6e0; --q: #c9a0e0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; color: var(--ink);
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    /* Moderner, ruhiger Verlauf statt flachem Schwarz — organisch, nicht steampunk. */
+    background:
+      radial-gradient(900px 500px at 18% -8%, rgba(93,214,160,0.10), transparent 60%),
+      radial-gradient(800px 500px at 90% 0%, rgba(106,166,224,0.10), transparent 55%),
+      var(--bg);
+    background-attachment: fixed;
+    min-height: 100vh;
+    padding: max(16px, env(safe-area-inset-top)) 16px 28px;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; }
+  .topbar { display: flex; align-items: center; gap: 12px; margin: 4px 0 14px; }
+  .logo {
+    width: 64px; height: 64px; border-radius: 16px; flex: 0 0 auto;
+    object-fit: cover; display: block;
+    box-shadow: 0 0 0 1px var(--line), 0 6px 20px rgba(93,214,160,0.18);
+  }
+  h1 { font-size: 1.3rem; margin: 0; letter-spacing: 0.2px; font-weight: 650; }
+  .sub { color: var(--dim); font-size: 0.85rem; margin: 0 0 16px; }
+  .sub a, a.link { color: var(--mine); text-decoration: none; }
+  .sub a:hover, a.link:hover { text-decoration: underline; }
+  .card {
+    background: linear-gradient(180deg, rgba(255,255,255,0.025), transparent), var(--panel);
+    border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px;
+    margin-bottom: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  .label { color: var(--dim); font-size: 0.8rem; }
+  code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 999px; padding: 3px 10px; font-size: 0.8rem;
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); flex: 0 0 auto; }
+  .dot.up { background: var(--accent); }
+  .dot.down { background: var(--bad); }
+  .dot.try { background: var(--warn); }
+  textarea {
+    width: 100%; min-height: 56px; resize: vertical;
+    background: var(--panel2); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 8px; padding: 10px; font: inherit;
+  }
+  button {
+    background: var(--accent); color: #08130d; border: 0;
+    border-radius: 8px; padding: 9px 15px; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button.ghost { background: transparent; color: var(--mine); border: 1px solid var(--line); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  #selftest.ok { color: var(--accent); }
+  #selftest.fail { color: var(--bad); }
+  #threads { list-style: none; margin: 0; padding: 0; }
+  .q-card {
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 12px; background: var(--panel2);
+  }
+  .q-head { font-size: 0.78rem; color: var(--dim); margin-bottom: 3px; }
+  .q-head .who { color: var(--q); }
+  .q-card.mine .q-head .who::after { content: " (ich)"; color: var(--accent); }
+  .q-text { white-space: pre-wrap; word-break: break-word; font-weight: 600; }
+  .answers { list-style: none; margin: 10px 0 0; padding: 0 0 0 12px;
+    border-left: 2px solid var(--line); }
+  .answers li { padding: 7px 0; }
+  .a-head { font-size: 0.74rem; color: var(--dim); margin-bottom: 2px; }
+  .a-head .who { color: var(--mine); }
+  .answers li.mine .a-head .who::after { content: " (ich)"; color: var(--accent); }
+  .a-text { white-space: pre-wrap; word-break: break-word; }
+  .a-score {
+    display: inline-block; margin-left: 6px; padding: 1px 7px;
+    border-radius: 999px; font-size: 0.72rem; font-weight: 600;
+    background: rgba(93,214,160,0.16); color: var(--accent);
+  }
+  .a-judge {
+    display: inline-block; margin-left: 6px; padding: 1px 7px;
+    border-radius: 999px; font-size: 0.72rem; font-weight: 600;
+    background: rgba(201,160,224,0.18); color: var(--q);
+  }
+  .a-grund { font-size: 0.74rem; color: var(--dim); margin-top: 2px; font-style: italic; }
+  .sort-ctl { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center;
+    margin-bottom: 10px; }
+  .sort-ctl button { padding: 7px 13px; font-size: 0.85rem; }
+  .sort-ctl select, .sort-ctl input {
+    background: var(--panel2); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 9px; font: inherit; font-size: 0.85rem;
+  }
+  .sort-ctl input { min-width: 200px; }
+  .sort-ctl .status { font-size: 0.78rem; color: var(--dim); }
+  .status { font-size: 0.78rem; color: var(--dim); }
+  .status.on { color: var(--accent); }
+  .status.err { color: var(--bad); }
+  .judge-ctl { border-top: 1px dashed var(--line); padding-top: 10px; }
+  .answer-form { margin-top: 8px; display: flex; gap: 8px; align-items: flex-end; }
+  .answer-form textarea { min-height: 38px; }
+  .empty { color: var(--dim); font-style: italic; }
+  footer {
+    color: var(--dim); font-size: 0.78rem; line-height: 1.5;
+    border-top: 1px solid var(--line); margin-top: 18px; padding-top: 12px;
+  }
+  footer b { color: var(--warn); }
+
+  /* ===== Moderner Feinschliff (kombiniert aus den Mockups, ohne Messenger-Optik) ===== */
+  /* Holografischer, langsam wandernder Hintergrund-Schleier. */
+  body::before {
+    content: ""; position: fixed; inset: -30vh -30vw; z-index: -1; pointer-events: none;
+    background:
+      radial-gradient(38vw 38vw at 20% 18%, rgba(93,214,160,0.16), transparent 60%),
+      radial-gradient(34vw 34vw at 82% 28%, rgba(106,166,224,0.15), transparent 60%),
+      radial-gradient(30vw 30vw at 60% 88%, rgba(167,139,250,0.12), transparent 60%);
+    filter: blur(8px); opacity: 0.9;
+    animation: aurora 26s ease-in-out infinite alternate;
+  }
+  @keyframes aurora {
+    0%   { transform: translate3d(-3%, -2%, 0) rotate(0deg) scale(1.05); }
+    50%  { transform: translate3d(3%, 2%, 0) rotate(8deg) scale(1.12); }
+    100% { transform: translate3d(-2%, 3%, 0) rotate(-6deg) scale(1.06); }
+  }
+  .logo { animation: pulse 4.5s ease-in-out infinite; }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 0 1px var(--line), 0 6px 20px rgba(93,214,160,0.18); }
+    50%     { box-shadow: 0 0 0 1px rgba(93,214,160,0.4), 0 8px 30px rgba(93,214,160,0.38); }
+  }
+  /* Karten: Glas + Hover-Lift. */
+  .card { transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; backdrop-filter: blur(6px); }
+  .card:hover { border-color: rgba(93,214,160,0.28); box-shadow: 0 12px 34px rgba(0,0,0,0.28); }
+  /* Frage-Karte: leuchtender „?"-Knoten links + Akzent-Kante. */
+  .q-card { position: relative; padding-left: 44px; overflow: hidden; }
+  .q-card::before {
+    content: "?"; position: absolute; left: 12px; top: 12px;
+    width: 22px; height: 22px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.78rem; font-weight: 700; color: #08130d;
+    background: radial-gradient(circle at 40% 35%, #8af0c2, #3f9e7e);
+    box-shadow: 0 0 10px rgba(93,214,160,0.5);
+  }
+  .q-card::after {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: linear-gradient(180deg, var(--accent), transparent);
+    opacity: 0.7;
+  }
+  /* Identität als Netz-Knoten-Punkt (KEIN Gesichts-Avatar → nicht WhatsApp). */
+  .who::before {
+    content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    margin-right: 6px; vertical-align: middle;
+    background: currentColor; box-shadow: 0 0 6px currentColor;
+  }
+  /* Lebendiger Haupt-Button (Frage stellen / Antworten primär). */
+  #post, button:not(.ghost) {
+    background: linear-gradient(135deg, #6ee3ad, #3f9e7e);
+    box-shadow: 0 4px 16px rgba(93,214,160,0.28);
+    transition: transform .12s ease, box-shadow .18s ease, filter .18s ease;
+  }
+  #post:hover, button:not(.ghost):hover { filter: brightness(1.06); box-shadow: 0 6px 22px rgba(93,214,160,0.42); }
+  #post:active, button:not(.ghost):active { transform: translateY(1px); }
+  button.ghost { transition: border-color .15s ease, color .15s ease, background .15s ease; }
+  button.ghost:hover { border-color: var(--accent); color: var(--accent); background: rgba(93,214,160,0.06); }
+  /* Score-Pillen farb-gestuft (hoch=grün, mittel=amber, niedrig=rot). */
+  .a-score, .a-judge { transition: background .2s ease, color .2s ease; }
+  .a-score.hi, .a-judge.hi { background: rgba(93,214,160,0.18); color: var(--accent); }
+  .a-score.mid, .a-judge.mid { background: rgba(224,162,74,0.18); color: var(--warn); }
+  .a-score.lo, .a-judge.lo { background: rgba(224,106,90,0.18); color: var(--bad); }
+  /* Antwort-Karten ruhig hervorheben (Pinnwand-Gefühl, keine Chat-Blasen). */
+  .answers li { padding-left: 2px; }
+  textarea:focus, select:focus, input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(93,214,160,0.12); }
+  /* Bewegung respektiert Nutzer-Wunsch nach Ruhe. */
+  @media (prefers-reduced-motion: reduce) {
+    body::before, .logo { animation: none; }
+  }
+  /* Werkzeug-Knöpfe (Topbar + leeren). */
+  .toolbar { display: flex; gap: 6px; align-items: center; }
+  .tbtn {
+    background: var(--panel2); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 10px; padding: 7px 10px; font-size: 0.9rem; line-height: 1;
+    cursor: pointer; transition: border-color .15s ease, background .15s ease, transform .1s ease;
+  }
+  .tbtn:hover { border-color: var(--accent); background: rgba(93,214,160,0.08); }
+  .tbtn:active { transform: translateY(1px); }
+  .tbtn.mic-on { color: #fff; border-color: var(--bad); background: rgba(224,106,90,0.25); animation: micpulse 1s ease-in-out infinite; }
+  @keyframes micpulse { 0%,100% { box-shadow: 0 0 0 0 rgba(224,106,90,0.5); } 50% { box-shadow: 0 0 0 6px rgba(224,106,90,0); } }
+  #board-clear { font-size: 0.78rem; padding: 5px 9px; }
+  /* Löschen-Kreuz pro Frage. */
+  .q-del {
+    position: absolute; right: 10px; top: 10px; width: 24px; height: 24px;
+    border-radius: 8px; border: 1px solid var(--line); background: var(--panel2);
+    color: var(--dim); font-size: 0.85rem; line-height: 1; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: color .15s ease, border-color .15s ease;
+  }
+  .q-del:hover { color: var(--bad); border-color: var(--bad); }
+  /* Text-Vergrößerung (per data-scale am <html>). */
+  html[data-scale="1"] body { font-size: 16px; }
+  html[data-scale="2"] body { font-size: 18px; }
+  html[data-scale="3"] body { font-size: 20.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <img class="logo" src="./icon-512.png" alt="Kimboard" width="512" height="512">
+    <div style="flex:1;">
+      <h1>Kimboard</h1>
+      <div class="sub" style="margin:0;">Impulse · Verbindungen · Erkenntnisse</div>
+    </div>
+    <div class="toolbar">
+      <button id="tb-zoom" class="tbtn" title="Text vergrößern / verkleinern">🔍</button>
+      <button id="tb-full" class="tbtn" title="Vollbild / Vollansicht">⛶</button>
+      <button id="tb-reload" class="tbtn" title="Neu laden (Cache leeren)">🔄</button>
+    </div>
+  </div>
+  <p class="sub">Eine <b>Frage</b> aufs geborgte, dumme Brett (Nostr) legen und
+    <b>Antworten</b> einsammeln — server-los, geräteübergreifend, nach
+    <b>Bedeutung</b> sortiert. ·
+    <a class="link" href="./impressum.html">Impressum &amp; Datenschutz</a></p>
+
+  <div class="card">
+    <div class="row" style="justify-content: space-between;">
+      <span class="pill">Meine Spore: <code id="me">…</code></span>
+      <span class="pill">Krypto-Selbsttest: <span id="selftest">läuft…</span></span>
+    </div>
+    <div class="row" id="relays" style="margin-top: 10px;"></div>
+    <div class="row" style="margin-top: 10px; gap: 8px;">
+      <input id="boardkey" type="password" placeholder="🔒 Privates Brett: Passwort (leer = offen)" autocomplete="off" style="flex:1; min-width:200px;">
+      <button id="boardkey-set" class="tbtn">Setzen</button>
+    </div>
+    <div class="status" id="boardkey-status" style="margin-top:4px;">Offenes Brett — alle Zettel sind öffentlich lesbar.</div>
+  </div>
+
+  <div class="card">
+    <div class="label" style="margin-bottom: 6px;">Neue Frage aufs Brett legen</div>
+    <textarea id="qmsg" placeholder="z. B. Was ist ein leichtes Sommeressen?" maxlength="280"></textarea>
+    <div class="row" style="margin-top: 8px; justify-content: space-between;">
+      <span class="label" id="sendhint">&nbsp;</span>
+      <span style="display:flex; gap:8px; align-items:center;">
+        <button id="mic" class="tbtn" title="Frage einsprechen">🎤</button>
+        <button id="ocrbtn" class="tbtn" title="Foto/Handschrift → Frage (Mistral OCR, EU)">📷</button>
+        <button id="ask" disabled>Frage stellen</button></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content: space-between; margin-bottom: 8px;">
+      <span class="label">Fragen &amp; Antworten (Tag <code>#sbkim-frage-antwort-test</code>)</span>
+      <button id="board-clear" class="tbtn" title="Angezeigte Suchen ausblenden (lokal, bleibt nach Neuladen weg)">🧹 leeren</button>
+    </div>
+    <div class="sort-ctl">
+      <button id="semantic" class="ghost">🧠 Antworten nach Bedeutung sortieren</button>
+      <span class="status" id="semstatus">aus — sortiert nach Ankunft (Bedeutungs-Rangfolge lädt Modell ~30&nbsp;MB beim Einschalten)</span>
+    </div>
+    <div class="sort-ctl judge-ctl">
+      <select id="judgeprov">
+        <option value="">⚖️ KI-Richter: aus (gratis bleibt Voreinstellung)</option>
+        <option value="claude">Cloud: Claude (Anthropic) — eigener Schlüssel</option>
+        <option value="gemini">Cloud: Gemini (Google) — Gratis-Stufe</option>
+        <option value="openrouter">Cloud: OpenRouter — viele Modelle, auch gratis</option>
+        <option value="webllm">frei: KI im Browser (WebLLM) — kein Cent, lädt Modell</option>
+      </select>
+      <input id="judgekey" type="password" placeholder="API-Schlüssel" style="display:none;" autocomplete="off">
+      <a id="judgekeylink" href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" style="display:none; color:#6aa6e0; font-size:0.8rem;">🔑 Schlüssel erstellen ↗</a>
+      <label id="judgeremember-l" style="display:none; font-size:0.8rem; color:var(--dim);">
+        <input type="checkbox" id="judgeremember" checked> auf diesem Gerät merken
+      </label>
+      <select id="orModel" style="display:none;" title="OpenRouter-Modell (gratis-Modelle enden auf :free)">
+        <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (gratis)</option>
+        <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash (gratis)</option>
+        <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek V3 (gratis)</option>
+      </select>
+      <button id="orFree" class="tbtn" style="display:none;" title="Aktuelle Gratis-Modelle von OpenRouter laden">🔄 Gratis-Modelle laden</button>
+      <select id="webllmmodel" style="display:none;">
+        <option value="Qwen2.5-0.5B-Instruct-q4f16_1-MLC">Trabant — Qwen2.5 0.5B (winzig, fast überall)</option>
+        <option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC" selected>VW Golf — Qwen2.5 1.5B (sichere Mittelklasse)</option>
+        <option value="Qwen2.5-3B-Instruct-q4f16_1-MLC">Großer VW — Qwen2.5 3B (am Limit alter Geräte)</option>
+        <option value="Qwen2.5-7B-Instruct-q4f16_1-MLC">Mercedes — Qwen2.5 7B (nur starke Rechner/PC)</option>
+        <option value="Llama-3.1-8B-Instruct-q4f32_1-MLC">Mercedes — Llama 3.1 8B (nur starke Rechner/PC)</option>
+      </select>
+      <button id="webllmload" class="ghost" style="display:none;">⬇️ Modell laden</button>
+      <button id="webllm-clear" class="tbtn" title="Heruntergeladene KI-Modelle vom Gerät löschen (Speicher freigeben)">🗑 KI-Modelle löschen</button>
+      <button id="judgerun" class="ghost" style="display:none;">⚖️ Richter anwenden</button>
+      <span class="status" id="judgestatus"></span>
+    </div>
+    <ul id="threads"><li class="empty">Noch keine Frage empfangen…</li></ul>
+  </div>
+
+  <footer>
+    <b>Ehrlich:</b> Beweist, dass <i>Frage→Antwort</i> über das geborgte Brett
+    läuft (NIP-01-Reply via <code>e</code>-Tag). Immer noch <b>öffentlich</b>
+    (jeder Relay-Leser sieht Fragen + Antworten), <b>keine garantierte
+    Haltbarkeit</b>, <b>kein Spam-Schutz</b>. <b>Bedeutungs-Sortierung</b>
+    (Knopf oben) ist <b>optional</b>: erst auf bewusste Nutzer-Aktion lädt das
+    Embedding-Modell (Modul 03, <code>Xenova/multilingual-e5-small</code>) — das
+    ist der <i>einzige</i> Teil, der ein CDN/Internet nutzt (einmalig ~30&nbsp;MB,
+    dann im Browser-Cache); es sortiert nach Nähe zur Frage und filtert nichts
+    weg, fail-soft. Der Score ist ein <b>zentrierter (whitened) Cosinus</b>:
+    der gemeinsame Mittelwert-Vektor wird abgezogen, damit der <i>Inhalt</i>
+    entscheidet und nicht die Hülle (gleiche Sprache/Stil) — Hintergrund:
+    Anisotropie-Befund, <code>docs/LEHRE-EMBEDDING-MATCH-KALIBRIERUNG.md</code>.
+    Hier mit lokal wachsendem Referenz-Schwerpunkt (die netzweite Konstante
+    liefert erst Bau „Modul&nbsp;04 Whitening"). <b>Ehrlich:</b> dieser Cosinus
+    ist eine <b>Rangfolge</b> (was näher dran ist, steht oben) — <i>kein</i>
+    Verwandt-/Unverwandt-Urteil; die Messreihe (LEHRE-Doc) zeigt, dass der
+    gratis Cosinus verwandt von unverwandt nicht zuverlässig trennt. Das echte
+    Urteil liefert der <b>KI-Richter</b> (⚖️), eine zweite, <b>optionale</b>
+    Stufe: er versteht <i>Absicht/Verneinung</i>
+    („alkoholfrei = KEIN Alkohol"), was der Vektor nicht kann. Drei Stufen, keine
+    erzwingt Bezahlung: <b>(1)</b> gratis &amp; überall — lokales Embedding;
+    <b>(2)</b> gratis, gerät-hungrig — KI im Browser (WebLLM, Modell-Wahl
+    Trabant→Mercedes; lädt Bibliothek + Modell einmalig aus dem Netz, dann im
+    Cache; langsamer + nicht ganz so stark wie die Cloud);
+    <b>(3)</b> bezahlt &amp; am stärksten — Cloud mit eigenem Schlüssel. Der
+    Schlüssel wird <b>nur mit Häkchen „auf diesem Gerät merken"</b> lokal
+    gespeichert (<code>localStorage</code>, im Klartext, nur auf diesem Gerät —
+    kein Server, kein Tracker); Häkchen weg = sofort gelöscht. Krypto bleibt
+    lokal vendoriert.
+  </footer>
+</div>
+
+<script src="./modules/03_embedding.js"></script>
+<script src="./modules/24_ocr_eingabe.js"></script>
+<script type="module">
+import { schnorr, utils } from './modules/noble-secp256k1.js';
+
+// ---- Helpers ----
+const $ = (id) => document.getElementById(id);
+const toHex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+const fromHex = (h) => {
+  const a = new Uint8Array(h.length / 2);
+  for (let i = 0; i < a.length; i++) a[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+  return a;
+};
+const short = (hex) => hex.slice(0, 8) + '…' + hex.slice(-4);
+const esc = (s) => s; // textContent wird benutzt — kein HTML-Inject
+async function sha256Hex(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return toHex(new Uint8Array(buf));
+}
+
+const TAG = 'sbkim-frage-antwort-test';
+// Breit gestreute öffentliche Relays (verschiedene Betreiber/Regionen). Wählbar.
+// Fällt eins aus, tragen die anderen weiter — kein Umschalten, alle parallel.
+// Erster Eintrag: Klaus' EIGENES, log-freies, neutrales Toolpoint-Relay
+// (föderiert neben den öffentlichen, steht im Default-Aktiv-Satz). Live seit
+// 2026-06-25, betrieben auf eigenem VPS. Siehe docs/discovery/notiz-toolpoint-relay.md.
+const RELAY_POOL = [
+  'wss://relay.family-projekt.de',
+  'wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.nostr.band',
+  'wss://relay.primal.net', 'wss://relay.snort.social', 'wss://nostr.mom',
+  'wss://offchain.pub', 'wss://relay.mostr.pub',
+];
+const LS_RELAYS = 'sbkim_pinnwand_relays';
+let activeRelays;
+try {
+  const saved = JSON.parse(localStorage.getItem(LS_RELAYS) || 'null');
+  activeRelays = (Array.isArray(saved) && saved.length) ? saved.filter((u) => RELAY_POOL.includes(u)) : null;
+} catch { activeRelays = null; }
+if (!activeRelays || !activeRelays.length) activeRelays = RELAY_POOL.slice(0, 5); // Default: 5 gestreut
+function saveRelays() { try { localStorage.setItem(LS_RELAYS, JSON.stringify(activeRelays)); } catch { /* */ } }
+
+// ---- Identität (gleiche Spore wie der Pinnwand-Test, falls vorhanden) ----
+const LS_KEY = 'sbkim_nostr_test_priv';
+let privHex = localStorage.getItem(LS_KEY);
+if (!privHex || privHex.length !== 64) {
+  privHex = toHex(utils.randomPrivateKey());
+  localStorage.setItem(LS_KEY, privHex);
+}
+const priv = fromHex(privHex);
+const pubHex = toHex(schnorr.getPublicKey(priv));
+$('me').textContent = short(pubHex);
+
+// ---- Krypto-Selbsttest ----
+(async () => {
+  const el = $('selftest');
+  try {
+    const probe = await sha256Hex('sbkim-nostr-fa-selftest');
+    const sig = await schnorr.sign(fromHex(probe), priv);
+    const ok = await schnorr.verify(sig, fromHex(probe), fromHex(pubHex));
+    el.textContent = ok ? 'OK' : 'FAIL';
+    el.className = ok ? 'ok' : 'fail';
+  } catch (e) {
+    el.textContent = 'FAIL (' + e.message + ')';
+    el.className = 'fail';
+  }
+})();
+
+// ---- Event bauen (NIP-01). extraTags z.B. [["e", frageId]] für Antworten ----
+// ---- Privates Brett: Verschlüsselung (gemeinsames Passwort, AES-GCM-256) ----
+// EHRLICH: das Relay sieht dann nur Geheimtext. Wer dasselbe Passwort hat (deine
+// Gruppe), kann lesen; alle anderen sehen Unsinn und überspringen. Fester
+// Gruppen-Salt (Sicherheit kommt aus Passwort-Stärke + AES-256, nicht aus dem
+// Salt). Schlüssel bleibt NUR im Speicher (kein localStorage) — pro Sitzung neu.
+const ENC_PREFIX = 'sbkimenc1:';
+const ENC_SALT = new TextEncoder().encode('sbkim-pinnwand-shared-salt-v1');
+let boardKey = null; // CryptoKey | null (null = offenes Brett)
+const b64 = (buf) => btoa(String.fromCharCode.apply(null, new Uint8Array(buf)));
+const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const isEnc = (s) => typeof s === 'string' && s.startsWith(ENC_PREFIX);
+async function deriveBoardKey(pass) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: ENC_SALT, iterations: 150000, hash: 'SHA-256' },
+    base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function encryptContent(text) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, boardKey, new TextEncoder().encode(text));
+  return ENC_PREFIX + b64(iv) + ':' + b64(ct);
+}
+async function decryptContent(s) {
+  try {
+    const parts = s.split(':'); // sbkimenc1 : iv : ct
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(parts[1]) }, boardKey, unb64(parts[2]));
+    return new TextDecoder().decode(pt);
+  } catch { return null; }
+}
+
+async function buildEvent(content, extraTags = []) {
+  const created_at = Math.floor(Date.now() / 1000);
+  const kind = 1;
+  const tags = [['t', TAG], ...extraTags];
+  let outContent = content;
+  if (boardKey) { outContent = await encryptContent(content); tags.push(['enc', 'sbkim1']); }
+  const id = await sha256Hex(JSON.stringify([0, pubHex, created_at, kind, tags, outContent]));
+  const sig = toHex(await schnorr.sign(fromHex(id), priv));
+  return { id, pubkey: pubHex, created_at, kind, tags, content: outContent, sig };
+}
+// Eine Notiz ist eine ANTWORT, wenn sie ein e-Tag trägt → die referenzierte Frage-id.
+function refOf(ev) {
+  const e = (ev.tags || []).find((t) => t[0] === 'e');
+  return e ? e[1] : null;
+}
+
+// ---- Thread-Anzeige ----
+const seen = new Set();
+const threads = $('threads');           // <ul>
+const qViews = new Map();                // frageId -> { answersUl, answerIds:Set, qEv, qVec, answers:[] }
+const pendingAnswers = new Map();        // frageId -> [ev,...] (Antwort vor Frage angekommen)
+
+// Lokal ausgeblendete Suchen (persistent). EHRLICH: öffentliche Relay-Notizen
+// kann man nicht zuverlässig löschen — hier werden sie lokal weggeblendet,
+// bleiben aber nach Neuladen weg (Liste im localStorage dieses Geräts).
+const LS_HIDDEN = 'sbkim_pinnwand_hidden';
+let hidden = new Set();
+try { hidden = new Set(JSON.parse(localStorage.getItem(LS_HIDDEN) || '[]')); } catch { /* fail-soft */ }
+function saveHidden() { try { localStorage.setItem(LS_HIDDEN, JSON.stringify([...hidden])); } catch { /* */ } }
+function hideQuestion(id, li) {
+  hidden.add(id); saveHidden();
+  if (li && li.parentNode) li.parentNode.removeChild(li);
+  qViews.delete(id);
+  if (!threads.children.length) {
+    const e = document.createElement('li'); e.className = 'empty';
+    e.textContent = 'Brett leer — neue Fragen erscheinen hier.'; threads.appendChild(e);
+  }
+}
+function clearBoard() {
+  for (const id of [...qViews.keys()]) hidden.add(id);
+  saveHidden();
+  threads.innerHTML = '';
+  const e = document.createElement('li'); e.className = 'empty';
+  e.textContent = 'Brett geleert — neue Fragen erscheinen wieder hier.'; threads.appendChild(e);
+  qViews.clear();
+}
+
+function timeStr(ts) { return new Date(ts * 1000).toLocaleTimeString('de-DE'); }
+
+function renderQuestion(ev, relay) {
+  if (hidden.has(ev.id)) return; // lokal ausgeblendete Suchen nicht zeigen
+  const empty = threads.querySelector('.empty');
+  if (empty) empty.remove();
+  const li = document.createElement('li');
+  const card = document.createElement('div');
+  card.className = 'q-card' + (ev.pubkey === pubHex ? ' mine' : '');
+  // Löschen-Kreuz: blendet diese Suche lokal aus (persistent, kein Relay-Eingriff).
+  const del = document.createElement('button');
+  del.className = 'q-del'; del.textContent = '✕';
+  del.title = 'Diese Suche ausblenden (bleibt nach Neuladen weg)';
+  del.addEventListener('click', () => { hideQuestion(ev.id, li); });
+  card.appendChild(del);
+  const head = document.createElement('div');
+  head.className = 'q-head';
+  const who = document.createElement('span');
+  who.className = 'who mono'; who.textContent = short(ev.pubkey);
+  head.appendChild(who);
+  head.append(` · ${timeStr(ev.created_at)} · via ${relay.replace('wss://', '')}`);
+  const text = document.createElement('div');
+  text.className = 'q-text'; text.textContent = ev.content;
+  const answersUl = document.createElement('ul');
+  answersUl.className = 'answers';
+
+  // Antwort-Formular pro Frage
+  const form = document.createElement('div');
+  form.className = 'answer-form';
+  const ta = document.createElement('textarea');
+  ta.placeholder = 'Antwort…'; ta.maxLength = 280;
+  const amic = document.createElement('button');
+  amic.className = 'tbtn'; amic.textContent = '🎤'; amic.title = 'Antwort einsprechen';
+  const btn = document.createElement('button');
+  btn.className = 'ghost'; btn.textContent = 'Antworten';
+  btn.addEventListener('click', async () => {
+    const a = ta.value.trim();
+    if (!a) return;
+    btn.disabled = true;
+    const aev = await buildEvent(a, [['e', ev.id]]);
+    const live = liveSockets();
+    for (const ws of live) ws.send(JSON.stringify(['EVENT', aev]));
+    ta.value = '';
+    dispatch(aev, live[0] ? live[0].url : 'lokal'); // sofort lokal zeigen (entschlüsselt bei privatem Brett)
+    btn.disabled = false;
+  });
+  form.appendChild(ta); form.appendChild(amic); form.appendChild(btn);
+  attachMic(amic, ta, null); // Antwort ebenfalls einsprechbar
+
+  card.appendChild(head); card.appendChild(text);
+  card.appendChild(answersUl); card.appendChild(form);
+  li.appendChild(card);
+  threads.insertBefore(li, threads.firstChild); // neueste Frage oben
+
+  const view = { answersUl, answerIds: new Set(), qEv: ev, qVec: null, answers: [] };
+  qViews.set(ev.id, view);
+  // gepufferte Antworten nachreichen
+  const pend = pendingAnswers.get(ev.id);
+  if (pend) { for (const a of pend) renderAnswer(a.ev, a.relay); pendingAnswers.delete(ev.id); }
+  // Bedeutungs-Sortierung: Frage einbetten + sortieren, falls eingeschaltet.
+  if (semanticOn) embedQuestion(view).then(() => resort(view));
+}
+
+function renderAnswer(ev, relay) {
+  const qid = refOf(ev);
+  const view = qViews.get(qid);
+  if (!view) { // Frage noch nicht da → puffern
+    if (!pendingAnswers.has(qid)) pendingAnswers.set(qid, []);
+    pendingAnswers.get(qid).push({ ev, relay });
+    return;
+  }
+  if (view.answerIds.has(ev.id)) return;
+  view.answerIds.add(ev.id);
+  const li = document.createElement('li');
+  if (ev.pubkey === pubHex) li.className = 'mine';
+  const head = document.createElement('div');
+  head.className = 'a-head';
+  const who = document.createElement('span');
+  who.className = 'who mono'; who.textContent = short(ev.pubkey);
+  head.appendChild(who);
+  head.append(` · ${timeStr(ev.created_at)} · via ${relay.replace('wss://', '')}`);
+  const badge = document.createElement('span');
+  badge.className = 'a-score'; badge.style.display = 'none'; // erst mit Bedeutungs-Sortierung
+  head.appendChild(badge);
+  const judgeBadge = document.createElement('span');
+  judgeBadge.className = 'a-judge'; judgeBadge.style.display = 'none'; // erst mit KI-Richter
+  head.appendChild(judgeBadge);
+  const text = document.createElement('div');
+  text.className = 'a-text'; text.textContent = ev.content;
+  const grund = document.createElement('div');
+  grund.className = 'a-grund'; grund.style.display = 'none'; // Richter-Begründung
+  li.appendChild(head); li.appendChild(text); li.appendChild(grund);
+  const entry = { ev, li, badge, judgeBadge, grund, vec: null, score: null, judgeScore: null };
+  view.answers.push(entry);                 // Ankunfts-Reihenfolge bleibt erhalten
+  view.answersUl.appendChild(li);           // Antworten älteste oben (Lesefluss)
+  // Bedeutungs-Sortierung: neue Antwort einbetten + neu sortieren, falls an.
+  if (semanticOn && view.qVec) embedAnswer(entry).then(() => resort(view));
+}
+
+// ---- Bedeutungs-Sortierung (Modul 03 Embedding; WHITENED Cosinus) ----
+// EHRLICH: sortiert die Antworten eines Threads nach Nähe zur Frage — es wird
+// NICHTS weggefiltert (anders als Modul 04 queryLocal mit 0.80-Schwelle: das
+// ist „Korpus durchsuchen", hier ist „Thread sortieren"). Modell lädt erst auf
+// bewusste Nutzer-Aktion (Pilz-Schicht-Prinzip), fail-soft.
+//
+// WICHTIG — Anisotropie-Fix (docs/LEHRE-EMBEDDING-MATCH-KALIBRIERUNG.md):
+// roher e5-Cosinus hat einen hohen Boden (~0.82) — zwei beliebige deutsche
+// Texte „matchen" scheinbar, weil das Modell alle Vektoren in einen engen Kegel
+// legt (gleiche Sprache/Stil/passage:-Präfix = die „Hülle"). Lösung der Lehre:
+// vor dem Cosinus den Mittelwert-Vektor abziehen (Zentrierung ≈ Whitening-light),
+// dann heißt 0 wieder „unverwandt" und der INHALT entscheidet, nicht die Hülle.
+// Hier server-los/self-contained: statt einer netzweiten Konstante (die erst
+// Bau „Modul 04 Whitening" liefert) sammeln wir einen WACHSENDEN Referenz-
+// Schwerpunkt aus allen auf dieser Seite eingebetteten Texten. Je mehr Text,
+// desto stabiler der Boden-Abzug.
+let semanticOn = false;
+const EMB = () => window.SbkimEmbedding;
+function dot(a, b) { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; }
+function l2norm(v) { let n = 0; for (let i = 0; i < v.length; i++) n += v[i] * v[i]; n = Math.sqrt(n) || 1; const o = new Float32Array(v.length); for (let i = 0; i < v.length; i++) o[i] = v[i] / n; return o; }
+
+// Wachsender Referenz-Schwerpunkt (μ-Schätzer der Anisotropie-Richtung).
+let sumVec = null, vecCount = 0;
+function accumulate(vec) {
+  if (!sumVec) sumVec = new Float32Array(vec.length);
+  for (let i = 0; i < vec.length; i++) sumVec[i] += vec[i];
+  vecCount++;
+}
+function meanVec() { return (sumVec && vecCount >= 3) ? l2norm(sumVec) : null; } // erst ab genug Text
+function whiten(v, mean) { const w = new Float32Array(v.length); for (let i = 0; i < v.length; i++) w[i] = v[i] - mean[i]; return l2norm(w); }
+// Score: zentrierter (whitened) Cosinus, sonst roher Cosinus als Fallback.
+function relevance(qVec, aVec, mean) {
+  return mean ? dot(whiten(qVec, mean), whiten(aVec, mean)) : dot(qVec, aVec);
+}
+
+async function embedQuestion(view) {
+  if (!view.qVec) { view.qVec = await EMB().embedQuery(view.qEv.content); accumulate(view.qVec); }
+  return view.qVec;
+}
+async function embedAnswer(entry) {
+  if (!entry.vec) { entry.vec = await EMB().embedPassage(entry.ev.content); accumulate(entry.vec); }
+  return entry.vec;
+}
+
+async function resort(view) {
+  if (!semanticOn || !view.qVec) {
+    // Aus → Ankunfts-Reihenfolge wiederherstellen, Badges verbergen.
+    for (const e of view.answers) { e.badge.style.display = 'none'; view.answersUl.appendChild(e.li); }
+    return;
+  }
+  // Fehlende Antwort-Vektoren nachziehen.
+  for (const e of view.answers) { if (!e.vec) { try { await embedAnswer(e); } catch { /* fail-soft */ } } }
+  const mean = meanVec(); // zentrieren, sobald genug Text gesammelt ist
+  for (const e of view.answers) {
+    e.score = e.vec ? relevance(view.qVec, e.vec, mean) : -2;
+    if (e.vec) {
+      e.badge.textContent = e.score.toFixed(2);
+      e.badge.className = 'a-score ' + (e.score > 0.25 ? 'hi' : e.score >= 0 ? 'mid' : 'lo'); // zentriert: 0 = Grenze
+      e.badge.style.display = '';
+    }
+  }
+  const ordered = view.answers.slice().sort((a, b) => b.score - a.score);
+  for (const e of ordered) view.answersUl.appendChild(e.li); // höchste Passung oben
+}
+
+async function enableSemantic() {
+  const st = $('semstatus');
+  st.className = 'status'; st.textContent = 'Modell lädt… (einmalig ~30 MB, dann im Cache)';
+  $('semantic').disabled = true;
+  try {
+    if (!EMB() || typeof EMB().init !== 'function') throw new Error('Modul 03 nicht geladen');
+    await EMB().init();
+    semanticOn = true;
+    st.className = 'status on'; st.textContent = 'an — Bedeutungs-Rangfolge (Zahl = Nähe zur Frage, kein Verwandt-Urteil — das liefert der ⚖️ KI-Richter)';
+    $('semantic').textContent = '🧠 Bedeutungs-Sortierung aus';
+    for (const view of qViews.values()) { await embedQuestion(view); await resort(view); }
+  } catch (e) {
+    semanticOn = false;
+    st.className = 'status err';
+    st.textContent = 'Modell konnte nicht laden (' + (e.message || e) + ') — bleibt nach Ankunft sortiert';
+  } finally {
+    $('semantic').disabled = false;
+  }
+}
+function disableSemantic() {
+  semanticOn = false;
+  $('semantic').textContent = '🧠 Antworten nach Bedeutung sortieren';
+  $('semstatus').className = 'status';
+  $('semstatus').textContent = 'aus — sortiert nach Ankunft';
+  for (const view of qViews.values()) resort(view);
+}
+$('semantic').addEventListener('click', () => { semanticOn ? disableSemantic() : enableSemantic(); });
+
+// ---- KI-Richter (Stufe 1: Cloud, BYOK; WebLLM = nächster Stich) ----
+// EHRLICH: Der Vektor misst Thema, nicht Absicht — "alkoholfrei" ist ihm nah an
+// "Alkohol". Der Richter (ein Sprachmodell) versteht die ABSICHT/VERNEINUNG. Er
+// ist OPT-IN: der gratis Embedding-Weg bleibt Voreinstellung. Der Schlüssel
+// bleibt NUR im Speicher (kein localStorage, kein Code) — beim Neuladen weg.
+// Spiegelt die Provider-Abstraktion von Modul 04 hybridMatch (hier nur claude —
+// Mistral bewusst raus: hat sich weder in Text- noch Bedeutungs-Erkennung
+// bewährt, Klaus 2026-06-24; deckt sich mit der Widget-Festlegung "Mistral RAUS").
+// Anbieter steckbar. Jeder liefert dasselbe Verdikt-Schema (via parseJudgeJson).
+// Gemini + OpenRouter haben großzügige Gratis-Stufen; OpenRouter bündelt viele
+// Modelle inkl. einer wechselnden Liste kostenloser (live ladbar).
+const JUDGE = {
+  claude: {
+    label: 'Claude (Anthropic)',
+    keyUrl: 'https://console.anthropic.com/settings/keys',
+    url: () => 'https://api.anthropic.com/v1/messages',
+    headers: (key) => ({
+      'content-type': 'application/json', 'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true', // Browser-CORS (Meilenstein B2)
+    }),
+    body: (prompt) => JSON.stringify({
+      model: 'claude-haiku-4-5-20251001', max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+    pick: (data) => data && data.content && data.content[0] && data.content[0].text,
+  },
+  gemini: {
+    label: 'Gemini (Google, Gratis-Stufe)',
+    keyUrl: 'https://aistudio.google.com/apikey',
+    url: () => 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
+    headers: (key) => ({ 'content-type': 'application/json', 'x-goog-api-key': key }),
+    body: (prompt) => JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0 },
+    }),
+    pick: (data) => data && data.candidates && data.candidates[0] && data.candidates[0].content &&
+      data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text,
+  },
+  openrouter: {
+    label: 'OpenRouter (viele Modelle, auch gratis)',
+    keyUrl: 'https://openrouter.ai/keys',
+    url: () => 'https://openrouter.ai/api/v1/chat/completions',
+    headers: (key) => ({ 'content-type': 'application/json', 'authorization': 'Bearer ' + key }),
+    body: (prompt, model) => JSON.stringify({
+      model: model || 'meta-llama/llama-3.3-70b-instruct:free',
+      messages: [{ role: 'user', content: prompt }], temperature: 0,
+    }),
+    pick: (data) => data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content,
+  },
+};
+const CLOUD_PROVIDERS = ['claude', 'gemini', 'openrouter'];
+
+// Prompt: bewusst auf ABSICHT + VERNEINUNG getrimmt.
+function buildJudgePrompt(question, answers) {
+  const list = answers.map((a, i) => `${i}: ${a}`).join('\n');
+  return 'Du bewertest, wie gut jede Antwort die ABSICHT der Frage erfüllt.\n' +
+    'Achte besonders auf VERNEINUNG und Bedingungen: "alkoholfrei" bedeutet KEIN ' +
+    'Alkohol; "leicht" ist das Gegenteil von schwer/fettig. Eine Antwort, die das ' +
+    'Gegenteil enthält (z.B. echte Alkoholcocktails bei einer alkoholfrei-Frage), ' +
+    'bekommt eine NIEDRIGE Bewertung, auch wenn das Thema ähnlich ist.\n\n' +
+    'Frage: ' + question + '\n\nAntworten:\n' + list + '\n\n' +
+    'Antworte NUR mit JSON, ein Array, je Antwort {"i":<index>,"score":<0..1>,' +
+    '"grund":"<kurz>"}. Kein weiterer Text.';
+}
+
+// Robustes Parsen: Code-Fences strippen, das JSON-Array herauslösen.
+function parseJudgeJson(text) {
+  if (typeof text !== 'string') return null;
+  let s = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+  const a = s.indexOf('['), b = s.lastIndexOf(']');
+  if (a === -1 || b === -1 || b < a) return null;
+  try {
+    const arr = JSON.parse(s.slice(a, b + 1));
+    if (!Array.isArray(arr)) return null;
+    return arr.filter((x) => x && typeof x.i === 'number' && typeof x.score === 'number');
+  } catch { return null; }
+}
+
+// Gemini-Modellnamen ändern sich (alte Namen -> HTTP 404). Wir fragen EINMAL die
+// Modell-Liste des Kontos ab und nehmen ein verfügbares "flash"-Modell, das
+// generateContent kann. Überlebt künftige Modell-Wechsel; fester Fallback, falls
+// die Liste nicht erreichbar ist.
+let geminiModelCache = null;
+async function resolveGeminiModel(key) {
+  if (geminiModelCache) return geminiModelCache;
+  try {
+    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models', { headers: { 'x-goog-api-key': key } });
+    if (r.ok) {
+      const d = await r.json();
+      const ms = (d.models || []).filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'));
+      const name = (m) => m.name.replace(/^models\//, '');
+      const pick = ms.find((m) => /flash/i.test(m.name) && !/(thinking|exp|vision|image|tts|live|embedding)/i.test(m.name))
+        || ms.find((m) => /flash/i.test(m.name)) || ms[0];
+      if (pick) { geminiModelCache = name(pick); return geminiModelCache; }
+    }
+  } catch { /* offline/CORS -> Fallback */ }
+  geminiModelCache = 'gemini-flash-latest';
+  return geminiModelCache;
+}
+
+async function callJudge(provider, key, prompt) {
+  const spec = JUDGE[provider];
+  if (!spec) throw new Error('Unbekannter Anbieter');
+  const model = provider === 'openrouter' ? ($('orModel').value || '') : '';
+  let url = spec.url(key);
+  if (provider === 'gemini') {
+    const gm = await resolveGeminiModel(key);
+    url = 'https://generativelanguage.googleapis.com/v1beta/models/' + gm + ':generateContent';
+  }
+  const res = await fetch(url, { method: 'POST', headers: spec.headers(key), body: spec.body(prompt, model) });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  const txt = spec.pick(data);
+  const parsed = parseJudgeJson(txt);
+  if (!parsed) throw new Error('Antwort nicht als JSON lesbar');
+  return parsed;
+}
+
+// ---- Freier Richter: WebLLM (KI im Browser, kein Cent, kein Schlüssel) ----
+// EHRLICH: lädt die Bibliothek (esm.run) + die Modell-Gewichte einmalig aus dem
+// Netz (CDN/HuggingFace) — derselbe „Pilz-Egress auf bewusste Nutzer-Aktion" wie
+// das Embedding-Modell. Danach im Browser-Cache, kein Server, kein Konto. Auf
+// alter Hardware deutlich langsamer + nicht gleichwertig zur Cloud (kleines
+// Modell). Dein Gerät entscheidet beim Laden, welche „Klasse" trägt.
+let webllmLib = null, webllmEngine = null, webllmEngineModel = null;
+async function ensureWebllmLib() {
+  if (!webllmLib) webllmLib = await import('https://esm.run/@mlc-ai/web-llm');
+  return webllmLib;
+}
+async function loadWebllm(modelId, onProgress) {
+  if (webllmEngine && webllmEngineModel === modelId) return webllmEngine;
+  const lib = await ensureWebllmLib();
+  webllmEngine = await lib.CreateMLCEngine(modelId, {
+    initProgressCallback: (p) => onProgress(p && (p.text || (Math.round((p.progress || 0) * 100) + ' %'))),
+  });
+  webllmEngineModel = modelId;
+  return webllmEngine;
+}
+async function callWebllmJudge(prompt) {
+  if (!webllmEngine) throw new Error('Modell nicht geladen');
+  const reply = await webllmEngine.chat.completions.create({
+    messages: [{ role: 'user', content: prompt }], temperature: 0, max_tokens: 1024,
+  });
+  const txt = reply && reply.choices && reply.choices[0] && reply.choices[0].message && reply.choices[0].message.content;
+  const parsed = parseJudgeJson(txt);
+  if (!parsed) throw new Error('Antwort nicht als JSON lesbar');
+  return parsed;
+}
+
+// Steckbar: Cloud (claude) ODER frei (webllm). Beide liefern dasselbe Verdikt-Schema.
+async function getVerdicts(prompt) {
+  const p = $('judgeprov').value;
+  if (p === 'webllm') return callWebllmJudge(prompt);
+  if (CLOUD_PROVIDERS.includes(p)) return callJudge(p, $('judgekey').value.trim(), prompt);
+  throw new Error('kein Anbieter gewählt');
+}
+
+async function judgeView(view) {
+  if (!view.answers.length) return;
+  const verdicts = await getVerdicts(buildJudgePrompt(view.qEv.content, view.answers.map((e) => e.ev.content)));
+  for (const v of verdicts) {
+    const e = view.answers[v.i];
+    if (!e) continue;
+    e.judgeScore = v.score;
+    e.judgeBadge.textContent = '⚖️ ' + v.score.toFixed(2);
+    e.judgeBadge.className = 'a-judge ' + (v.score >= 0.7 ? 'hi' : v.score >= 0.4 ? 'mid' : 'lo'); // Richter: 0..1
+    e.judgeBadge.style.display = '';
+    if (v.grund) { e.grund.textContent = v.grund; e.grund.style.display = ''; }
+  }
+  // Richter-Urteil hat Vorrang vor dem Cosinus; höchste Bewertung oben.
+  const ordered = view.answers.slice().sort((a, b) =>
+    (b.judgeScore == null ? -1 : b.judgeScore) - (a.judgeScore == null ? -1 : a.judgeScore));
+  for (const e of ordered) view.answersUl.appendChild(e.li);
+}
+
+// UI-Verdrahtung.
+// Schlüssel-Persistenz: NUR wenn das Häkchen gesetzt ist, im localStorage
+// dieses Geräts (im Klartext — kein Server, kein Tracker). Häkchen weg →
+// sofort gelöscht. Der verschlüsselte Weg wäre der Tresor (Modul 20), hier
+// bewusst die einfache Geräte-Bequemlichkeit für eine Testseite.
+// Pro Anbieter ein eigener Schlüssel, nur mit Häkchen gespeichert (Klartext,
+// nur dieses Gerät). Häkchen weg → alles gelöscht.
+const LS_JUDGE = 'sbkim_pinnwand_judge';
+function loadJudgeStore() { try { return JSON.parse(localStorage.getItem(LS_JUDGE) || '{}'); } catch { return {}; } }
+function persistJudge() {
+  const p = $('judgeprov').value;
+  if (!$('judgeremember').checked) { localStorage.removeItem(LS_JUDGE); return; }
+  if (!CLOUD_PROVIDERS.includes(p)) return;
+  const store = loadJudgeStore();
+  store.prov = p; store.keys = store.keys || {};
+  const key = $('judgekey').value.trim();
+  if (key) store.keys[p] = key; else delete store.keys[p];
+  try { localStorage.setItem(LS_JUDGE, JSON.stringify(store)); } catch { /* */ }
+}
+
+$('judgeprov').addEventListener('change', () => {
+  const p = $('judgeprov').value;
+  const cloud = CLOUD_PROVIDERS.includes(p);
+  const free = p === 'webllm';
+  const isOR = p === 'openrouter';
+  $('judgekey').style.display = cloud ? '' : 'none';
+  $('judgekeylink').style.display = cloud ? '' : 'none';
+  $('judgeremember-l').style.display = cloud ? '' : 'none';
+  $('orModel').style.display = isOR ? '' : 'none';
+  $('orFree').style.display = isOR ? '' : 'none';
+  $('webllmmodel').style.display = free ? '' : 'none';
+  $('webllmload').style.display = free ? '' : 'none';
+  $('judgerun').style.display = (cloud || free) ? '' : 'none';
+  if (cloud) {
+    $('judgekeylink').href = JUDGE[p].keyUrl;
+    const store = loadJudgeStore();
+    $('judgekey').value = (store.keys && store.keys[p]) || '';
+  }
+  $('judgestatus').className = 'status';
+  $('judgestatus').textContent = cloud
+    ? 'Schlüssel für ' + JUDGE[p].label + ' eingeben (oder „🔑 Schlüssel erstellen ↗"), dann „Richter anwenden".'
+      + (isOR ? ' Tipp: „🔄 Gratis-Modelle laden" holt die aktuellen kostenlosen Modelle.' : '')
+    : free
+      ? 'Modell-Klasse wählen → „⬇️ Modell laden", dann „Richter anwenden". Gratis, langsamer, nicht ganz so stark.'
+      : 'aus — gratis Embedding-Weg bleibt aktiv';
+  persistJudge();
+});
+$('judgekey').addEventListener('input', persistJudge);
+$('judgeremember').addEventListener('change', persistJudge);
+
+// OpenRouter: aktuelle GRATIS-Modelle live laden (Liste ändert sich über die Zeit).
+$('orFree').addEventListener('click', async () => {
+  const st = $('judgestatus');
+  $('orFree').disabled = true;
+  st.className = 'status'; st.textContent = 'lade aktuelle Gratis-Modelle…';
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/models');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const free = (data.data || []).filter((m) => {
+      const pr = m.pricing || {};
+      return String(pr.prompt) === '0' && String(pr.completion) === '0';
+    });
+    if (!free.length) throw new Error('keine gefunden');
+    const sel = $('orModel');
+    sel.innerHTML = '';
+    free.slice(0, 50).forEach((m) => {
+      const o = document.createElement('option');
+      o.value = m.id; o.textContent = (m.name || m.id) + ' (gratis)';
+      sel.appendChild(o);
+    });
+    st.className = 'status on'; st.textContent = free.length + ' Gratis-Modelle geladen — eines wählen, dann „Richter anwenden".';
+  } catch (e) {
+    st.className = 'status err'; st.textContent = 'Gratis-Liste nicht ladbar (' + (e.message || e) + ') — Standard-Auswahl bleibt.';
+  }
+  $('orFree').disabled = false;
+});
+
+// Beim Laden: zuletzt gewählten Anbieter + dessen Schlüssel wiederherstellen.
+(function restoreJudge() {
+  const store = loadJudgeStore();
+  if (store.prov && CLOUD_PROVIDERS.includes(store.prov)) {
+    $('judgeprov').value = store.prov;
+    $('judgeprov').dispatchEvent(new Event('change'));
+  }
+})();
+
+// Freies Modell laden (WebLLM). Einmaliger Download, dann im Cache.
+$('webllmload').addEventListener('click', async () => {
+  const st = $('judgestatus');
+  const modelId = $('webllmmodel').value;
+  $('webllmload').disabled = true;
+  st.className = 'status'; st.textContent = 'Modell lädt… (einmaliger Download, kann auf altem Gerät dauern)';
+  try {
+    if (!navigator.gpu) throw new Error('kein WebGPU in diesem Browser');
+    await loadWebllm(modelId, (t) => { st.className = 'status'; st.textContent = 'Lädt: ' + (t || '…'); });
+    st.className = 'status on'; st.textContent = 'Modell bereit — „Richter anwenden"';
+  } catch (e) {
+    st.className = 'status err'; st.textContent = 'Modell-Laden fehlgeschlagen: ' + (e.message || e) + ' — kleinere Klasse probieren oder Cloud nutzen';
+  }
+  $('webllmload').disabled = false;
+});
+
+// KI-Modelle vom Gerät löschen: WebLLM legt die Gewichte im Browser-Cache der
+// Seite ab (KEINE Dateien im Dateisystem). Wir löschen alle Caches AUSSER der
+// App-Schale (sbkim-pinnwand-*) → entfernt alle heruntergeladenen Modelle, ohne
+// Identität/Schlüssel (localStorage) anzutasten. Meldet die freigewordene Größe.
+$('webllm-clear').addEventListener('click', async () => {
+  const st = $('judgestatus');
+  $('webllm-clear').disabled = true;
+  st.className = 'status'; st.textContent = 'Lösche KI-Modelle vom Gerät…';
+  let before = 0, after = 0;
+  try { if (navigator.storage && navigator.storage.estimate) before = (await navigator.storage.estimate()).usage || 0; } catch { /* */ }
+  try {
+    webllmEngine = null; webllmEngineModel = null; // Engine freigeben
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys
+        .filter((k) => !k.startsWith('sbkim-pinnwand-')) // App-Schale behalten
+        .map((k) => caches.delete(k)));
+    }
+  } catch { /* fail-soft */ }
+  try { if (navigator.storage && navigator.storage.estimate) after = (await navigator.storage.estimate()).usage || 0; } catch { /* */ }
+  const freedMB = Math.max(0, before - after) / 1e6;
+  st.className = 'status on';
+  st.textContent = 'KI-Modelle gelöscht' + (freedMB >= 1 ? ' (~' + freedMB.toFixed(0) + ' MB frei)' : '') +
+    '. Jetzt ein kleineres Modell wählen + „⬇️ Modell laden".';
+  $('webllm-clear').disabled = false;
+});
+
+$('judgerun').addEventListener('click', async () => {
+  const provider = $('judgeprov').value;
+  const st = $('judgestatus');
+  if (provider === 'claude' && !$('judgekey').value.trim()) {
+    st.className = 'status err'; st.textContent = 'kein Schlüssel eingegeben'; return;
+  }
+  if (provider === 'webllm' && !webllmEngine) {
+    st.className = 'status err'; st.textContent = 'erst „⬇️ Modell laden" drücken'; return;
+  }
+  // Leeres Brett: nichts zu bewerten (sonst irreführende „nicht erreichbar"-Meldung).
+  let answersCount = 0;
+  for (const v of qViews.values()) answersCount += v.answers.length;
+  if (qViews.size === 0 || answersCount === 0) {
+    st.className = 'status err';
+    st.textContent = 'keine Fragen mit Antworten auf dem Brett — erst Frage + Antworten anlegen';
+    return;
+  }
+  $('judgerun').disabled = true;
+  st.className = 'status'; st.textContent = 'Richter denkt nach…';
+  let okCount = 0, failCount = 0;
+  st.dataset.lastErr = '';
+  for (const view of qViews.values()) {
+    try { await judgeView(view); okCount++; }
+    catch (e) { failCount++; st.dataset.lastErr = (e && e.message) ? e.message : String(e); }
+  }
+  if (okCount && !failCount) { st.className = 'status on'; st.textContent = 'an — Antworten nach Absicht bewertet (⚖️ = KI-Urteil)'; }
+  else if (okCount) { st.className = 'status on'; st.textContent = 'teils bewertet (' + failCount + ' Fehler: ' + (st.dataset.lastErr || 'unbekannt') + ')'; }
+  else { st.className = 'status err'; st.textContent = 'Richter nicht erreichbar (' + (st.dataset.lastErr || 'unbekannt') + ') — gratis Sortierung bleibt'; }
+  $('judgerun').disabled = false;
+});
+
+async function dispatch(ev, relay) {
+  if (seen.has(ev.id)) return;
+  // Verschlüsselte Notiz: nur zeigen, wenn wir sie mit dem Brett-Passwort lesen
+  // können. Sonst (kein/falsches Passwort) überspringen — kein Geheimtext-Müll.
+  if (isEnc(ev.content)) {
+    if (!boardKey) return;
+    const plain = await decryptContent(ev.content);
+    if (plain == null) return;
+    ev.content = plain; // ab hier intern Klartext (wird nie wieder gesendet)
+  }
+  if (seen.has(ev.id)) return; // nach await erneut prüfen
+  seen.add(ev.id);
+  if (refOf(ev)) renderAnswer(ev, relay);
+  else renderQuestion(ev, relay);
+}
+
+// ---- Relays (mit Auto-Reconnect) ----
+const SUB_ID = 'sbkim-fa';
+const conns = {};       // url -> WebSocket (aktuell)
+const backoff = {};     // url -> ms (wächst bei Fehlschlag)
+const dots = {};
+function relayPills() {
+  const wrap = $('relays');
+  wrap.innerHTML = '';
+  for (const url of RELAY_POOL) {
+    const on = activeRelays.includes(url);
+    const pill = document.createElement('span');
+    pill.className = 'pill'; pill.style.cursor = 'pointer';
+    pill.style.opacity = on ? '1' : '0.45';
+    pill.title = on ? 'aktiv — klicken zum Abschalten' : 'aus — klicken zum Zuschalten';
+    const dot = document.createElement('span'); dot.className = 'dot ' + (on ? 'try' : '');
+    dots[url] = dot; pill.appendChild(dot);
+    pill.append((on ? '' : '+ ') + url.replace('wss://', ''));
+    pill.addEventListener('click', () => toggleRelay(url));
+    wrap.appendChild(pill);
+  }
+}
+function toggleRelay(url) {
+  const i = activeRelays.indexOf(url);
+  if (i >= 0) {
+    activeRelays.splice(i, 1);
+    const ws = conns[url];
+    if (ws) { try { ws.close(); } catch { /* */ } delete conns[url]; }
+  } else {
+    activeRelays.push(url);
+    connect(url);
+  }
+  saveRelays();
+  relayPills();
+  updateSendState();
+}
+const setDot = (url, s) => { const d = dots[url]; if (d) d.className = 'dot ' + s; };
+
+function scheduleReconnect(url) {
+  if (!activeRelays.includes(url)) return; // abgeschaltete Relays nicht neu verbinden
+  const cur = backoff[url] || 0;
+  const next = Math.min(cur ? cur * 2 : 2000, 20000); // 2s,4s,…,20s gedeckelt
+  backoff[url] = next;
+  setTimeout(() => {
+    const ws = conns[url];
+    if (!ws || ws.readyState === WebSocket.CLOSED) connect(url);
+  }, next);
+}
+
+function connect(url) {
+  setDot(url, 'try');
+  let ws;
+  try { ws = new WebSocket(url); } catch { setDot(url, 'down'); scheduleReconnect(url); return; }
+  conns[url] = ws;
+  ws.onopen = () => {
+    backoff[url] = 0; // Erfolg → Backoff zurücksetzen
+    setDot(url, 'up');
+    ws.send(JSON.stringify(['REQ', SUB_ID, { kinds: [1], '#t': [TAG], limit: 200 }]));
+    updateSendState();
+  };
+  ws.onmessage = (e) => {
+    let m; try { m = JSON.parse(e.data); } catch { return; }
+    if (Array.isArray(m) && m[0] === 'EVENT' && m[1] === SUB_ID && m[2]) dispatch(m[2], url);
+  };
+  ws.onclose = () => { setDot(url, 'down'); updateSendState(); scheduleReconnect(url); };
+  ws.onerror = () => { setDot(url, 'down'); }; // onclose folgt → Reconnect dort
+}
+
+// Tab wieder sichtbar (Handy aus dem Hintergrund) → tote Sockets sofort neu.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  for (const url of activeRelays) {
+    const ws = conns[url];
+    if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+      backoff[url] = 0;
+      connect(url);
+    }
+  }
+});
+
+const liveSockets = () => Object.values(conns).filter((w) => w.readyState === WebSocket.OPEN);
+function updateSendState() {
+  const n = liveSockets().length;
+  $('ask').disabled = n === 0;
+  $('sendhint').textContent = n > 0
+    ? `${n} Relay${n > 1 ? 's' : ''} verbunden`
+    : 'kein Relay verbunden…';
+}
+
+// Ansicht zurücksetzen + erneut abonnieren (z. B. nach Passwort-Wechsel, damit
+// die Brett-Historie mit dem neuen Schlüssel neu bewertet/entschlüsselt wird).
+function resubscribe() {
+  seen.clear(); qViews.clear(); pendingAnswers.clear();
+  threads.innerHTML = '';
+  const e = document.createElement('li'); e.className = 'empty';
+  e.textContent = 'lade…'; threads.appendChild(e);
+  for (const ws of liveSockets()) {
+    try { ws.send(JSON.stringify(['REQ', SUB_ID, { kinds: [1], '#t': [TAG], limit: 200 }])); } catch { /* */ }
+  }
+}
+
+// Privates Brett: Passwort setzen/entfernen.
+$('boardkey-set').addEventListener('click', async () => {
+  const pass = $('boardkey').value;
+  const st = $('boardkey-status');
+  if (!pass) {
+    boardKey = null;
+    st.className = 'status'; st.textContent = 'Offenes Brett — alle Zettel sind öffentlich lesbar.';
+    resubscribe();
+    return;
+  }
+  st.className = 'status'; st.textContent = 'Schlüssel wird abgeleitet…';
+  try {
+    boardKey = await deriveBoardKey(pass);
+    st.className = 'status on';
+    st.textContent = '🔒 Privates Brett aktiv — nur wer dieses Passwort hat, kann lesen/schreiben. (Relay sieht nur Geheimtext.)';
+    resubscribe();
+  } catch (e) {
+    boardKey = null;
+    st.className = 'status err'; st.textContent = 'Schlüssel-Fehler: ' + (e.message || e);
+  }
+});
+
+// ---- Frage stellen ----
+$('ask').addEventListener('click', async () => {
+  const content = $('qmsg').value.trim();
+  if (!content) return;
+  $('ask').disabled = true;
+  const ev = await buildEvent(content); // keine e-Tags → Frage
+  const live = liveSockets();
+  for (const ws of live) ws.send(JSON.stringify(['EVENT', ev]));
+  $('qmsg').value = '';
+  dispatch(ev, live[0] ? live[0].url : 'lokal');
+  updateSendState();
+});
+
+// ---- Werkzeug-Knöpfe (leeren / vergrößern / vollbild / neu laden) ----
+$('board-clear').addEventListener('click', clearBoard);
+
+// Mikrofon: Frage einsprechen (Browser-Spracherkennung, gratis, server-los,
+// kein Schlüssel). Fail-soft, wenn der Browser es nicht kann.
+(function setupMic() {
+  const mic = $('mic');
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    mic.disabled = true;
+    mic.title = 'Spracheingabe in diesem Browser nicht verfügbar';
+    mic.style.opacity = '0.5';
+    return;
+  }
+  let rec = null, listening = false, base = '';
+  mic.addEventListener('click', () => {
+    if (listening) { try { rec.stop(); } catch { /* */ } return; }
+    rec = new SR();
+    rec.lang = 'de-DE';
+    rec.interimResults = true;
+    rec.continuous = false;
+    base = $('qmsg').value ? $('qmsg').value.replace(/\s*$/, '') + ' ' : '';
+    rec.onstart = () => { listening = true; mic.classList.add('mic-on'); mic.textContent = '⏹'; $('sendhint').textContent = 'höre zu… sprich deine Frage'; };
+    rec.onresult = (e) => {
+      let txt = '';
+      for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
+      $('qmsg').value = (base + txt).slice(0, 280);
+    };
+    rec.onerror = (e) => { $('sendhint').textContent = 'Spracheingabe-Fehler: ' + (e.error || 'unbekannt'); };
+    rec.onend = () => { listening = false; mic.classList.remove('mic-on'); mic.textContent = '🎤'; if (!/Fehler/.test($('sendhint').textContent)) $('sendhint').textContent = ' '; updateSendState(); };
+    try { rec.start(); } catch (err) { $('sendhint').textContent = 'Mikrofon nicht verfügbar (' + (err.message || err) + ')'; }
+  });
+})();
+
+// 📷 OCR-Eingabe (Strang B2): Foto/Handschrift → Frage via Modul 24 (Mistral OCR,
+// EU, BYOK, RAM-only). Fail-soft; füllt #qmsg (wie das Mikrofon) und enabled den
+// Frage-Knopf über updateSendState().
+(function () {
+  const ocrbtn = $('ocrbtn');
+  if (!ocrbtn) return;
+  let ocrKey = '';
+  ocrbtn.addEventListener('click', () => {
+    const ocr = window.SbkimOcr;
+    if (!ocr || typeof ocr.recognize !== 'function') { $('sendhint').textContent = 'OCR-Modul nicht geladen — bitte tippen.'; return; }
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/*,application/pdf'; inp.setAttribute('capture', 'environment'); inp.style.display = 'none';
+    inp.addEventListener('change', () => {
+      const file = inp.files && inp.files[0];
+      if (inp.parentNode) inp.parentNode.removeChild(inp);
+      if (!file) return;
+      if (!ocrKey) { const k = window.prompt('OCR-Schlüssel (EU/Mistral, nur diese Sitzung — wird nicht gespeichert):'); if (!k) return; ocrKey = k.trim(); }
+      $('sendhint').textContent = '📷 Texterkennung läuft…';
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        ocr.recognize(String(ev.target.result), { provider: 'mistral', apiKey: ocrKey, mimeType: file.type })
+          .then((r) => {
+            if (r && r.available) {
+              const base = $('qmsg').value ? $('qmsg').value.replace(/\s*$/, '') + ' ' : '';
+              $('qmsg').value = (base + (r.text || '')).slice(0, 280);
+              const ver = r.model ? (' · Mistral OCR ' + r.model) : '';
+              $('sendhint').textContent = (r.text ? ('Erkannt (' + r.text.length + ' Zeichen)') : 'Kein Text erkannt') + ver;
+              updateSendState();
+            } else {
+              const reason = (r && r.reason) || 'Texterkennung nicht möglich.';
+              if (/Schlüssel/.test(reason)) ocrKey = '';
+              $('sendhint').textContent = '⚠️ ' + reason;
+            }
+          })
+          .catch((e) => { $('sendhint').textContent = '⚠️ ' + (ocr.ocrErrorHint ? ocr.ocrErrorHint(e) : 'Texterkennung nicht möglich — bitte tippen.'); });
+      };
+      reader.onerror = () => { $('sendhint').textContent = 'Bild konnte nicht gelesen werden.'; };
+      reader.readAsDataURL(file);
+    });
+    document.body.appendChild(inp);
+    inp.click();
+  });
+})();
+
+// Wiederverwendbares Mikrofon für JEDES weitere Text-Eingabefeld (z. B. jede
+// Antwort). Gleiche Browser-Spracherkennung, fail-soft. Von renderQuestion
+// pro Antwort-Feld aufgerufen (Funktions-Deklaration → hoisted).
+function attachMic(mic, target, hint) {
+  if (!mic || !target) return;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const setHint = (t) => { if (hint) hint.textContent = t; };
+  if (!SR) { mic.disabled = true; mic.title = 'Spracheingabe in diesem Browser nicht verfügbar'; mic.style.opacity = '0.5'; return; }
+  const max = target.maxLength > 0 ? target.maxLength : 280;
+  let rec = null, listening = false, base = '';
+  mic.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (listening) { try { rec.stop(); } catch { /* */ } return; }
+    rec = new SR();
+    rec.lang = 'de-DE'; rec.interimResults = true; rec.continuous = false;
+    base = target.value ? target.value.replace(/\s*$/, '') + ' ' : '';
+    rec.onstart = () => { listening = true; mic.classList.add('mic-on'); mic.textContent = '⏹'; setHint('höre zu… sprich jetzt'); };
+    rec.onresult = (ev2) => {
+      let txt = '';
+      for (let i = 0; i < ev2.results.length; i++) txt += ev2.results[i][0].transcript;
+      target.value = (base + txt).slice(0, max);
+    };
+    rec.onerror = (ev2) => { setHint('Spracheingabe-Fehler: ' + (ev2.error || 'unbekannt')); };
+    rec.onend = () => { listening = false; mic.classList.remove('mic-on'); mic.textContent = '🎤'; };
+    try { rec.start(); } catch (err) { setHint('Mikrofon nicht verfügbar'); }
+  });
+}
+
+// Text-Vergrößerung: 3 Stufen, persistent.
+const LS_SCALE = 'sbkim_pinnwand_scale';
+function applyScale(s) { document.documentElement.setAttribute('data-scale', String(s)); }
+let scale = parseInt(localStorage.getItem(LS_SCALE) || '1', 10) || 1;
+applyScale(scale);
+$('tb-zoom').addEventListener('click', () => {
+  scale = scale >= 3 ? 1 : scale + 1;
+  applyScale(scale);
+  try { localStorage.setItem(LS_SCALE, String(scale)); } catch { /* */ }
+});
+
+// Vollbild / Vollansicht.
+$('tb-full').addEventListener('click', () => {
+  const d = document;
+  if (!d.fullscreenElement) {
+    (d.documentElement.requestFullscreen ? d.documentElement.requestFullscreen() : Promise.reject()).catch(() => {});
+    $('tb-full').textContent = '🗗';
+  } else {
+    (d.exitFullscreen ? d.exitFullscreen() : Promise.resolve()).catch(() => {});
+    $('tb-full').textContent = '⛶';
+  }
+});
+document.addEventListener('fullscreenchange', () => {
+  $('tb-full').textContent = document.fullscreenElement ? '🗗' : '⛶';
+});
+
+// Hard-Reload: Service-Worker + alle Caches leeren, dann frisch laden.
+// Behebt das „alte Version hängt"-Problem dauerhaft per Knopfdruck.
+$('tb-reload').addEventListener('click', async () => {
+  $('tb-reload').disabled = true;
+  $('tb-reload').textContent = '⏳';
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+  } catch { /* fail-soft */ }
+  location.reload();
+});
+
+// ---- Start ----
+relayPills();
+activeRelays.forEach(connect);
+updateSendState();
+</script>
+
+<!-- ── SBKIM-Endknoten-Stack (byte-1:1-Kopien, Drift-Guard im Smoke-Test) ──
+     Macht Kimboard zusätzlich zur Pinnwand-Funktion zu einem vollen SBKIM-Knoten:
+     eigene Identität + Spore, Rendezvous („🌐 Mit dem Netz verbinden"), Status-
+     Lampen-Leiste + Selbst-Siegel, Empfangsmodus-Lauschen. Modul 03 (Embedding)
+     ist oben bereits geladen; hier nicht erneut einbinden (geteilter Global). -->
+<script src="./modules/01_storage.js"></script>
+<!-- Modus A / eigene Schublade: MUSS direkt nach dem Storage-Kern laufen -->
+<script src="./assets/storage-init.js"></script>
+<script src="./modules/04_match.js"></script>
+<script src="./modules/02_spore.js"></script>
+<script src="./modules/05_anastomose.js"></script>
+<!-- Relais-Client (Modul 05b) ist ES-Modul + importiert noble relativ -->
+<script type="module" src="./modules/05b_nostr_relay.js"></script>
+<script src="./modules/23_rendezvous.js"></script>
+<script src="./modules/23_rendezvous_ui.js"></script>
+<!-- Status-Lampen-Leiste (Modul 17) MUSS vor Membran(15)/Siegel(16) inited sein
+     (legt die Proxy-Spans #lamp-fremd + #sbkim-siegel-badge an). -->
+<script src="./modules/17_floating_widget.js"></script>
+<script src="./modules/07_apoptose.js"></script>
+<script src="./modules/15_membran.js"></script>
+<script src="./modules/16_siegel.js"></script>
+<!-- Empfangsmodus: lauscht, damit ein Gegenknoten andocken kann -->
+<script src="./assets/nostr-listen-init.js"></script>
+<!-- Modus A fahren + 🌐-Knopf mounten -->
+<script src="./assets/rendezvous-init.js"></script>
+<!-- Voller Knoten: Widget → Membran → Siegel (+ Apoptose) in dieser Reihenfolge -->
+<script src="./assets/schutz-init.js"></script>
+<!-- Andock-Werkzeug IM Siegel-Modal (🔑 Identität & Spore · ✍ Semantik · 🛡 Schutz) -->
+<script src="./assets/siegel-inhalt.js"></script>
+
+<script>
+  // Service-Worker registrieren → installierbar + offline-Start (App-Schale).
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("./sw.js").catch(function (err) {
+        console.warn("[Kimboard] Service-Worker-Registrierung fehlgeschlagen:", err);
+      });
+    });
+  }
+</script>
+</body>
+</html>

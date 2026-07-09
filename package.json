@@ -1,0 +1,11 @@
+{
+  "name": "kimboard",
+  "version": "0.1.0",
+  "description": "Kimboard — semantische Pinnwand als eigenständiger SBKIM-Endknoten (Pinnwand-Funktion + Endknoten-Stack 01/02/04/05/05b/07/15/16/17/23). Server-los, im Browser.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "UNLICENSED"
+}
