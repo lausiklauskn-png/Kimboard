@@ -36,7 +36,7 @@ const EXPECTED_SHA256 = {
   "16_siegel.js": "4f0854dfc728d69b2bb0f121e81ce9ee644e1b885d836faf48307b0d4ae1257d",
   "17_floating_widget.js": "f48a95ac357ae212fe80e04e28426c43ae0ad9ab35de1eff42d19b8a3b0116c9",
   "23_rendezvous.js": "bbdf02a80c32603ef28e7a8d0cef19129cf90aaffcffb62c5ef6bd5b51fcfdbf",
-  "23_rendezvous_ui.js": "c2e188b840d581aa9407636f82664e6c735f9db9cbb5a18e3143aaddba92c17a",
+  "23_rendezvous_ui.js": "2d1b638f133f883bde2fe078cf324de25e31bdc7aa992851920ec024a2b253e3",
   "24_ocr_eingabe.js": "79f966d628976e03a7c3006e6ca45dd11d9f71c6bb6b562094a8d5c803138c8b",
   "noble-secp256k1.js": "8f3879ca422c4fdfe7ca0361688636fa7cc550a59bd94d512ed6ec79aa3d55d1",
 };
