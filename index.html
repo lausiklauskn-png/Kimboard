@@ -346,6 +346,9 @@
   </footer>
 </div>
 
+<!-- Identitäts-Isolierung: eigenes DB-Suffix global setzen, BEVOR irgendein
+     SBKIM-Modul lädt (Modul 01 liest window.SBKIM_DB_SUFFIX beim Laden). -->
+<script>window.SBKIM_DB_SUFFIX="kimboard";</script>
 <script src="./modules/03_embedding.js"></script>
 <script src="./modules/24_ocr_eingabe.js"></script>
 <script type="module">
