@@ -25,7 +25,7 @@ import { dirname, join } from "node:path";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 const EXPECTED_SHA256 = {
-  "01_storage.js": "2df77f3543d7ebf9f8666bf219ba44a3d100322fcbfd615ee0e6340b678fa9e9",
+  "01_storage.js": "c3af0e81556ba68b1f589ebc4659898622ecd863c54d207ef765e91e0a8f1d11",
   "02_spore.js": "ae6960e0140680e7630a59dc568541f50bdd7e7437b1718afad3a229a6817341",
   "03_embedding.js": "a381bb79d1857288d106b1dd11395f16ea605e035e8b02a939a5cb5001467ad4",
   "04_match.js": "df367d113e3de250a27ab6268d20527ea6ef7eb52b7787f6832513b994a5cbb3",
@@ -35,7 +35,7 @@ const EXPECTED_SHA256 = {
   "15_membran.js": "fbf9f42d8a2720b01d6318b00e84c0eac35a108cb3ee50e87096796e3c72e7cf",
   "16_siegel.js": "de03320f1d1e4db1432a6fdbf788818bc7febd313590e232d26f2420ccaefdea",
   "17_floating_widget.js": "f48a95ac357ae212fe80e04e28426c43ae0ad9ab35de1eff42d19b8a3b0116c9",
-  "23_rendezvous.js": "c05dac4fce70672144c370bf4bad44fbb49f9b671aa46fb4cab9574688ffbfce",
+  "23_rendezvous.js": "bbdf02a80c32603ef28e7a8d0cef19129cf90aaffcffb62c5ef6bd5b51fcfdbf",
   "23_rendezvous_ui.js": "89a6e8f853fd505dd566e3f310e9288740707b85fca1795403f1f262cce71415",
   "24_ocr_eingabe.js": "79f966d628976e03a7c3006e6ca45dd11d9f71c6bb6b562094a8d5c803138c8b",
   "noble-secp256k1.js": "8f3879ca422c4fdfe7ca0361688636fa7cc550a59bd94d512ed6ec79aa3d55d1",
