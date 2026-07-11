@@ -36,8 +36,8 @@ const EXPECTED_SHA256 = {
   "16_siegel.js": "a581461a079711162d9c4137a5674f7e6d38d3c4bc95b64b6c8d13b57c75621e",
   "20_schluessel_safe.js": "38404dc0a16d69cbbde8dd7ff40d6270161990d7b17bd06b442cdec18a4a19b7",
   "17_floating_widget.js": "f48a95ac357ae212fe80e04e28426c43ae0ad9ab35de1eff42d19b8a3b0116c9",
-  "23_rendezvous.js": "517abc5ab6c56fd70904db14c941e002b5c3c05a371cfe76ef4232687015729b",
-  "23_rendezvous_ui.js": "0dc35fb40e15f178fbf326e58ff0f2e9a6dc4ca70bfbd456ad2f63a32670c4b0",
+  "23_rendezvous.js": "9f3a20856c33080989db278a54ee23d723eeec82e169e2c4aee67dbc236f992a",
+  "23_rendezvous_ui.js": "65b2f5ab712d95c8c0618dc98e51f8980ae03b1ca70b068fac2e589114d9e8fa",
   "24_ocr_eingabe.js": "79f966d628976e03a7c3006e6ca45dd11d9f71c6bb6b562094a8d5c803138c8b",
   "noble-secp256k1.js": "8f3879ca422c4fdfe7ca0361688636fa7cc550a59bd94d512ed6ec79aa3d55d1",
 };
