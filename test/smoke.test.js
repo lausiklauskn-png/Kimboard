@@ -35,9 +35,10 @@ const EXPECTED_SHA256 = {
   "15_membran.js": "fbf9f42d8a2720b01d6318b00e84c0eac35a108cb3ee50e87096796e3c72e7cf",
   "16_siegel.js": "a581461a079711162d9c4137a5674f7e6d38d3c4bc95b64b6c8d13b57c75621e",
   "20_schluessel_safe.js": "38404dc0a16d69cbbde8dd7ff40d6270161990d7b17bd06b442cdec18a4a19b7",
+  "21_spracheingabe.js": "6be3902c67c3ebfb24a845c59bad9147af903c467b7fb7535bc26cc7943b2a49",
   "17_floating_widget.js": "f48a95ac357ae212fe80e04e28426c43ae0ad9ab35de1eff42d19b8a3b0116c9",
   "23_rendezvous.js": "9f3a20856c33080989db278a54ee23d723eeec82e169e2c4aee67dbc236f992a",
-  "23_rendezvous_ui.js": "265b101a4504e4c97f033137f18c97d345c29af6db87947e17654af4ceb0f30e",
+  "23_rendezvous_ui.js": "e430d25af2a61ef6dc9b8df01f0678e58da46f28d1b3afb4f9030b03239e1ae1",
   "24_ocr_eingabe.js": "79f966d628976e03a7c3006e6ca45dd11d9f71c6bb6b562094a8d5c803138c8b",
   "noble-secp256k1.js": "8f3879ca422c4fdfe7ca0361688636fa7cc550a59bd94d512ed6ec79aa3d55d1",
 };
