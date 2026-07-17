@@ -5,7 +5,7 @@
 //      müssen ihren aufgezeichneten sha256 halten. Verändert jemand eine Kopie
 //      versehentlich, wird der Test rot — „kopieren, nicht klonen" bleibt
 //      nachprüfbar (kanonische Quelle: Sage-Protokol/src/modules/*, bzw.
-//      pinnwand/modules/* für 03/24/noble).
+//      pinnwand/modules/* für 03/24/noble/dm_crypto).
 //   2) App-Schale-Vollständigkeit + korrekte Ladeordnung (Storage-Kern VOR der
 //      eigenen Schublade, Widget 17 vor Membran 15 / Siegel 16).
 //   3) Pinnwand-Funktion erhalten (Nostr-Tag + EVENT/REQ + Whitening) UND
@@ -34,13 +34,14 @@ const EXPECTED_SHA256 = {
   "07_apoptose.js": "0acdd6ab2d95e131fa6953061cc0e95a2396e05fff091a7dc690b2668a4c035a",
   "15_membran.js": "fbf9f42d8a2720b01d6318b00e84c0eac35a108cb3ee50e87096796e3c72e7cf",
   "16_siegel.js": "a581461a079711162d9c4137a5674f7e6d38d3c4bc95b64b6c8d13b57c75621e",
-  "20_schluessel_safe.js": "38404dc0a16d69cbbde8dd7ff40d6270161990d7b17bd06b442cdec18a4a19b7",
+  "20_schluessel_safe.js": "e7e25c9070e93f8267171d2b626109cfd90cb481c2781242f5f7dfc203f031f3",
   "21_spracheingabe.js": "6be3902c67c3ebfb24a845c59bad9147af903c467b7fb7535bc26cc7943b2a49",
   "17_floating_widget.js": "f48a95ac357ae212fe80e04e28426c43ae0ad9ab35de1eff42d19b8a3b0116c9",
   "23_rendezvous.js": "9f3a20856c33080989db278a54ee23d723eeec82e169e2c4aee67dbc236f992a",
   "23_rendezvous_ui.js": "4d760f4b57be609ebacdee518e18295672707b66b1aca95b451ed71eafa1670c",
   "24_ocr_eingabe.js": "79f966d628976e03a7c3006e6ca45dd11d9f71c6bb6b562094a8d5c803138c8b",
   "noble-secp256k1.js": "8f3879ca422c4fdfe7ca0361688636fa7cc550a59bd94d512ed6ec79aa3d55d1",
+  "dm_crypto.js": "dab5323c03c466cc519a2dca6523705e166eba69d046a5872fe682011fef4712",
 };
 
 test("Drift-Guard: jede Modul-Kopie hält ihren aufgezeichneten sha256", () => {
