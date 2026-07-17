@@ -256,6 +256,12 @@
       <button id="boardkey-set" class="tbtn">Setzen</button>
     </div>
     <div class="status" id="boardkey-status" style="margin-top:4px;">Offenes Brett — alle Zettel sind öffentlich lesbar.</div>
+    <div class="row" style="margin-top: 8px; gap: 8px; align-items:center;">
+      <label for="dm-to" style="opacity:.85;">🔒 Privat an:</label>
+      <select id="dm-to" style="flex:1; min-width:180px;"><option value="">— öffentlich / Brett —</option></select>
+      <button id="dm-contacts" class="tbtn" title="Kontakte verwalten + Sicherheitsnummern">👤 Kontakte</button>
+    </div>
+    <div class="status" id="dm-status" style="margin-top:4px;">Tipp: Klick auf einen Absender-Namen merkt ihn als Kontakt (Freigabe). „Privat an" verschlüsselt den nächsten Zettel nur für diese Person.</div>
   </div>
 
   <div class="card">
@@ -353,6 +359,7 @@
 <script src="./modules/24_ocr_eingabe.js"></script>
 <script type="module">
 import { schnorr, utils } from './modules/noble-secp256k1.js';
+import { dmEncrypt, dmDecrypt, isDm, safetyNumber } from './modules/dm_crypto.js';
 
 // ---- Helpers ----
 const $ = (id) => document.getElementById(id);
@@ -447,12 +454,116 @@ async function decryptContent(s) {
   } catch { return null; }
 }
 
+// ============ B7: Private Direkt-Nachricht (E2E, ECDH + TOFU) ============
+// Verschlüsselt einen Zettel für GENAU eine Person (statt fürs ganze Brett) —
+// mit den VORHANDENEN Nostr-Schlüsseln (kein Parallel-Schlüssel). Dasselbe
+// Verfahren wie Signal/WhatsApp (ECDH → AES-GCM). Vertrauen beim Erstkontakt =
+// TOFU (Ein-Klick-Freigabe, weil du die Gegenseite kennst) + Änderungs-Warnung +
+// optionale Sicherheitsnummer. Der Passwort-Weg (Brett) bleibt daneben unberührt.
+// Kleiner, selbst-enthaltener Hinweis-Balken (fail-soft) für die Kontakt-Freigabe.
+function toast(msg) {
+  try {
+    const t = document.createElement('div');
+    t.textContent = msg;
+    t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);' +
+      'background:rgba(20,18,16,.96);color:#eee;border:1px solid var(--acc,#c9a961);' +
+      'padding:9px 14px;border-radius:10px;z-index:130;font-size:.9rem;max-width:90vw;' +
+      'box-shadow:0 4px 16px rgba(0,0,0,.4);';
+    document.body.appendChild(t);
+    setTimeout(() => { try { document.body.removeChild(t); } catch (_e) { /* */ } }, 2600);
+  } catch (_e) { /* fail-soft: Hinweis ist optional */ }
+}
+const LS_DM_CONTACTS = 'sbkim_pinnwand_contacts';
+let dmContacts = {}; // pubHex -> { name, pinnedAt }
+try { dmContacts = JSON.parse(localStorage.getItem(LS_DM_CONTACTS) || '{}') || {}; } catch { dmContacts = {}; }
+function saveContacts() { try { localStorage.setItem(LS_DM_CONTACTS, JSON.stringify(dmContacts)); } catch { /* */ } }
+let dmRecipient = null; // pubHex des Empfängers für den nächsten Zettel (null = Brett/öffentlich)
+function contactName(pub) { return (dmContacts[pub] && dmContacts[pub].name) || short(pub); }
+function pinContact(pub, name) {
+  pub = String(pub || '').toLowerCase().trim();
+  if (pub === pubHex) { toast('Das ist dein eigener Schlüssel.'); return false; }
+  if (!/^[0-9a-f]{64}$/.test(pub)) { toast('Kein gültiger Schlüssel (64 Hex-Zeichen).'); return false; }
+  name = (name || '').trim() || short(pub);
+  // Änderungs-Warnung: gleicher Name schon an einen ANDEREN Schlüssel gebunden?
+  const clash = Object.keys(dmContacts).find((p) => p !== pub && dmContacts[p].name === name);
+  if (clash && !confirm('Achtung: „' + name + '" war bisher ein ANDERER Schlüssel (' + short(clash) +
+      ').\nWirklich diesen neuen Schlüssel als „' + name + '" merken?')) return false;
+  const existed = !!dmContacts[pub];
+  dmContacts[pub] = { name, pinnedAt: (dmContacts[pub] && dmContacts[pub].pinnedAt) || Date.now() };
+  saveContacts(); refreshRecipientSelect();
+  toast(existed ? 'Kontakt aktualisiert: ' + name : '🔒 Freigegeben: ' + name);
+  return true;
+}
+function refreshRecipientSelect() {
+  const sel = $('dm-to'); if (!sel) return;
+  const cur = dmRecipient;
+  sel.innerHTML = '';
+  const o0 = document.createElement('option'); o0.value = ''; o0.textContent = '— öffentlich / Brett —'; sel.appendChild(o0);
+  for (const pub of Object.keys(dmContacts)) {
+    const o = document.createElement('option'); o.value = pub; o.textContent = '🔒 privat an ' + contactName(pub); sel.appendChild(o);
+  }
+  sel.value = (cur && dmContacts[cur]) ? cur : '';
+  dmRecipient = sel.value || null;
+}
+function makeWhoClickable(who, pub) {
+  who.style.cursor = 'pointer';
+  who.title = 'Klick: als Kontakt merken (für private Nachrichten)';
+  who.addEventListener('click', () => {
+    if (pub === pubHex) { toast('Das bist du selbst.'); return; }
+    const known = dmContacts[pub];
+    const name = prompt(known ? 'Name für diesen Kontakt:' :
+      '🔒 Diesen Absender als Kontakt merken (Freigabe)?\nName (optional):', known ? known.name : '');
+    if (name === null) return; // abgebrochen
+    pinContact(pub, name);
+  });
+}
+async function openContacts() {
+  const bg = document.createElement('div');
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(20,18,16,.6);display:flex;align-items:center;justify-content:center;z-index:80;padding:16px;';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--card,#1c1a17);color:var(--fg,#eee);border:1px solid var(--acc,#c9a961);border-radius:14px;max-width:520px;width:100%;max-height:82vh;overflow:auto;padding:16px 18px;font-size:.92rem;';
+  box.innerHTML = '<h3 style="margin:.1em 0 .5em">🔒 Kontakte (private Nachrichten)</h3>' +
+    '<p style="opacity:.8;margin:.2em 0 .8em">Du kannst an einen Kontakt <b>privat</b> schreiben — nur ihr beide könnt es lesen. ' +
+    'Neue Kontakte merkst du per Klick auf den Absender-Namen eines Zettels, oder hier per Schlüssel. ' +
+    'Die <b>Sicherheitsnummer</b> kannst du mit der Gegenseite über einen zweiten Weg (Anruf) vergleichen — stimmt sie, ist kein Betrüger dazwischen.</p>';
+  const list = document.createElement('div');
+  const keys = Object.keys(dmContacts);
+  if (!keys.length) { const p = document.createElement('p'); p.textContent = 'Noch keine Kontakte.'; p.style.opacity = '.7'; list.appendChild(p); }
+  for (const pub of keys) {
+    const row = document.createElement('div');
+    row.style.cssText = 'border-top:1px solid rgba(255,255,255,.12);padding:8px 0;';
+    const sn = await safetyNumber(pubHex, pub);
+    row.innerHTML = '<b>' + contactName(pub).replace(/</g, '&lt;') + '</b> <span class="mono" style="opacity:.6">' + short(pub) + '</span>' +
+      '<div class="mono" style="font-size:.82rem;opacity:.85;margin:.2em 0">🔢 Sicherheitsnummer: ' + sn + '</div>';
+    const rm = document.createElement('button'); rm.className = 'tbtn'; rm.textContent = 'Entfernen';
+    rm.addEventListener('click', () => { delete dmContacts[pub]; saveContacts(); refreshRecipientSelect(); document.body.removeChild(bg); openContacts(); });
+    row.appendChild(rm); list.appendChild(row);
+  }
+  box.appendChild(list);
+  const add = document.createElement('div'); add.style.cssText = 'margin-top:12px;display:flex;gap:6px;flex-wrap:wrap;';
+  const inp = document.createElement('input'); inp.placeholder = 'Schlüssel (64 Hex) …'; inp.style.cssText = 'flex:1;min-width:180px;';
+  const nm = document.createElement('input'); nm.placeholder = 'Name (optional)'; nm.style.cssText = 'flex:1;min-width:120px;';
+  const addBtn = document.createElement('button'); addBtn.className = 'tbtn'; addBtn.textContent = '＋ merken';
+  addBtn.addEventListener('click', () => { if (pinContact(inp.value, nm.value)) { document.body.removeChild(bg); openContacts(); } });
+  add.appendChild(inp); add.appendChild(nm); add.appendChild(addBtn); box.appendChild(add);
+  const close = document.createElement('button'); close.className = 'ghost'; close.textContent = 'Schließen'; close.style.marginTop = '12px';
+  close.addEventListener('click', () => document.body.removeChild(bg));
+  box.appendChild(close);
+  bg.appendChild(box); bg.addEventListener('click', (e) => { if (e.target === bg) document.body.removeChild(bg); });
+  document.body.appendChild(bg);
+}
+
 async function buildEvent(content, extraTags = []) {
   const created_at = Math.floor(Date.now() / 1000);
   const kind = 1;
   const tags = [['t', TAG], ...extraTags];
   let outContent = content;
-  if (boardKey) { outContent = await encryptContent(content); tags.push(['enc', 'sbkim1']); }
+  if (dmRecipient) {
+    // Privat an EINEN Empfänger (E2E). p-Tag = Empfänger (NIP-04-Konvention), damit
+    // der Sender die eigene Nachricht später auch wieder lesen kann.
+    outContent = await dmEncrypt(content, priv, dmRecipient);
+    tags.push(['p', dmRecipient]); tags.push(['enc', 'dm1']);
+  } else if (boardKey) { outContent = await encryptContent(content); tags.push(['enc', 'sbkim1']); }
   const id = await sha256Hex(JSON.stringify([0, pubHex, created_at, kind, tags, outContent]));
   const sig = toHex(await schnorr.sign(fromHex(id), priv));
   return { id, pubkey: pubHex, created_at, kind, tags, content: outContent, sig };
@@ -513,7 +624,9 @@ function renderQuestion(ev, relay) {
   head.className = 'q-head';
   const who = document.createElement('span');
   who.className = 'who mono'; who.textContent = short(ev.pubkey);
+  makeWhoClickable(who, ev.pubkey);
   head.appendChild(who);
+  if (ev._dm) { const lk = document.createElement('span'); lk.className = 'who'; lk.style.color = 'var(--acc2,#8fd)'; lk.textContent = ' 🔒 privat · ' + contactName(ev._dm); head.appendChild(lk); }
   head.append(` · ${timeStr(ev.created_at)} · via ${relay.replace('wss://', '')}`);
   const text = document.createElement('div');
   text.className = 'q-text'; text.textContent = ev.content;
@@ -573,7 +686,9 @@ function renderAnswer(ev, relay) {
   head.className = 'a-head';
   const who = document.createElement('span');
   who.className = 'who mono'; who.textContent = short(ev.pubkey);
+  makeWhoClickable(who, ev.pubkey);
   head.appendChild(who);
+  if (ev._dm) { const lk = document.createElement('span'); lk.className = 'who'; lk.style.color = 'var(--acc2,#8fd)'; lk.textContent = ' 🔒 privat · ' + contactName(ev._dm); head.appendChild(lk); }
   head.append(` · ${timeStr(ev.created_at)} · via ${relay.replace('wss://', '')}`);
   const badge = document.createElement('span');
   badge.className = 'a-score'; badge.style.display = 'none'; // erst mit Bedeutungs-Sortierung
@@ -1032,6 +1147,15 @@ async function dispatch(ev, relay) {
     const plain = await decryptContent(ev.content);
     if (plain == null) return;
     ev.content = plain; // ab hier intern Klartext (wird nie wieder gesendet)
+  } else if (isDm(ev.content)) {
+    // Private E2E-Nachricht: mit dem öffentlichen Schlüssel der GEGENSEITE lesen.
+    // Bin ich der Absender → Gegenseite = Empfänger aus dem p-Tag; sonst = Absender.
+    const pTag = (ev.tags || []).find((t) => t[0] === 'p');
+    const other = ev.pubkey === pubHex ? (pTag ? pTag[1] : null) : ev.pubkey;
+    if (!other) return;
+    const plain = await dmDecrypt(ev.content, priv, other);
+    if (plain == null) return; // nicht für dich → still überspringen (kein Geheimtext-Müll)
+    ev.content = plain; ev._dm = other; // intern Klartext + Merker für die 🔒-Anzeige
   }
   if (seen.has(ev.id)) return; // nach await erneut prüfen
   seen.add(ev.id);
@@ -1162,6 +1286,21 @@ $('boardkey-set').addEventListener('click', async () => {
 });
 
 // ---- Frage stellen ----
+// B7: Empfänger-Auswahl + Kontakte-Knopf verdrahten + initial befüllen.
+(function wireDm() {
+  const sel = $('dm-to');
+  if (sel) sel.addEventListener('change', () => {
+    dmRecipient = sel.value || null;
+    const st = $('dm-status');
+    if (st) st.textContent = dmRecipient
+      ? '🔒 Der nächste Zettel geht PRIVAT an ' + contactName(dmRecipient) + ' (nur ihr beide könnt ihn lesen).'
+      : 'Tipp: Klick auf einen Absender-Namen merkt ihn als Kontakt (Freigabe). „Privat an" verschlüsselt den nächsten Zettel nur für diese Person.';
+  });
+  const cb = $('dm-contacts');
+  if (cb) cb.addEventListener('click', openContacts);
+  refreshRecipientSelect();
+})();
+
 $('ask').addEventListener('click', async () => {
   const content = $('qmsg').value.trim();
   if (!content) return;

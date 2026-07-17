@@ -16,7 +16,7 @@
  */
 "use strict";
 
-var CACHE_VERSION = "kimboard-v23";
+var CACHE_VERSION = "kimboard-v24";
 
 var APP_SHELL = [
   "./",
@@ -32,6 +32,7 @@ var APP_SHELL = [
   "./assets/schutz-init.js",
   "./assets/siegel-inhalt.js",
   "./modules/noble-secp256k1.js",
+  "./modules/dm_crypto.js",
   "./modules/01_storage.js",
   "./modules/02_spore.js",
   "./modules/03_embedding.js",
