@@ -90,6 +90,22 @@ test("Pinnwand-Funktion erhalten + Endknoten-Stack vorhanden", () => {
   assert.match(html, /assets\/siegel-inhalt\.js/, "Siegel-Andock-Werkzeug eingebunden");
 });
 
+test("Gerätename verdrahtet (Anzeige-Name im Raum + nick-Tag am Brett)", () => {
+  const html = readFileSync(join(ROOT, "index.html"), "utf8");
+  assert.match(html, /id="geraetename"/, "Gerätename-Eingabefeld vorhanden");
+  assert.match(html, /LS_GERAETENAME\s*=\s*'sbkim_geraetename'/, "localStorage-Schlüssel gesetzt");
+  assert.match(html, /tags\.push\(\['nick', _nick\]\)/, "nick-Tag beim Senden gesetzt");
+  assert.match(html, /function authorLabel\(ev\)/, "authorLabel (Kontakt > nick > Kennung) vorhanden");
+  assert.match(html, /who\.textContent = authorLabel\(ev\)/, "Absender-Anzeige nutzt authorLabel");
+  assert.match(html, /sbkim:geraetename-changed/, "Kopplungs-Event gefeuert");
+  const rdv = readFileSync(join(ROOT, "assets/rendezvous-init.js"), "utf8");
+  assert.match(rdv, /function displayNodeName\(\)/, "displayNodeName im Rendezvous-Glue");
+  assert.match(rdv, /nodeName: displayNodeName\(\)/, "Anmeldung nutzt displayNodeName");
+  // Sicherheit: die SIGNIERTE Spore behält den kanonischen Namen (kein Re-Sign).
+  assert.match(rdv, /nodeName: CFG\.nodeName/, "generateOwnSpore behält CFG.nodeName (kein Spore-Re-Sign)");
+  assert.match(rdv, /sbkim:geraetename-changed/, "Rendezvous-Glue hört auf Namenswechsel");
+});
+
 test("SW-APP_SHELL nennt genau die vorhandenen Dateien", () => {
   const sw = readFileSync(join(ROOT, "sw.js"), "utf8");
   const shell = sw.match(/var APP_SHELL = \[([\s\S]*?)\];/);
