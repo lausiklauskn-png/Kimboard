@@ -27,17 +27,30 @@ function toHex(b) { return Array.from(b).map((x) => x.toString(16).padStart(2, '
 function b64(buf) { return btoa(String.fromCharCode.apply(null, new Uint8Array(buf))); }
 function unb64(s) { return Uint8Array.from(atob(s), (c) => c.charCodeAt(0)); }
 
+// Schlüssel-Normalisierer: die App reicht den privaten Schlüssel als Uint8Array
+// (fromHex(privHex)) durch, der Headless-Test als Hex-Text — beides muss gehen.
+// (Ohne diese Normalisierung stürzt fromHex auf einem Uint8Array ab: h.substr.)
+function asPrivBytes(k) {
+  if (k instanceof Uint8Array) return k;
+  return fromHex(String(k));
+}
+function asPubHex(p) {
+  if (p instanceof Uint8Array) return toHex(p);
+  return String(p).toLowerCase();
+}
+
 // Nostr-Pubkeys sind x-only (32 Byte / 64 hex, BIP340). Für ECDH heben wir sie mit
 // geradem Y auf einen vollen Punkt (02||X) — genau wie NIP-04.
-function liftPub(pubHex) {
-  const h = String(pubHex).toLowerCase();
+function liftPub(pub) {
+  const h = asPubHex(pub);
   if (h.length === 64) return '02' + h;
   return h; // bereits 02/03/04-präfix
 }
 
 // Gemeinsames ECDH-Geheimnis (X-Koordinate) aus eigenem Priv + fremdem Pub.
-export function sharedX(myPrivHex, theirPubHex) {
-  const shared = getSharedSecret(fromHex(myPrivHex), liftPub(theirPubHex), false); // 0x04||X||Y
+// Priv als Uint8Array ODER Hex-Text, Pub als x-only-Hex ODER Bytes.
+export function sharedX(myPriv, theirPub) {
+  const shared = getSharedSecret(asPrivBytes(myPriv), liftPub(theirPub), false); // 0x04||X||Y
   return shared.slice(1, 33); // X-Koordinate
 }
 

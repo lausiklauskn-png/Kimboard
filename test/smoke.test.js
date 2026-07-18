@@ -41,7 +41,7 @@ const EXPECTED_SHA256 = {
   "23_rendezvous_ui.js": "4d760f4b57be609ebacdee518e18295672707b66b1aca95b451ed71eafa1670c",
   "24_ocr_eingabe.js": "79f966d628976e03a7c3006e6ca45dd11d9f71c6bb6b562094a8d5c803138c8b",
   "noble-secp256k1.js": "8f3879ca422c4fdfe7ca0361688636fa7cc550a59bd94d512ed6ec79aa3d55d1",
-  "dm_crypto.js": "dab5323c03c466cc519a2dca6523705e166eba69d046a5872fe682011fef4712",
+  "dm_crypto.js": "e9c973f0459c5f03fa80b47d3cd4505ef6d4bd689e409569370a59db2586ba63",
 };
 
 test("Drift-Guard: jede Modul-Kopie hält ihren aufgezeichneten sha256", () => {

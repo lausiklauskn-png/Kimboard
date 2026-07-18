@@ -54,6 +54,17 @@ ok((await M.dmDecrypt(tampered, B.priv, A.pub)) === null, 'manipulierter Umschla
 ok((await M.dmDecrypt('normaler text', B.priv, A.pub)) === null, 'Nicht-DM-Text -> null');
 ok(M.isDm('sbkimenc1:...') === false, 'isDm trennt vom Passwort-Weg (sbkimenc1)');
 
+// --- Regression: privater Schlüssel als Uint8Array (wie die echte App ihn reicht) ---
+// index.html macht `const priv = fromHex(privHex)` → Bytes, NICHT Hex-Text.
+// Vor dem Fix stürzte das mit „h.substr is not a function" ab (Browser-Befund 18.07).
+function fromHex(h) { const a = new Uint8Array(h.length / 2); for (let i = 0; i < a.length; i++) a[i] = parseInt(h.substr(i * 2, 2), 16); return a; }
+const aPrivBytes = fromHex(A.priv);
+const bPrivBytes = fromHex(B.priv);
+const boxBytes = await M.dmEncrypt(SECRET, aPrivBytes, B.pub);      // A(Bytes) -> B
+ok(M.isDm(boxBytes), 'dmEncrypt akzeptiert Uint8Array-Priv (App-Fall)');
+ok((await M.dmDecrypt(boxBytes, bPrivBytes, A.pub)) === SECRET, 'B(Bytes) entschlüsselt Uint8Array-Nachricht == Original');
+ok((await M.dmDecrypt(boxBytes, B.priv, A.pub)) === SECRET, 'Bytes-Umschlag auch mit Hex-Priv lesbar (beide Wege gemischt)');
+
 // Sicherheitsnummer (SAS)
 const sasAB = await M.safetyNumber(A.pub, B.pub);
 const sasBA = await M.safetyNumber(B.pub, A.pub);
