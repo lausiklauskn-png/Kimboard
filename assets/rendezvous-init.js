@@ -36,6 +36,12 @@
     domainKeywords: ["Pinnwand", "Notizen", "Merken", "Frage-Antwort", "Nostr", "Bedeutungs-Sortierung", "SBKIM", "Mycel"],
   };
 
+  // Gerätename (frei wählbarer Anzeige-Name, lokal): NUR an die Anzeige/Anmeldung
+  // hängen — NICHT an generateOwnSpore (Identität/Spore bleibt kanonisch, kein
+  // Re-Sign). Sicherheit: nur Hinweis, die Kennung im Raum bleibt daneben.
+  function geraetename() { try { return (localStorage.getItem("sbkim_geraetename") || "").trim().slice(0, 40); } catch (_e) { return ""; } }
+  function displayNodeName() { var g = geraetename(); return g ? (CFG.nodeName + " · " + g) : CFG.nodeName; }
+
   function createIdentity() {
     if (!window.SbkimEmbedding || !window.SbkimSpore) {
       return Promise.reject(new Error("Module 02/03 (Spore/Embedding) nicht geladen."));
@@ -116,7 +122,7 @@
     if (window.SbkimRendezvous && typeof window.SbkimRendezvous.init === "function") {
       try {
         window.SbkimRendezvous.init({
-          nodeName: CFG.nodeName,
+          nodeName: displayNodeName(),
           dbSuffix: DB_SUFFIX,
           createIdentity: createIdentity,
           ensureIdentity: true,   // Modus A
@@ -131,11 +137,17 @@
     }
     try {
       window.SbkimRendezvousUI.init({
-        nodeName: CFG.nodeName,
+        nodeName: displayNodeName(),
         dbSuffix: DB_SUFFIX,
         corner: "bl",
         createIdentity: createIdentity,
       });
+      // Gerätename-Kopplung: beim Namenswechsel Anzeige-Namen neu setzen (fail-soft).
+      try {
+        window.addEventListener("sbkim:geraetename-changed", function () {
+          try { if (window.SbkimRendezvous && window.SbkimRendezvous.configure) window.SbkimRendezvous.configure({ nodeName: displayNodeName() }); } catch (_e) {}
+        });
+      } catch (_e) {}
       console.info("[Kimboard] Rendezvous-UI gemountet (🌐 Mit dem Netz verbinden, Modus A aktiv).");
     } catch (e) {
       console.warn("[Kimboard] Rendezvous-UI übersprungen:", e);
