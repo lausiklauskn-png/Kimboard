@@ -16,7 +16,7 @@
  */
 "use strict";
 
-var CACHE_VERSION = "kimboard-v26";
+var CACHE_VERSION = "kimboard-v27";
 
 var APP_SHELL = [
   "./",
