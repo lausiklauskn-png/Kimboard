@@ -1,5 +1,5 @@
 {
-  "createdAt": "2026-07-18T22:31:28.359Z",
+  "createdAt": "2026-07-19T13:01:01.384Z",
   "domain": "Pinnwand/Notizen/Merken",
   "domainDescription": "Kimboard — semantische Pinnwand: Fragen und Notizen an ein geborgtes „dummes Brett“ (Nostr) heften, geräteübergreifend und nach Bedeutung sortiert. Merken, Notizen, Frage-Antwort — server-los direkt im Browser, ohne Server und ohne Konto.",
   "domainKeywords": [
@@ -405,7 +405,7 @@
     "Backup",
     "Handshake"
   ],
-  "id": "VrQCOQkRWYRizppntQY0woMgKvLSGGgSOBOOU47HcKQ",
+  "id": "1f9Jb7c3SEI8dUOtGR6_meMaOaPgbz2GWXMLmPCZMv8",
   "nodeName": "Kimboard",
   "nodeType": "hybrid",
   "protocolVersion": "0.2",
@@ -417,9 +417,9 @@
       "verify"
     ],
     "kty": "OKP",
-    "x": "z3o75krRrGN4U2pN7V7LxcrLRDHmAe1E9Rw_ixXuqDw"
+    "x": "AM5cTMF9cF-lqf4-c6S3VGwrjrThWYiMi83PwnUrNBc"
   },
-  "signature": "MRI-IxjS6shH7gfmHDG-j8D_kAS9_l1eU2-t43Mlf4LVevlUmhh6no8IH-TRWa-MUP-8KP0g_VBIOi3E_4LtCA",
+  "signature": "7RETmGVNAe9FBFtqQ6_Hjb5eFjOcYaeKBWn-gBu16ECX_Ip728g13FF03x1HvqGTKAzBwQWu9a9jqNiTp89OCA",
   "snippetVectors": [
     {
       "text": "Kimboard — semantische Pinnwand: Fragen und Notizen an ein geborgtes „dummes Brett“ (Nostr) heften, geräteübergreifend und nach Bedeutung sortiert.",
