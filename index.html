@@ -786,9 +786,57 @@ function whiten(v, mean) { const w = new Float32Array(v.length); for (let i = 0;
 function relevance(qVec, aVec, mean) {
   return mean ? dot(whiten(qVec, mean), whiten(aVec, mean)) : dot(qVec, aVec);
 }
+// Bester Cosinus über MEHRERE Frage-Varianten (Multi-Query, A5b).
+function bestRelevance(qVecs, aVec, mean) {
+  let best = -Infinity;
+  for (const q of qVecs) { if (!q) continue; const r = relevance(q, aVec, mean); if (r > best) best = r; }
+  return best === -Infinity ? -2 : best;
+}
+
+// ---- Multi-Query (A5b): Frage-Varianten für bessere Bedeutungs-Sortierung ----
+// EHRLICH: neben der Original-Frage werden ein paar VARIANTEN eingebettet
+// (Füllwörter weg + kleine Synonym-Karte) und je Antwort der BESTE Cosinus über
+// alle Varianten genommen. So werden auch Antworten gut sortiert, die ANDERS
+// formuliert sind als die Frage. Es wird NICHTS gefiltert — reine Sortier-Fläche
+// (wie der family-Marktplatz). Fail-soft: gibt es keine echte Variante, ist es
+// die Ein-Frage-Sortierung wie zuvor. Die Synonym-Karte ist app-eigen/erweiterbar.
+const QUERY_FILLERS = /\b(wei[sß]+|wer|jemand|kann|mir|bitte|mal|denn|eigentlich|vielleicht|hallo|hey|gibt|es|ob|wie|kennt|hat|habt|ihr|man|sagen|helfen|frage|k[öo]+nnt|k[öo]+nnte|w[üu]+rde)\b/gi;
+const QUERY_SYNONYMS = [
+  ['auto', 'wagen', 'fahrzeug', 'pkw'], ['kaufen', 'erwerben', 'besorgen'],
+  ['günstig', 'billig', 'preiswert'], ['reparieren', 'reparatur', 'flicken'],
+  ['essen', 'gericht', 'speise', 'rezept'], ['getränk', 'drink', 'cocktail'],
+  ['arzt', 'ärztin', 'doktor', 'mediziner'], ['hilfe', 'unterstützung', 'rat'],
+  ['problem', 'schwierigkeit', 'fehler'], ['kind', 'kinder', 'nachwuchs'],
+];
+const QUERY_VARIANT_MAX = 4;
+function expandQuery(text) {
+  const src = String(text || '');
+  const out = [src];
+  const stripped = src.replace(QUERY_FILLERS, ' ').replace(/\s+/g, ' ').trim();
+  if (stripped && stripped.toLowerCase() !== src.toLowerCase()) out.push(stripped);
+  const low = src.toLowerCase();
+  for (const grp of QUERY_SYNONYMS) {
+    const hit = grp.find((w) => low.includes(w));
+    if (!hit) continue;
+    for (const alt of grp) {
+      if (alt === hit) continue;
+      const v = low.split(hit).join(alt);
+      if (!out.some((o) => o.toLowerCase() === v)) out.push(v);
+      if (out.length >= QUERY_VARIANT_MAX) break;
+    }
+    if (out.length >= QUERY_VARIANT_MAX) break;
+  }
+  return out.slice(0, QUERY_VARIANT_MAX);
+}
 
 async function embedQuestion(view) {
-  if (!view.qVec) { view.qVec = await EMB().embedQuery(view.qEv.content); accumulate(view.qVec); }
+  if (!view.qVecs) {
+    view.qVecs = [];
+    for (const q of expandQuery(view.qEv.content)) {
+      try { const v = await EMB().embedQuery(q); view.qVecs.push(v); accumulate(v); } catch { /* fail-soft */ }
+    }
+    view.qVec = view.qVecs[0] || null; // Primär-Vektor (Original) für die Guards
+  }
   return view.qVec;
 }
 async function embedAnswer(entry) {
@@ -806,7 +854,7 @@ async function resort(view) {
   for (const e of view.answers) { if (!e.vec) { try { await embedAnswer(e); } catch { /* fail-soft */ } } }
   const mean = meanVec(); // zentrieren, sobald genug Text gesammelt ist
   for (const e of view.answers) {
-    e.score = e.vec ? relevance(view.qVec, e.vec, mean) : -2;
+    e.score = e.vec ? bestRelevance(view.qVecs || [view.qVec], e.vec, mean) : -2;
     if (e.vec) {
       e.badge.textContent = e.score.toFixed(2);
       e.badge.className = 'a-score ' + (e.score > 0.25 ? 'hi' : e.score >= 0 ? 'mid' : 'lo'); // zentriert: 0 = Grenze
