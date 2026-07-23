@@ -82,6 +82,10 @@ test("Pinnwand-Funktion erhalten + Endknoten-Stack vorhanden", () => {
   assert.match(html, /'EVENT'/, "Nostr EVENT erhalten");
   assert.match(html, /'REQ'/, "Nostr REQ erhalten");
   assert.match(html, /function whiten\(/, "Whitening (Inhalt statt Hülle) erhalten");
+  // Multi-Query (A5b): Frage-Varianten + bester Cosinus, kein Filter.
+  assert.match(html, /function expandQuery/, "Multi-Query A5b: expandQuery erhalten");
+  assert.match(html, /function bestRelevance/, "Multi-Query A5b: bestRelevance erhalten");
+  assert.match(html, /view\.qVecs/, "Multi-Query A5b: qVecs-Varianten verdrahtet");
   // Endknoten-Stack ist verdrahtet.
   for (const m of ["02_spore.js", "05_anastomose.js", "23_rendezvous.js", "16_siegel.js"]) {
     assert.match(html, new RegExp(m.replace(".", "\\.")), `Endknoten-Modul eingebunden: ${m}`);
