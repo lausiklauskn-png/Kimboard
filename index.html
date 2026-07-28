@@ -258,6 +258,23 @@
     </div>
     <div class="status" id="geraetename-hint" style="margin-top:4px;">Frei wählbarer Anzeige-Name — erscheint im Raum + auf deinen Zetteln (nur ein Hinweis, kein Vertrauens-Beweis; die Kennung bleibt daneben).</div>
     <div class="row" id="relays" style="margin-top: 10px;"></div>
+    <div class="row" style="margin-top: 8px; gap: 8px; align-items:center; flex-wrap:wrap;">
+      <label style="opacity:.85;"><input type="checkbox" id="rot-on"> 🔄 Relais automatisch wechseln</label>
+      <input id="rot-secret" type="password" placeholder="Kreis-Geheimnis (bei allen gleich)" autocomplete="off" style="flex:1; min-width:170px;">
+      <select id="rot-period" title="Wie oft gewechselt wird">
+        <option value="300000">alle 5 Min</option>
+        <option value="900000" selected>alle 15 Min</option>
+        <option value="3600000">stündlich</option>
+        <option value="86400000">täglich</option>
+      </select>
+      <select id="rot-count" title="Wie viele Relais gleichzeitig">
+        <option value="2">2 Relais</option>
+        <option value="3" selected>3 Relais</option>
+        <option value="4">4 Relais</option>
+      </select>
+      <button id="rot-announce" class="tbtn" title="Umschalt-Ansage an deine Kontakte senden (Reserve, falls Uhren abweichen)">📢 ansagen</button>
+    </div>
+    <div class="status" id="rot-status" style="margin-top:4px;">Aus — du wählst die Relais oben selbst. Automatik: alle im Kreis rechnen aus demselben Geheimnis dieselben Relais aus, ohne Absprache. Zweck: Ausfallsicherheit + Metadaten nicht an einem Relais bündeln — <b>kein</b> Schutz gegen Sperren oder Überwachung.</div>
     <div class="row" style="margin-top: 10px; gap: 8px;">
       <input id="boardkey" type="password" placeholder="🔒 Privates Brett: Passwort (leer = offen)" autocomplete="off" style="flex:1; min-width:200px;">
       <button id="boardkey-set" class="tbtn">Setzen</button>
@@ -280,6 +297,9 @@
       <span style="display:flex; gap:8px; align-items:center;">
         <button id="mic" class="tbtn" title="Frage einsprechen">🎤</button>
         <button id="ocrbtn" class="tbtn" title="Foto/Handschrift → Frage (Mistral OCR, EU)">📷</button>
+        <button id="dmvoice" class="tbtn" title="🔒 Sprachnotiz an privaten Kontakt (nur bei „Privat an")">🎙️</button>
+        <button id="dmimg" class="tbtn" title="🔒 Bild an privaten Kontakt (nur bei „Privat an")">🖼️</button>
+        <input type="file" id="dmimgfile" accept="image/*" style="display:none">
         <button id="ask" disabled>Frage stellen</button></span>
     </div>
   </div>
@@ -368,6 +388,8 @@
 <script type="module">
 import { schnorr, utils } from './modules/noble-secp256k1.js';
 import { dmEncrypt, dmDecrypt, isDm, safetyNumber } from './modules/dm_crypto.js';
+import { currentRelays as rotCurrentRelays, makeAnnouncement as rotMakeAnnouncement,
+         parseAnnouncement as rotParseAnnouncement, isAnnouncement as rotIsAnnouncement } from './modules/relay_rotation.js';
 
 // ---- Helpers ----
 const $ = (id) => document.getElementById(id);
@@ -673,7 +695,9 @@ function renderQuestion(ev, relay) {
   if (ev._dm) { const lk = document.createElement('span'); lk.className = 'who'; lk.style.color = 'var(--acc2,#8fd)'; lk.textContent = ' 🔒 privat · ' + (ev._dmGroupN > 1 ? ev._dmGroupN + ' Kontakte' : contactName(ev._dm)); head.appendChild(lk); }
   head.append(` · ${timeStr(ev.created_at)} · via ${relay.replace('wss://', '')}`);
   const text = document.createElement('div');
-  text.className = 'q-text'; text.textContent = ev.content;
+  text.className = 'q-text';
+  const _media = ev._dm ? parseDmMedia(ev.content) : null;
+  if (_media) { renderDmMedia(text, _media); } else { text.textContent = ev.content; }
   const answersUl = document.createElement('ul');
   answersUl.className = 'answers';
 
@@ -1248,6 +1272,8 @@ async function dispatch(ev, relay) {
     const plain = await dmDecrypt(ev.content, priv, other);
     if (plain == null) return; // nicht für dich → still überspringen (kein Geheimtext-Müll)
     ev.content = plain; ev._dm = other; // intern Klartext + Merker für die 🔒-Anzeige
+    // Umschalt-Ansage (Schritt 3): wird ausgeführt, nicht als Zettel angezeigt.
+    if (rotIsAnnouncement(ev.content)) { handleAnnouncement(ev); return; }
     // Eigene „privat an mehrere"-Sendung: die N Kopien (gleicher grp-Tag) in der EIGENEN
     // Ansicht zu EINEM Eintrag zusammenfassen (jeder Empfänger sieht ohnehin nur seine).
     if (ev.pubkey === pubHex) {
@@ -1475,6 +1501,201 @@ $('ask').addEventListener('click', async () => {
   updateSendState();
 });
 
+// ============ Schritt 2: Sprach-/Bild-Nachricht im PRIVATEN DM ============
+// Nur für private Empfänger (E2E). Das Medium reist als kleiner JSON-Umschlag
+// IM verschlüsselten Klartext — dieselbe ECDH-Verschlüsselung wie beim Text-DM,
+// kein neuer Schlüssel, kein neuer Kanal. Ehrliche Grenze: über die öffentlichen
+// Relais gilt ein Größenlimit → Sprachnotizen kurz, Bilder verkleinert; zu Großes
+// wird mit klarem Hinweis abgelehnt statt still zu scheitern.
+const DM_MEDIA_MAX = 80000; // max. base64-Länge (~60 KB) — relais-freundlich
+function makeMediaEnvelope(kind, mime, b64, caption) {
+  return JSON.stringify({ kbmt: 1, k: kind, m: mime, d: b64, c: caption || '' });
+}
+function parseDmMedia(s) {
+  if (typeof s !== 'string' || s.charCodeAt(0) !== 123 /* { */ || s.indexOf('"kbmt"') < 0) return null;
+  try { const o = JSON.parse(s); if (o && o.kbmt === 1 && (o.k === 'voice' || o.k === 'image') && typeof o.d === 'string') return o; } catch (_e) { /* fail-soft */ }
+  return null;
+}
+function renderDmMedia(container, media) {
+  if (media.k === 'image') {
+    const im = document.createElement('img');
+    im.src = 'data:' + (media.m || 'image/jpeg') + ';base64,' + media.d;
+    im.alt = '🔒 privates Bild'; im.loading = 'lazy';
+    im.style.cssText = 'max-width:100%;max-height:60vh;border-radius:10px;display:block;';
+    container.appendChild(im);
+  } else if (media.k === 'voice') {
+    const cap = document.createElement('div'); cap.textContent = '🎙️ Sprachnotiz';
+    cap.style.cssText = 'font-size:.8rem;opacity:.7;margin-bottom:3px;';
+    const au = document.createElement('audio');
+    au.controls = true; au.src = 'data:' + (media.m || 'audio/webm') + ';base64,' + media.d;
+    au.style.cssText = 'width:100%;margin:2px 0;';
+    container.appendChild(cap); container.appendChild(au);
+  }
+  if (media.c) { const c = document.createElement('div'); c.textContent = media.c; c.style.marginTop = '4px'; container.appendChild(c); }
+}
+async function sendPrivateMedia(kind, mime, b64) {
+  const rcpts = dmRecipients.slice();
+  if (!rcpts.length) { toast('🎙️/🖼️ nur für private Kontakte — oben „Privat an" wählen.'); return; }
+  if (!b64 || b64.length > DM_MEDIA_MAX) { toast('Zu groß für die öffentlichen Relais — bitte kürzer/kleiner.'); return; }
+  const content = makeMediaEnvelope(kind, mime, b64, '');
+  const live = liveSockets();
+  if (rcpts.length >= 2) {
+    const grp = toHex(crypto.getRandomValues(new Uint8Array(8)));
+    for (const r of rcpts) { const ev = await buildEvent(content, [['grp', grp, String(rcpts.length)]], r); for (const ws of live) ws.send(JSON.stringify(['EVENT', ev])); dispatch(ev, live[0] ? live[0].url : 'lokal'); }
+  } else {
+    const ev = await buildEvent(content, [], rcpts[0]); for (const ws of live) ws.send(JSON.stringify(['EVENT', ev])); dispatch(ev, live[0] ? live[0].url : 'lokal');
+  }
+  toast(kind === 'voice' ? '🎙️ Sprachnotiz gesendet' : '🖼️ Bild gesendet');
+}
+// --- Bild: Datei → verkleinern (max 800 px, JPEG q0.6) → senden ---
+$('dmimg').addEventListener('click', () => {
+  if (!dmRecipients.length) { toast('🖼️ nur für private Kontakte — oben „Privat an" wählen.'); return; }
+  $('dmimgfile').click();
+});
+$('dmimgfile').addEventListener('change', async (e) => {
+  const f = e.target.files && e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try { const b64 = await downscaleImage(f, 800, 0.6); await sendPrivateMedia('image', 'image/jpeg', b64); }
+  catch (_e) { toast('Bild konnte nicht verarbeitet werden.'); }
+});
+function downscaleImage(file, maxSide, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image(); const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let w = img.width, h = img.height;
+      const scale = Math.min(1, maxSide / Math.max(w, h));
+      w = Math.max(1, Math.round(w * scale)); h = Math.max(1, Math.round(h * scale));
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+      cv.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve((cv.toDataURL('image/jpeg', quality).split(',')[1]) || '');
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('img')); };
+    img.src = url;
+  });
+}
+// --- Sprachnotiz: MediaRecorder, zweiter Klick = stoppen + senden ---
+(function setupDmVoice() {
+  const btn = $('dmvoice');
+  if (!('MediaRecorder' in window) || !navigator.mediaDevices) { btn.disabled = true; btn.style.opacity = '0.5'; btn.title = 'Aufnahme in diesem Browser nicht verfügbar'; return; }
+  let rec = null, chunks = [], stream = null, recording = false;
+  btn.addEventListener('click', async () => {
+    if (recording) { try { rec.stop(); } catch (_e) { /* */ } return; }
+    if (!dmRecipients.length) { toast('🎙️ nur für private Kontakte — oben „Privat an" wählen.'); return; }
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch (_e) { toast('Kein Mikrofon-Zugriff.'); return; }
+    chunks = []; rec = new MediaRecorder(stream);
+    rec.ondataavailable = (ev) => { if (ev.data && ev.data.size) chunks.push(ev.data); };
+    rec.onstop = async () => {
+      recording = false; btn.classList.remove('mic-on'); btn.textContent = '🎙️';
+      try { stream.getTracks().forEach((t) => t.stop()); } catch (_e) { /* */ }
+      const blob = new Blob(chunks, { type: (rec && rec.mimeType) || 'audio/webm' });
+      const b64 = await blobToB64(blob);
+      await sendPrivateMedia('voice', blob.type || 'audio/webm', b64);
+    };
+    rec.start(); recording = true; btn.classList.add('mic-on'); btn.textContent = '⏹';
+    toast('🎙️ Aufnahme läuft — nochmal tippen zum Senden');
+  });
+})();
+function blobToB64(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1] || '');
+    r.onerror = reject; r.readAsDataURL(blob);
+  });
+}
+
+// ============ Schritt 3: automatischer Relais-Wechsel (Kreis-Rotation) ============
+// Berechnet: alle im Kreis rechnen aus Geheimnis + Zeitfenster DIESELBE Auswahl aus
+// (keine Absprache nötig); das vorige Fenster wird mitgehört, damit beim Umschalten
+// niemand verloren geht. Ansage (📢) ist nur der Notnagel bei schiefen Uhren.
+// Default AUS — ohne Häkchen bleibt alles wie bisher (manuelle Pills).
+// EHRLICH: Zweck ist Ausfallsicherheit + Metadaten nicht an EINEM Relais bündeln,
+// NICHT Zensur-Umgehung und keine Tarnung (die Relais-Liste ist öffentlich).
+const LS_ROT = 'sbkim_pinnwand_rotation';
+let rot = { on: false, secret: '', periodMs: 900000, count: 3, manual: null };
+try { const s = JSON.parse(localStorage.getItem(LS_ROT) || 'null'); if (s && typeof s === 'object') rot = Object.assign(rot, s); } catch { /* fail-soft */ }
+let rotTimer = null;
+function saveRot() { try { localStorage.setItem(LS_ROT, JSON.stringify(rot)); } catch { /* */ } }
+function rotStatusText(info) {
+  if (!rot.on) return 'Aus — du wählst die Relais oben selbst. Automatik: alle im Kreis rechnen aus demselben Geheimnis dieselben Relais aus, ohne Absprache. Zweck: Ausfallsicherheit + Metadaten nicht an einem Relais bündeln — kein Schutz gegen Sperren oder Überwachung.';
+  if (!rot.secret) return '⚠️ Bitte ein Kreis-Geheimnis eintragen — es muss bei allen im Kreis GLEICH sein (sonst landet ihr auf verschiedenen Relais).';
+  const mins = Math.max(1, Math.round((info?.msUntilNext || 0) / 60000));
+  return '🔄 Automatik läuft · jetzt: ' + (info?.current || []).map((u) => u.replace('wss://', '')).join(', ') +
+    ' · nächster Wechsel in ~' + mins + ' Min · voriges Fenster wird mitgehört, damit nichts verloren geht.';
+}
+function applyRelaySet(next) {
+  // Verbindungen an die neue Menge angleichen (schließen/öffnen), ohne Datenverlust.
+  for (const url of Object.keys(conns)) {
+    if (!next.includes(url)) { const ws = conns[url]; try { ws && ws.close(); } catch { /* */ } delete conns[url]; }
+  }
+  activeRelays = next.slice();
+  for (const url of activeRelays) if (!conns[url]) connect(url);
+  relayPills(); updateSendState();
+}
+async function runRotation() {
+  if (!rot.on || !rot.secret) return;
+  try {
+    const info = await rotCurrentRelays(rot.secret, RELAY_POOL, { count: rot.count, periodMs: rot.periodMs });
+    if (info.union.length) applyRelaySet(info.union);
+    const st = $('rot-status'); if (st) st.textContent = rotStatusText(info);
+    clearTimeout(rotTimer);
+    rotTimer = setTimeout(runRotation, Math.max(5000, info.msUntilNext + 1500)); // kleiner Puffer
+  } catch (_e) {
+    const st = $('rot-status'); if (st) st.textContent = '⚠️ Automatik konnte nicht rechnen — die zuletzt gewählten Relais bleiben aktiv.';
+  }
+}
+function stopRotation(restoreManual) {
+  clearTimeout(rotTimer); rotTimer = null;
+  if (restoreManual && Array.isArray(rot.manual) && rot.manual.length) {
+    applyRelaySet(rot.manual.filter((u) => RELAY_POOL.includes(u)));
+  }
+  const st = $('rot-status'); if (st) st.textContent = rotStatusText(null);
+}
+function initRotationUi() {
+  const cb = $('rot-on'), sec = $('rot-secret'), per = $('rot-period'), cnt = $('rot-count');
+  if (!cb) return;
+  cb.checked = !!rot.on; sec.value = rot.secret || '';
+  per.value = String(rot.periodMs); cnt.value = String(rot.count);
+  cb.addEventListener('change', () => {
+    rot.on = cb.checked;
+    if (rot.on) { rot.manual = activeRelays.slice(); saveRot(); runRotation(); }
+    else { saveRot(); stopRotation(true); }
+  });
+  sec.addEventListener('change', () => { rot.secret = sec.value.trim(); saveRot(); if (rot.on) runRotation(); });
+  per.addEventListener('change', () => { rot.periodMs = parseInt(per.value, 10) || 900000; saveRot(); if (rot.on) runRotation(); });
+  cnt.addEventListener('change', () => { rot.count = parseInt(cnt.value, 10) || 3; saveRot(); if (rot.on) runRotation(); });
+  $('rot-announce').addEventListener('click', announceSwitch);
+  if (rot.on && rot.secret) runRotation(); else stopRotation(false);
+}
+// 📢 Ansage an die Kontakte (Reserve-Weg) — reist über den verschlüsselten DM,
+// ist dadurch signiert und nur für den Kreis lesbar.
+async function announceSwitch() {
+  const targets = dmRecipients.length ? dmRecipients.slice() : Object.keys(dmContacts);
+  if (!targets.length) { toast('Keine Kontakte — erst jemanden als Kontakt merken.'); return; }
+  if (!rot.on || !rot.secret) { toast('Erst die Automatik einschalten (mit Kreis-Geheimnis).'); return; }
+  const info = await rotCurrentRelays(rot.secret, RELAY_POOL, { count: rot.count, periodMs: rot.periodMs });
+  const text = rotMakeAnnouncement(info.windowIdx, info.current, Date.now());
+  const live = liveSockets();
+  for (const r of targets) {
+    const ev = await buildEvent(text, [], r);
+    for (const ws of live) ws.send(JSON.stringify(['EVENT', ev]));
+  }
+  toast('📢 Umschalt-Ansage an ' + targets.length + ' Kontakt(e) gesendet');
+}
+// Ansage eines Kontakts übernehmen (nur von BEKANNTEN Kontakten, nur Relais aus
+// dem eigenen Pool — eine Ansage kann niemanden auf fremde Adressen umleiten).
+function handleAnnouncement(ev) {
+  if (!dmContacts[ev.pubkey]) return false;         // nur aus dem eigenen Kreis
+  const ann = rotParseAnnouncement(ev.content, RELAY_POOL);
+  if (!ann) return false;
+  const next = ann.relays.slice();
+  for (const u of activeRelays) if (!next.includes(u)) next.push(u); // Überlappung: nichts abreißen
+  applyRelaySet(next);
+  toast('📢 ' + contactName(ev.pubkey) + ' hat einen Relais-Wechsel angesagt — übernommen.');
+  return true;
+}
+
 // ---- Werkzeug-Knöpfe (leeren / vergrößern / vollbild / neu laden) ----
 $('board-clear').addEventListener('click', clearBoard);
 
@@ -1629,6 +1850,7 @@ $('tb-reload').addEventListener('click', async () => {
 relayPills();
 activeRelays.forEach(connect);
 updateSendState();
+initRotationUi();   // Relais-Automatik (Default aus; startet nur mit Häkchen + Geheimnis)
 </script>
 
 <!-- ── SBKIM-Endknoten-Stack (byte-1:1-Kopien, Drift-Guard im Smoke-Test) ──
