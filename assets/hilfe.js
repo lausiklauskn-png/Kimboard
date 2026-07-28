@@ -50,7 +50,7 @@
     // — Private Nachrichten —
     'dm-to':       ['🔒 Privat an', 'Wählst du hier eine Person, geht dein nächster Zettel NUR an sie — Ende-zu-Ende verschlüsselt. Kein Relais und kein Dritter kann ihn lesen. „öffentlich / Brett" schickt an alle.'],
     'dm-multi':    ['👥 Mehrere', 'Mehrere Empfänger auf einmal wählen. Jeder bekommt eine eigene, nur für ihn verschlüsselte Kopie — die Empfänger sehen einander nicht.'],
-    'dm-contacts': ['👤 Kontakte', 'Deine vertrauten Kontakte verwalten. Hier steht auch die SICHERHEITSNUMMER: Vergleicht ihr sie einmal über einen anderen Weg (Telefon, persönlich) und sie stimmt überein, ist garantiert kein Fremder dazwischen. Neue Kontakte merkst du per Tipp auf den Namen eines Absenders.'],
+    'dm-contacts': ['👤 Kontakte', 'Achtung: NICHT die Kontakte deines Telefons — nur Leute, mit denen du hier verschlüsselt schreiben willst. Einen Kontakt bekommst du so: die andere Person stellt einen Zettel aufs Brett, du tippst auf ihren Namen → Name vergeben, fertig. (Oder du fügst ihren Schlüssel von Hand ein.) Die SICHERHEITSNUMMER musst du nirgends beantragen: Sobald ein Kontakt da ist, erscheint sie automatisch bei ihm in der Liste — berechnet aus euren beiden Schlüsseln und bei euch beiden gleich. Einmal vorlesen und vergleichen: stimmt sie, ist kein Fremder dazwischen.'],
 
     // — Frage schreiben —
     'qmsg':    ['✏️ Deine Frage', 'Hier schreibst du, was du wissen willst oder mitteilen möchtest. Geht ans offene Brett — oder privat, wenn du oben „Privat an" gewählt hast.'],
@@ -101,9 +101,12 @@
     '<p><i>Ihr braucht zwei Geräte (oder du und ein Freund).</i></p>' +
     '<ol>' +
     '<li><b>Beide</b> öffnen die Pinnwand und stellen je einen Zettel aufs Brett, damit ihr euch seht.</li>' +
-    '<li>Jeder tippt auf den <b>Namen des anderen</b> über dessen Zettel → als <b>Kontakt merken</b> (Name vergeben).</li>' +
-    '<li>Öffnet <b>👤 Kontakte</b> und vergleicht die <b>Sicherheitsnummer</b> — laut vorlesen. ' +
-    'Stimmt sie bei beiden überein, ist sicher kein Fremder dazwischen. <i>Stimmt sie nicht: nicht weitermachen.</i></li>' +
+    '<li>Jeder tippt auf den <b>Namen des anderen</b> über dessen Zettel → als <b>Kontakt merken</b> (Name vergeben). ' +
+    '<i>So entsteht ein Kontakt — es sind nicht die Kontakte deines Telefons.</i></li>' +
+    '<li>Öffnet <b>👤 Kontakte</b>. Dort steht jetzt bei dem Kontakt eine <b>Sicherheitsnummer</b>. ' +
+    'Du musst sie nirgends beantragen: sie wird aus euren beiden Schlüsseln berechnet und ist bei euch beiden dieselbe. ' +
+    'Lest sie euch <b>einmal laut vor</b>. Stimmt sie überein, ist sicher kein Fremder dazwischen. ' +
+    '<i>Stimmt sie nicht: nicht weitermachen.</i></li>' +
     '<li>Wählt oben bei <b>„🔒 Privat an"</b> den anderen aus.</li>' +
     '<li>Schreibt eine Nachricht und sendet sie. Beim Empfänger erscheint sie mit <b>🔒 privat</b>.</li>' +
     '<li>Probiert <b>🎙️</b> (Sprachnotiz) und <b>🖼️</b> (Bild) — beides wird verschlüsselt übertragen.</li>' +
