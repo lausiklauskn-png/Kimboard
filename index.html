@@ -258,6 +258,23 @@
     </div>
     <div class="status" id="geraetename-hint" style="margin-top:4px;">Frei wählbarer Anzeige-Name — erscheint im Raum + auf deinen Zetteln (nur ein Hinweis, kein Vertrauens-Beweis; die Kennung bleibt daneben).</div>
     <div class="row" id="relays" style="margin-top: 10px;"></div>
+    <div class="row" style="margin-top: 8px; gap: 8px; align-items:center; flex-wrap:wrap;">
+      <label style="opacity:.85;"><input type="checkbox" id="rot-on"> 🔄 Relais automatisch wechseln</label>
+      <input id="rot-secret" type="password" placeholder="Kreis-Geheimnis (bei allen gleich)" autocomplete="off" style="flex:1; min-width:170px;">
+      <select id="rot-period" title="Wie oft gewechselt wird">
+        <option value="300000">alle 5 Min</option>
+        <option value="900000" selected>alle 15 Min</option>
+        <option value="3600000">stündlich</option>
+        <option value="86400000">täglich</option>
+      </select>
+      <select id="rot-count" title="Wie viele Relais gleichzeitig">
+        <option value="2">2 Relais</option>
+        <option value="3" selected>3 Relais</option>
+        <option value="4">4 Relais</option>
+      </select>
+      <button id="rot-announce" class="tbtn" title="Umschalt-Ansage an deine Kontakte senden (Reserve, falls Uhren abweichen)">📢 ansagen</button>
+    </div>
+    <div class="status" id="rot-status" style="margin-top:4px;">Aus — du wählst die Relais oben selbst. Automatik: alle im Kreis rechnen aus demselben Geheimnis dieselben Relais aus, ohne Absprache. Zweck: Ausfallsicherheit + Metadaten nicht an einem Relais bündeln — <b>kein</b> Schutz gegen Sperren oder Überwachung.</div>
     <div class="row" style="margin-top: 10px; gap: 8px;">
       <input id="boardkey" type="password" placeholder="🔒 Privates Brett: Passwort (leer = offen)" autocomplete="off" style="flex:1; min-width:200px;">
       <button id="boardkey-set" class="tbtn">Setzen</button>
@@ -371,6 +388,8 @@
 <script type="module">
 import { schnorr, utils } from './modules/noble-secp256k1.js';
 import { dmEncrypt, dmDecrypt, isDm, safetyNumber } from './modules/dm_crypto.js';
+import { currentRelays as rotCurrentRelays, makeAnnouncement as rotMakeAnnouncement,
+         parseAnnouncement as rotParseAnnouncement, isAnnouncement as rotIsAnnouncement } from './modules/relay_rotation.js';
 
 // ---- Helpers ----
 const $ = (id) => document.getElementById(id);
@@ -1253,6 +1272,8 @@ async function dispatch(ev, relay) {
     const plain = await dmDecrypt(ev.content, priv, other);
     if (plain == null) return; // nicht für dich → still überspringen (kein Geheimtext-Müll)
     ev.content = plain; ev._dm = other; // intern Klartext + Merker für die 🔒-Anzeige
+    // Umschalt-Ansage (Schritt 3): wird ausgeführt, nicht als Zettel angezeigt.
+    if (rotIsAnnouncement(ev.content)) { handleAnnouncement(ev); return; }
     // Eigene „privat an mehrere"-Sendung: die N Kopien (gleicher grp-Tag) in der EIGENEN
     // Ansicht zu EINEM Eintrag zusammenfassen (jeder Empfänger sieht ohnehin nur seine).
     if (ev.pubkey === pubHex) {
@@ -1584,6 +1605,97 @@ function blobToB64(blob) {
   });
 }
 
+// ============ Schritt 3: automatischer Relais-Wechsel (Kreis-Rotation) ============
+// Berechnet: alle im Kreis rechnen aus Geheimnis + Zeitfenster DIESELBE Auswahl aus
+// (keine Absprache nötig); das vorige Fenster wird mitgehört, damit beim Umschalten
+// niemand verloren geht. Ansage (📢) ist nur der Notnagel bei schiefen Uhren.
+// Default AUS — ohne Häkchen bleibt alles wie bisher (manuelle Pills).
+// EHRLICH: Zweck ist Ausfallsicherheit + Metadaten nicht an EINEM Relais bündeln,
+// NICHT Zensur-Umgehung und keine Tarnung (die Relais-Liste ist öffentlich).
+const LS_ROT = 'sbkim_pinnwand_rotation';
+let rot = { on: false, secret: '', periodMs: 900000, count: 3, manual: null };
+try { const s = JSON.parse(localStorage.getItem(LS_ROT) || 'null'); if (s && typeof s === 'object') rot = Object.assign(rot, s); } catch { /* fail-soft */ }
+let rotTimer = null;
+function saveRot() { try { localStorage.setItem(LS_ROT, JSON.stringify(rot)); } catch { /* */ } }
+function rotStatusText(info) {
+  if (!rot.on) return 'Aus — du wählst die Relais oben selbst. Automatik: alle im Kreis rechnen aus demselben Geheimnis dieselben Relais aus, ohne Absprache. Zweck: Ausfallsicherheit + Metadaten nicht an einem Relais bündeln — kein Schutz gegen Sperren oder Überwachung.';
+  if (!rot.secret) return '⚠️ Bitte ein Kreis-Geheimnis eintragen — es muss bei allen im Kreis GLEICH sein (sonst landet ihr auf verschiedenen Relais).';
+  const mins = Math.max(1, Math.round((info?.msUntilNext || 0) / 60000));
+  return '🔄 Automatik läuft · jetzt: ' + (info?.current || []).map((u) => u.replace('wss://', '')).join(', ') +
+    ' · nächster Wechsel in ~' + mins + ' Min · voriges Fenster wird mitgehört, damit nichts verloren geht.';
+}
+function applyRelaySet(next) {
+  // Verbindungen an die neue Menge angleichen (schließen/öffnen), ohne Datenverlust.
+  for (const url of Object.keys(conns)) {
+    if (!next.includes(url)) { const ws = conns[url]; try { ws && ws.close(); } catch { /* */ } delete conns[url]; }
+  }
+  activeRelays = next.slice();
+  for (const url of activeRelays) if (!conns[url]) connect(url);
+  relayPills(); updateSendState();
+}
+async function runRotation() {
+  if (!rot.on || !rot.secret) return;
+  try {
+    const info = await rotCurrentRelays(rot.secret, RELAY_POOL, { count: rot.count, periodMs: rot.periodMs });
+    if (info.union.length) applyRelaySet(info.union);
+    const st = $('rot-status'); if (st) st.textContent = rotStatusText(info);
+    clearTimeout(rotTimer);
+    rotTimer = setTimeout(runRotation, Math.max(5000, info.msUntilNext + 1500)); // kleiner Puffer
+  } catch (_e) {
+    const st = $('rot-status'); if (st) st.textContent = '⚠️ Automatik konnte nicht rechnen — die zuletzt gewählten Relais bleiben aktiv.';
+  }
+}
+function stopRotation(restoreManual) {
+  clearTimeout(rotTimer); rotTimer = null;
+  if (restoreManual && Array.isArray(rot.manual) && rot.manual.length) {
+    applyRelaySet(rot.manual.filter((u) => RELAY_POOL.includes(u)));
+  }
+  const st = $('rot-status'); if (st) st.textContent = rotStatusText(null);
+}
+function initRotationUi() {
+  const cb = $('rot-on'), sec = $('rot-secret'), per = $('rot-period'), cnt = $('rot-count');
+  if (!cb) return;
+  cb.checked = !!rot.on; sec.value = rot.secret || '';
+  per.value = String(rot.periodMs); cnt.value = String(rot.count);
+  cb.addEventListener('change', () => {
+    rot.on = cb.checked;
+    if (rot.on) { rot.manual = activeRelays.slice(); saveRot(); runRotation(); }
+    else { saveRot(); stopRotation(true); }
+  });
+  sec.addEventListener('change', () => { rot.secret = sec.value.trim(); saveRot(); if (rot.on) runRotation(); });
+  per.addEventListener('change', () => { rot.periodMs = parseInt(per.value, 10) || 900000; saveRot(); if (rot.on) runRotation(); });
+  cnt.addEventListener('change', () => { rot.count = parseInt(cnt.value, 10) || 3; saveRot(); if (rot.on) runRotation(); });
+  $('rot-announce').addEventListener('click', announceSwitch);
+  if (rot.on && rot.secret) runRotation(); else stopRotation(false);
+}
+// 📢 Ansage an die Kontakte (Reserve-Weg) — reist über den verschlüsselten DM,
+// ist dadurch signiert und nur für den Kreis lesbar.
+async function announceSwitch() {
+  const targets = dmRecipients.length ? dmRecipients.slice() : Object.keys(dmContacts);
+  if (!targets.length) { toast('Keine Kontakte — erst jemanden als Kontakt merken.'); return; }
+  if (!rot.on || !rot.secret) { toast('Erst die Automatik einschalten (mit Kreis-Geheimnis).'); return; }
+  const info = await rotCurrentRelays(rot.secret, RELAY_POOL, { count: rot.count, periodMs: rot.periodMs });
+  const text = rotMakeAnnouncement(info.windowIdx, info.current, Date.now());
+  const live = liveSockets();
+  for (const r of targets) {
+    const ev = await buildEvent(text, [], r);
+    for (const ws of live) ws.send(JSON.stringify(['EVENT', ev]));
+  }
+  toast('📢 Umschalt-Ansage an ' + targets.length + ' Kontakt(e) gesendet');
+}
+// Ansage eines Kontakts übernehmen (nur von BEKANNTEN Kontakten, nur Relais aus
+// dem eigenen Pool — eine Ansage kann niemanden auf fremde Adressen umleiten).
+function handleAnnouncement(ev) {
+  if (!dmContacts[ev.pubkey]) return false;         // nur aus dem eigenen Kreis
+  const ann = rotParseAnnouncement(ev.content, RELAY_POOL);
+  if (!ann) return false;
+  const next = ann.relays.slice();
+  for (const u of activeRelays) if (!next.includes(u)) next.push(u); // Überlappung: nichts abreißen
+  applyRelaySet(next);
+  toast('📢 ' + contactName(ev.pubkey) + ' hat einen Relais-Wechsel angesagt — übernommen.');
+  return true;
+}
+
 // ---- Werkzeug-Knöpfe (leeren / vergrößern / vollbild / neu laden) ----
 $('board-clear').addEventListener('click', clearBoard);
 
@@ -1738,6 +1850,7 @@ $('tb-reload').addEventListener('click', async () => {
 relayPills();
 activeRelays.forEach(connect);
 updateSendState();
+initRotationUi();   // Relais-Automatik (Default aus; startet nur mit Häkchen + Geheimnis)
 </script>
 
 <!-- ── SBKIM-Endknoten-Stack (byte-1:1-Kopien, Drift-Guard im Smoke-Test) ──
