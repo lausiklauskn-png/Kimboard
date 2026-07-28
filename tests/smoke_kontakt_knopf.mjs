@@ -1,0 +1,118 @@
+#!/usr/bin/env node
+/*
+ * Smoke — Stufe 1: sichtbarer „➕ Kontakt"-Knopf am Zettel (echter Browser).
+ *
+ * Klaus' Befund 2026-07-28: Wie ein Kontakt überhaupt entsteht, war nicht zu
+ * erkennen — der Absender-Name war nur unsichtbar klickbar. Geprüft wird:
+ *   - An einem FREMDEN Zettel steht ein sichtbarer Knopf „➕ Kontakt";
+ *     am EIGENEN Zettel nicht.
+ *   - Ein Klick merkt den Kontakt (kein Schlüssel-Abtippen nötig — der
+ *     Schlüssel steckt schon im Zettel).
+ *   - Danach wechselt die Beschriftung SOFORT von der kryptischen Kennung auf
+ *     den Namen, und der Knopf wird zum Kontakt-Zeichen 👤 — ohne Neuladen.
+ *   - Das gilt auch an ANTWORTEN, nicht nur an Fragen.
+ *   - Im Erklär-Modus wird der Knopf erklärt statt ausgeführt.
+ *
+ * Voraussetzung: npm install --no-save playwright-core
+ * Aufruf: node tests/smoke_kontakt_knopf.mjs   ·   Exit 0 = grün.
+ */
+import { chromium } from 'playwright-core';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const EXE = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const PORT = 8443;
+let pass = 0, fail = 0;
+const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL ' + m); } };
+
+const srv = spawn('python3', ['-m', 'http.server', String(PORT)], { cwd: ROOT, stdio: 'ignore' });
+await new Promise((r) => setTimeout(r, 800));
+
+let browser;
+try {
+  browser = await chromium.launch({ executablePath: EXE, args: ['--no-sandbox'] });
+  const p = await browser.newPage({ viewport: { width: 900, height: 1000 } });
+  const errs = [];
+  p.on('pageerror', (e) => errs.push(String(e)));
+  await p.goto(`http://127.0.0.1:${PORT}/index.html`, { waitUntil: 'domcontentloaded' });
+  await p.waitForTimeout(1800);
+
+  const FREMD = 'b'.repeat(64);
+
+  // Zwei Zettel einschleusen: einer von einem Fremden, einer von mir selbst.
+  await p.evaluate(async (fremd) => {
+    const mk = (pubkey, id, content) => ({
+      id, pubkey, created_at: Math.floor(Date.now() / 1000),
+      kind: 1, tags: [['t', 'sbkim-frage-antwort-test']], content, sig: '0'.repeat(128),
+    });
+    await window.__kb.dispatch(mk(fremd, 'f'.repeat(64), 'Zettel von einem Fremden'), 'wss://test');
+    await window.__kb.dispatch(mk(window.__kb.me(), 'e'.repeat(64), 'Mein eigener Zettel'), 'wss://test');
+  }, FREMD);
+  await p.waitForTimeout(600);
+
+  console.log('== Stufe 1 — „➕ Kontakt" am Zettel ==');
+
+  const cards = await p.evaluate(() => document.querySelectorAll('.q-card').length);
+  ok(cards >= 2, 'beide Testzettel werden angezeigt (' + cards + ')');
+
+  const btns = await p.evaluate(() => document.querySelectorAll('.kb-addcontact').length);
+  ok(btns === 1, 'genau EIN Kontakt-Knopf — nur am fremden Zettel, nicht am eigenen (' + btns + ')');
+  ok(await p.evaluate((f) => !!document.querySelector('.kb-addcontact[data-pub-btn="' + f + '"]'), FREMD),
+    'der Knopf hängt am fremden Absender');
+  ok((await p.textContent('.kb-addcontact')).includes('Kontakt'), 'Knopf ist beschriftet („➕ Kontakt")');
+
+  // Vor dem Merken: kryptische Kennung, kein Name.
+  const vorher = await p.evaluate((f) => document.querySelector('[data-pub="' + f + '"]').textContent, FREMD);
+  ok(!/Freundin/.test(vorher), 'vorher steht nur die Kennung da: ' + vorher.slice(0, 24));
+
+  // Klick auf den Knopf → Name eingeben (prompt) → gemerkt.
+  p.once('dialog', (d) => d.accept('Freundin Anna'));
+  await p.click('.kb-addcontact');
+  await p.waitForTimeout(700);
+
+  ok(await p.evaluate((f) => !!window.__kb.contacts()[f], FREMD), 'Kontakt ist gespeichert');
+  const nachher = await p.evaluate((f) => document.querySelector('[data-pub="' + f + '"]').textContent, FREMD);
+  ok(/Freundin Anna/.test(nachher), 'Beschriftung wechselt SOFORT auf den Namen: ' + nachher.slice(0, 30));
+  ok((await p.evaluate(() => document.querySelectorAll('.kb-addcontact').length)) === 0, 'Knopf verschwindet nach dem Merken');
+  ok((await p.evaluate(() => document.querySelectorAll('.kb-iscontact').length)) >= 1, 'stattdessen steht das Kontakt-Zeichen 👤 da');
+  ok(await p.evaluate((f) => !!document.querySelector('#dm-to option[value="' + f + '"]'), FREMD),
+    'der Kontakt steht sofort in „Privat an" zur Auswahl');
+
+  // Auch an ANTWORTEN muss der Knopf erscheinen.
+  const FREMD2 = 'c'.repeat(64);
+  await p.evaluate(async (f2) => {
+    await window.__kb.dispatch({
+      id: 'a'.repeat(64), pubkey: f2, created_at: Math.floor(Date.now() / 1000), kind: 1,
+      tags: [['t', 'sbkim-frage-antwort-test'], ['e', 'f'.repeat(64)]],
+      content: 'Eine Antwort von jemand anderem', sig: '0'.repeat(128),
+    }, 'wss://test');
+  }, FREMD2);
+  await p.waitForTimeout(600);
+  ok(await p.evaluate((f2) => !!document.querySelector('.a-head .kb-addcontact[data-pub-btn="' + f2 + '"]'), FREMD2),
+    'auch an einer Antwort steht der Knopf');
+
+  // Erklär-Modus: der Knopf wird erklärt statt ausgeführt.
+  await p.evaluate(() => window.__hilfe.setMode(true));
+  await p.waitForTimeout(300);
+  await p.click('.kb-addcontact');
+  await p.waitForTimeout(500);
+  const bubble = await p.evaluate(() => {
+    const d = [...document.querySelectorAll('div')].find((x) => /verstanden/.test(x.textContent) && x.style.position === 'fixed');
+    return d ? d.textContent : '';
+  });
+  ok(/Kontakt/.test(bubble) && /Schlüssel/.test(bubble), 'im Erklär-Modus wird der Knopf erklärt');
+  ok((await p.evaluate((f2) => Object.keys(window.__kb.contacts()).includes(f2), FREMD2)) === false,
+    '…und NICHT ausgeführt (kein zweiter Kontakt entstanden)');
+  await p.evaluate(() => window.__hilfe.setMode(false));
+
+  ok(errs.length === 0, 'keine JS-Fehler im Browser (' + errs.slice(0, 2).join(' | ') + ')');
+} catch (e) {
+  fail++; console.error(e);
+} finally {
+  if (browser) await browser.close();
+  srv.kill();
+}
+console.log(`\n== Ergebnis: ${pass} ok, ${fail} FAIL ==`);
+process.exit(fail ? 1 : 0);

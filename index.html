@@ -543,7 +543,7 @@ function pinContact(pub, name) {
       ').\nWirklich diesen neuen Schlüssel als „' + name + '" merken?')) return false;
   const existed = !!dmContacts[pub];
   dmContacts[pub] = { name, pinnedAt: (dmContacts[pub] && dmContacts[pub].pinnedAt) || Date.now() };
-  saveContacts(); refreshRecipientSelect();
+  saveContacts(); refreshRecipientSelect(); refreshAuthorLabels(pub);
   toast(existed ? 'Kontakt aktualisiert: ' + name : '🔒 Freigegeben: ' + name);
   return true;
 }
@@ -565,16 +565,58 @@ function refreshRecipientSelect() {
   }
   updateDmStatus();
 }
+// Kontakt-Aufnahme ist der Einstieg in alles Private — sie muss SICHTBAR sein.
+// Früher war der Absender-Name nur unsichtbar klickbar; niemand fand das
+// (Klaus' Sichttest 2026-07-28). Jetzt steht ein echter Knopf daneben.
+function askAndPin(pub) {
+  if (pub === pubHex) { toast('Das bist du selbst.'); return; }
+  const known = dmContacts[pub];
+  const name = prompt(known ? 'Name für diesen Kontakt:' :
+    '🔒 Diesen Absender als Kontakt merken (Freigabe)?\nName (optional):', known ? known.name : '');
+  if (name === null) return; // abgebrochen
+  pinContact(pub, name);
+}
 function makeWhoClickable(who, pub) {
+  who.dataset.pub = pub;               // für die Sofort-Aktualisierung nach dem Merken
   who.style.cursor = 'pointer';
   who.title = 'Klick: als Kontakt merken (für private Nachrichten)';
-  who.addEventListener('click', () => {
-    if (pub === pubHex) { toast('Das bist du selbst.'); return; }
-    const known = dmContacts[pub];
-    const name = prompt(known ? 'Name für diesen Kontakt:' :
-      '🔒 Diesen Absender als Kontakt merken (Freigabe)?\nName (optional):', known ? known.name : '');
-    if (name === null) return; // abgebrochen
-    pinContact(pub, name);
+  who.addEventListener('click', () => askAndPin(pub));
+}
+// Baut den sichtbaren Kontakt-Knopf (bzw. das Kontakt-Zeichen, wenn man ihn
+// schon hat). Am eigenen Zettel: nichts. Erzeugen und Einfügen sind getrennt,
+// damit das Auffrischen es an DERSELBEN Stelle ersetzen kann (sonst rutscht es
+// hinter den Zeitstempel).
+function makeContactAction(pub) {
+  if (pub === pubHex) return null;
+  const known = !!dmContacts[pub];
+  const el = document.createElement(known ? 'span' : 'button');
+  el.className = known ? 'who kb-iscontact' : 'tbtn kb-addcontact';
+  el.dataset.pubBtn = pub;
+  if (known) {
+    el.textContent = ' 👤';
+    el.title = 'Ist dein Kontakt — du kannst ihm privat schreiben';
+  } else {
+    el.type = 'button';
+    el.textContent = '➕ Kontakt';
+    el.title = 'Diese Person als Kontakt merken — danach kannst du ihr privat (verschlüsselt) schreiben';
+    el.style.cssText = 'font-size:.72rem;padding:1px 7px;margin-left:6px;vertical-align:middle;';
+    el.addEventListener('click', (e) => { e.stopPropagation(); askAndPin(pub); });
+  }
+  return el;
+}
+function attachContactAction(head, pub) {
+  const el = makeContactAction(pub);
+  if (el) head.appendChild(el);
+}
+// Nach dem Merken sofort überall nachziehen: Kennung → Name, Knopf → 👤.
+// (Ohne das behielten schon gezeigte Zettel die kryptische Kennung.)
+function refreshAuthorLabels(pub) {
+  document.querySelectorAll('[data-pub="' + pub + '"]').forEach((n) => {
+    n.textContent = authorLabel({ pubkey: pub, tags: [] });
+  });
+  document.querySelectorAll('[data-pub-btn="' + pub + '"]').forEach((n) => {
+    const el = makeContactAction(pub);
+    if (el) n.replaceWith(el); else n.remove();   // an DERSELBEN Stelle ersetzen
   });
 }
 async function openContacts() {
@@ -637,7 +679,15 @@ async function openContacts() {
   const nm = document.createElement('input'); nm.placeholder = 'Name (optional)'; nm.style.cssText = 'flex:1;min-width:120px;';
   const addBtn = document.createElement('button'); addBtn.className = 'tbtn'; addBtn.textContent = '＋ merken';
   addBtn.addEventListener('click', () => { if (pinContact(inp.value, nm.value)) { document.body.removeChild(bg); openContacts(); } });
-  add.appendChild(inp); add.appendChild(nm); add.appendChild(addBtn); box.appendChild(add);
+  add.appendChild(inp); add.appendChild(nm); add.appendChild(addBtn);
+  // Handeingabe ist der AUSNAHMEFALL — sie wird zugeklappt, damit der normale
+  // Weg (Knopf „➕ Kontakt" am Zettel) nicht danebensteht wie gleichwertig.
+  const details = document.createElement('details');
+  details.style.marginTop = '12px';
+  const sum = document.createElement('summary');
+  sum.textContent = 'Ohne Zettel: Schlüssel von Hand eingeben';
+  sum.style.cssText = 'cursor:pointer;opacity:.8;font-size:.88rem;';
+  details.appendChild(sum); details.appendChild(add); box.appendChild(details);
   const close = document.createElement('button'); close.className = 'ghost'; close.textContent = 'Schließen'; close.style.marginTop = '12px';
   close.addEventListener('click', () => document.body.removeChild(bg));
   box.appendChild(close);
@@ -723,6 +773,7 @@ function renderQuestion(ev, relay) {
   who.className = 'who mono'; who.textContent = authorLabel(ev);
   makeWhoClickable(who, ev.pubkey);
   head.appendChild(who);
+  attachContactAction(head, ev.pubkey);
   if (ev._dm) { const lk = document.createElement('span'); lk.className = 'who'; lk.style.color = 'var(--acc2,#8fd)'; lk.textContent = ' 🔒 privat · ' + (ev._dmGroupN > 1 ? ev._dmGroupN + ' Kontakte' : contactName(ev._dm)); head.appendChild(lk); }
   head.append(` · ${timeStr(ev.created_at)} · via ${relay.replace('wss://', '')}`);
   const text = document.createElement('div');
@@ -787,6 +838,7 @@ function renderAnswer(ev, relay) {
   who.className = 'who mono'; who.textContent = authorLabel(ev);
   makeWhoClickable(who, ev.pubkey);
   head.appendChild(who);
+  attachContactAction(head, ev.pubkey);
   if (ev._dm) { const lk = document.createElement('span'); lk.className = 'who'; lk.style.color = 'var(--acc2,#8fd)'; lk.textContent = ' 🔒 privat · ' + (ev._dmGroupN > 1 ? ev._dmGroupN + ' Kontakte' : contactName(ev._dm)); head.appendChild(lk); }
   head.append(` · ${timeStr(ev.created_at)} · via ${relay.replace('wss://', '')}`);
   const badge = document.createElement('span');
@@ -1897,6 +1949,10 @@ relayPills();
 activeRelays.forEach(connect);
 updateSendState();
 initRotationUi();   // Relais-Automatik (Default aus; startet nur mit Häkchen + Geheimnis)
+
+// Schmaler Prüf-Zugang für die headless-Tests (Muster wie in Küchenzettel).
+// NUR Funktionen und die Kontakt-Liste — der private Schlüssel bleibt draußen.
+window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubHex };
 </script>
 
 <!-- ── SBKIM-Endknoten-Stack (byte-1:1-Kopien, Drift-Guard im Smoke-Test) ──

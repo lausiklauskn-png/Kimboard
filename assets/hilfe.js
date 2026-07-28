@@ -47,6 +47,9 @@
     'boardkey':     ['🔒 Privates Brett', 'Vergibst du hier ein Passwort, sind ALLE Zettel auf dem Brett verschlüsselt — nur wer dasselbe Passwort hat, kann sie lesen. Das Relais sieht dann nur Kauderwelsch. Leer = offenes Brett, für alle lesbar.'],
     'boardkey-set': ['Setzen', 'Übernimmt das Passwort für das private Brett.'],
 
+    // — Kontakt-Knopf am Zettel (Stufe 1) —
+    '.kb-addcontact': ['➕ Kontakt', 'Merkt sich die Person, die diesen Zettel geschrieben hat — danach kannst du ihr privat und verschlüsselt schreiben. Du musst dafür KEINEN Schlüssel abtippen: er steckt schon in ihrem Zettel. Ein Tipp, ein Name, fertig. Sobald sie dein Kontakt ist, erscheint bei ihr auch die Sicherheitsnummer zum Vergleichen.'],
+
     // — Private Nachrichten —
     'dm-to':       ['🔒 Privat an', 'Wählst du hier eine Person, geht dein nächster Zettel NUR an sie — Ende-zu-Ende verschlüsselt. Kein Relais und kein Dritter kann ihn lesen. „öffentlich / Brett" schickt an alle.'],
     'dm-multi':    ['👥 Mehrere', 'Mehrere Empfänger auf einmal wählen. Jeder bekommt eine eigene, nur für ihn verschlüsselte Kopie — die Empfänger sehen einander nicht.'],
@@ -145,10 +148,18 @@
     if (html != null) e.innerHTML = html;
     return e;
   }
+  // Erklärungen sind entweder an eine id gebunden oder — wenn es ein Element
+  // mehrfach gibt (z. B. „➕ Kontakt" an jedem Zettel) — an eine Klasse.
+  var CLASS_KEYS = Object.keys(TEXTE).filter(function (k) { return k.charAt(0) === '.'; });
   function findTarget(node) {
     // Nächstes Element nach oben, für das es eine Erklärung gibt.
     while (node && node !== document.body) {
       if (node.id && TEXTE[node.id]) return { key: node.id, node: node };
+      for (var i = 0; i < CLASS_KEYS.length; i++) {
+        if (node.classList && node.classList.contains(CLASS_KEYS[i].slice(1))) {
+          return { key: CLASS_KEYS[i], node: node };
+        }
+      }
       if (node.id === 'relays' || (node.parentNode && node.parentNode.id === 'relays')) {
         if (TEXTE['#relays']) return { key: '#relays', node: document.getElementById('relays') };
       }
@@ -184,10 +195,15 @@
   var banner = null;
   function markElements(active) {
     Object.keys(TEXTE).forEach(function (k) {
-      var n = k.charAt(0) === '#' ? document.querySelector(k) : document.getElementById(k);
-      if (!n) return;
-      n.style.outline = active ? '2px dashed rgba(54,214,195,.75)' : '';
-      n.style.outlineOffset = active ? '2px' : '';
+      // '#'/'.' → alle Treffer (Klassen kommen mehrfach vor), sonst die id.
+      var nodes = (k.charAt(0) === '#' || k.charAt(0) === '.')
+        ? document.querySelectorAll(k)
+        : [document.getElementById(k)];
+      Array.prototype.forEach.call(nodes, function (n) {
+        if (!n) return;
+        n.style.outline = active ? '2px dashed rgba(54,214,195,.75)' : '';
+        n.style.outlineOffset = active ? '2px' : '';
+      });
     });
   }
   function onCapture(ev) {
