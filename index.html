@@ -236,7 +236,9 @@
     </div>
     <div class="toolbar">
       <button id="tb-zoom" class="tbtn" title="Text vergrößern / verkleinern">🔍</button>
-      <button id="tb-full" class="tbtn" title="Vollbild / Vollansicht">⛶</button>
+      <!-- 🔳 statt ⛶ (U+26F6): das Zeichen fehlt in vielen Android-Schriften und
+           erschien dort als leerer Kasten (Klaus' Sichttest 2026-07-28). -->
+      <button id="tb-full" class="tbtn" title="Vollbild / Vollansicht">🔳</button>
       <button id="tb-reload" class="tbtn" title="Neu laden (Cache leeren)">🔄</button>
     </div>
   </div>
@@ -1895,5 +1897,9 @@ initRotationUi();   // Relais-Automatik (Default aus; startet nur mit Häkchen +
     });
   }
 </script>
+
+<!-- Hilfe: ❓-Knopf mit Anleitung + ein-/ausschaltbare Erklär-Blasen für alle
+     Knöpfe, Felder und Bereiche. Zuletzt geladen, damit alle Elemente stehen. -->
+<script src="./assets/hilfe.js"></script>
 </body>
 </html>
