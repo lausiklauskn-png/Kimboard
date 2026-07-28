@@ -37,10 +37,10 @@
 
     // — Relais —
     '#relays':    ['📡 Relais-Leiste', 'Relais sind die „schwarzen Bretter" im Netz, über die deine Zettel laufen. Ein Punkt zeigt, ob die Verbindung steht. Tippen schaltet ein Relais zu oder ab. Mehrere gleichzeitig sind gut: fällt eines aus, tragen die anderen weiter.'],
-    'rot-on':     ['🔄 Relais automatisch wechseln', 'Wechselt von selbst zwischen den Relais. Alle im Kreis rechnen aus demselben Geheimnis dieselbe Auswahl aus — ihr müsst euch nichts sagen. NUTZEN: Ausfallsicherheit, und kein einzelnes Relais sieht alles. WICHTIG: Das ist KEIN Schutz gegen Sperren oder Überwachung.'],
+    'rot-on':     ['🔄 Relais automatisch wechseln', 'Wechselt von selbst zwischen den Relais. Alle im Kreis rechnen aus demselben Geheimnis dieselbe Auswahl aus — ihr müsst euch nichts sagen. NUTZEN: Ausfallsicherheit, und kein einzelnes Relais sieht alles. Es wird nicht weniger als ohne Automatik: die Voreinstellung nimmt genauso viele Relais wie sonst auch. WICHTIG: Das ist KEIN Schutz gegen Sperren oder Überwachung.'],
     'rot-secret': ['🔑 Kreis-Geheimnis', 'Das gemeinsame Wort, aus dem alle im Kreis dieselbe Relais-Auswahl berechnen. Es MUSS bei allen exakt gleich sein — sonst landet ihr auf verschiedenen Relais und seht euch nicht. Es verschlüsselt nichts; es ist nur der gemeinsame „Würfel".'],
     'rot-period': ['⏱️ Wechsel-Takt', 'Wie oft das Relais gewechselt wird. Häufiger ist nicht automatisch besser — 15 Minuten oder stündlich sind im Alltag angenehm.'],
-    'rot-count':  ['🔢 Anzahl Relais', 'Mit wie vielen Relais gleichzeitig gesprochen wird. Mehr = ausfallsicherer.'],
+    'rot-count':  ['🔢 Anzahl Relais', 'Mit wie vielen Relais gleichzeitig gesprochen wird — von 2 bis „alle". Das ist eine Abwägung, keine „je mehr desto besser"-Skala: MEHR = ausfallsicherer (fällt eines aus, tragen die anderen weiter). WENIGER = in diesem Zeitfenster sehen weniger Relais deinen Verkehr. Ehrlich dazu: Weil ohnehin gewechselt wird, bekommen mit der Zeit alle Relais mal etwas zu sehen — der echte Gewinn ist, dass kein einzelnes Relais ALLES sieht. Voreinstellung 5, so viele wie auch ohne Automatik laufen.'],
     'rot-announce': ['📢 Wechsel ansagen', 'Notnagel: Sagt deinen Kontakten verschlüsselt, welche Relais gerade dran sind — falls die Uhren der Geräte stark auseinanderlaufen. Normalerweise nicht nötig, weil alle dasselbe ausrechnen.'],
 
     // — Brett-Passwort —

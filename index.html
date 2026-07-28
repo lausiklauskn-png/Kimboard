@@ -269,11 +269,8 @@
         <option value="3600000">stündlich</option>
         <option value="86400000">täglich</option>
       </select>
-      <select id="rot-count" title="Wie viele Relais gleichzeitig">
-        <option value="2">2 Relais</option>
-        <option value="3" selected>3 Relais</option>
-        <option value="4">4 Relais</option>
-      </select>
+      <!-- Auswahl wird aus RELAY_POOL erzeugt (wächst der Pool, wächst sie mit) -->
+      <select id="rot-count" title="Wie viele Relais gleichzeitig"></select>
       <button id="rot-announce" class="tbtn" title="Umschalt-Ansage an deine Kontakte senden (Reserve, falls Uhren abweichen)">📢 ansagen</button>
     </div>
     <div class="status" id="rot-status" style="margin-top:4px;">Aus — du wählst die Relais oben selbst. Automatik: alle im Kreis rechnen aus demselben Geheimnis dieselben Relais aus, ohne Absprache. Zweck: Ausfallsicherheit + Metadaten nicht an einem Relais bündeln — <b>kein</b> Schutz gegen Sperren oder Überwachung.</div>
@@ -1647,7 +1644,11 @@ function blobToB64(blob) {
 // EHRLICH: Zweck ist Ausfallsicherheit + Metadaten nicht an EINEM Relais bündeln,
 // NICHT Zensur-Umgehung und keine Tarnung (die Relais-Liste ist öffentlich).
 const LS_ROT = 'sbkim_pinnwand_rotation';
-let rot = { on: false, secret: '', periodMs: 900000, count: 3, manual: null };
+// Standard-Anzahl = so viele, wie ohne Automatik ohnehin laufen (RELAY_POOL.slice(0,5)),
+// damit das Einschalten der Automatik nie ein Rückschritt bei der Ausfallsicherheit ist
+// (Klaus' Befund 2026-07-28: Auswahl war auf 4 gedeckelt, obwohl 9 im Pool sind).
+const ROT_COUNT_DEFAULT = 5;
+let rot = { on: false, secret: '', periodMs: 900000, count: ROT_COUNT_DEFAULT, manual: null };
 try { const s = JSON.parse(localStorage.getItem(LS_ROT) || 'null'); if (s && typeof s === 'object') rot = Object.assign(rot, s); } catch { /* fail-soft */ }
 let rotTimer = null;
 function saveRot() { try { localStorage.setItem(LS_ROT, JSON.stringify(rot)); } catch { /* */ } }
@@ -1689,6 +1690,17 @@ function stopRotation(restoreManual) {
 function initRotationUi() {
   const cb = $('rot-on'), sec = $('rot-secret'), per = $('rot-period'), cnt = $('rot-count');
   if (!cb) return;
+  // Anzahl-Auswahl aus dem Pool erzeugen: 2 … alle. Kein willkürlicher Deckel —
+  // mehr gleichzeitig = ausfallsicherer, weniger = pro Zeitfenster weniger Mitwisser.
+  cnt.innerHTML = '';
+  for (let n = 2; n <= RELAY_POOL.length; n++) {
+    const o = document.createElement('option');
+    o.value = String(n);
+    o.textContent = n === RELAY_POOL.length ? ('alle ' + n + ' Relais') : (n + ' Relais');
+    cnt.appendChild(o);
+  }
+  if (rot.count > RELAY_POOL.length) rot.count = RELAY_POOL.length;
+  if (rot.count < 2) rot.count = 2;
   cb.checked = !!rot.on; sec.value = rot.secret || '';
   per.value = String(rot.periodMs); cnt.value = String(rot.count);
   cb.addEventListener('change', () => {
@@ -1698,7 +1710,7 @@ function initRotationUi() {
   });
   sec.addEventListener('change', () => { rot.secret = sec.value.trim(); saveRot(); if (rot.on) runRotation(); });
   per.addEventListener('change', () => { rot.periodMs = parseInt(per.value, 10) || 900000; saveRot(); if (rot.on) runRotation(); });
-  cnt.addEventListener('change', () => { rot.count = parseInt(cnt.value, 10) || 3; saveRot(); if (rot.on) runRotation(); });
+  cnt.addEventListener('change', () => { rot.count = parseInt(cnt.value, 10) || ROT_COUNT_DEFAULT; saveRot(); if (rot.on) runRotation(); });
   $('rot-announce').addEventListener('click', announceSwitch);
   if (rot.on && rot.secret) runRotation(); else stopRotation(false);
 }
