@@ -587,11 +587,43 @@ async function openContacts() {
   box.style.cssText = 'background:var(--card,#1c1a17);color:var(--fg,#eee);border:1px solid var(--acc,#c9a961);border-radius:14px;max-width:520px;width:100%;max-height:82vh;overflow:auto;padding:16px 18px;font-size:.92rem;';
   box.innerHTML = '<h3 style="margin:.1em 0 .5em">🔒 Kontakte (private Nachrichten)</h3>' +
     '<p style="opacity:.8;margin:.2em 0 .8em">Du kannst an einen Kontakt <b>privat</b> schreiben — nur ihr beide könnt es lesen. ' +
-    'Neue Kontakte merkst du per Klick auf den Absender-Namen eines Zettels, oder hier per Schlüssel. ' +
-    'Die <b>Sicherheitsnummer</b> kannst du mit der Gegenseite über einen zweiten Weg (Anruf) vergleichen — stimmt sie, ist kein Betrüger dazwischen.</p>';
+    'Das sind <b>nicht</b> die Kontakte deines Telefons — nur Leute, mit denen du hier verschlüsselt schreiben willst.</p>';
+  // Eigener Schlüssel zum Weitergeben — ohne ihn kann dich niemand hinzufügen.
+  const mine = document.createElement('div');
+  mine.style.cssText = 'border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:10px 12px;margin:0 0 12px;';
+  mine.innerHTML = '<div style="font-weight:700;margin-bottom:4px">🔑 Dein eigener Schlüssel</div>' +
+    '<div style="opacity:.8;font-size:.86rem;margin-bottom:6px">Gib ihn der Person, die dir schreiben soll (vorlesen, schicken, zeigen). Er ist <b>öffentlich</b> — er verrät nichts Geheimes.</div>' +
+    '<div class="mono" style="font-size:.76rem;word-break:break-all;opacity:.9">' + pubHex + '</div>';
+  const cp = document.createElement('button'); cp.className = 'tbtn'; cp.textContent = '📋 Kopieren';
+  cp.style.marginTop = '7px';
+  cp.addEventListener('click', () => { try { navigator.clipboard.writeText(pubHex); toast('Schlüssel kopiert'); } catch (_e) { toast('Bitte von Hand markieren.'); } });
+  mine.appendChild(cp); box.appendChild(mine);
+
   const list = document.createElement('div');
   const keys = Object.keys(dmContacts);
-  if (!keys.length) { const p = document.createElement('p'); p.textContent = 'Noch keine Kontakte.'; p.style.opacity = '.7'; list.appendChild(p); }
+  if (!keys.length) {
+    // Leere Liste = der Moment, in dem man am ehesten rätselt → Anleitung zeigen.
+    const p = document.createElement('div');
+    p.style.cssText = 'border:1px dashed rgba(255,255,255,.22);border-radius:10px;padding:11px 13px;line-height:1.55;';
+    p.innerHTML = '<b>Noch keine Kontakte.</b> So bekommst du deinen ersten — zwei Wege:' +
+      '<ol style="margin:.5em 0 .2em;padding-left:1.25em">' +
+      '<li><b>Der einfache Weg:</b> Lass die andere Person einen Zettel aufs Brett stellen. ' +
+      'Dann <b>tippe auf ihren Namen</b> über dem Zettel → Namen vergeben → fertig.</li>' +
+      '<li><b>Ohne Zettel:</b> Lass dir ihren Schlüssel geben (sie findet ihn hier oben unter „Dein eigener Schlüssel") ' +
+      'und füge ihn unten ein.</li>' +
+      '</ol>' +
+      '<div style="margin-top:.5em;opacity:.85">Die <b>Sicherheitsnummer</b> gibt es erst, <b>sobald ein Kontakt da ist</b> — ' +
+      'sie erscheint dann automatisch hier in der Liste. Du musst sie nirgends beantragen oder ausdenken: ' +
+      'sie wird aus euren beiden Schlüsseln berechnet und ist bei euch beiden dieselbe.</div>';
+    list.appendChild(p);
+  } else {
+    const p = document.createElement('div');
+    p.style.cssText = 'opacity:.85;font-size:.88rem;margin-bottom:6px;line-height:1.5;';
+    p.innerHTML = 'Zu jedem Kontakt steht unten die <b>Sicherheitsnummer</b>. Sie wird aus euren beiden Schlüsseln ' +
+      'berechnet und ist bei euch <b>gleich</b>. <b>Einmal vergleichen</b> (vorlesen am Telefon oder persönlich): ' +
+      'stimmt sie überein, ist sicher kein Fremder dazwischen. Stimmt sie nicht — nicht weiterschreiben.';
+    list.appendChild(p);
+  }
   for (const pub of keys) {
     const row = document.createElement('div');
     row.style.cssText = 'border-top:1px solid rgba(255,255,255,.12);padding:8px 0;';
