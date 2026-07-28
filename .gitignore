@@ -5,3 +5,6 @@
 *-backup-*.json
 sbkim/node_key*.json
 sbkim/*.enc.json
+
+# Node-Abhängigkeiten (nur lokal für Browser-Checks via --no-save)
+node_modules/
