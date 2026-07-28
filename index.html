@@ -224,6 +224,11 @@
   html[data-scale="1"] body { font-size: 16px; }
   html[data-scale="2"] body { font-size: 18px; }
   html[data-scale="3"] body { font-size: 20.5px; }
+
+  /* Kurzer, ehrlicher Fu&szlig; statt Fachtext-Wand (Klaus 2026-07-28) */
+  .honest-short { font-size:.86rem; opacity:.85; line-height:1.5; padding:10px 0 4px; }
+  .info-open { background:none; border:none; padding:0; margin-left:.4em;
+    color:#36d6c3; text-decoration:underline; cursor:pointer; font:inherit; }
 </style>
 </head>
 <body>
@@ -346,36 +351,10 @@
     <ul id="threads"><li class="empty">Noch keine Frage empfangen…</li></ul>
   </div>
 
-  <footer>
-    <b>Ehrlich:</b> Beweist, dass <i>Frage→Antwort</i> über das geborgte Brett
-    läuft (NIP-01-Reply via <code>e</code>-Tag). Immer noch <b>öffentlich</b>
-    (jeder Relay-Leser sieht Fragen + Antworten), <b>keine garantierte
-    Haltbarkeit</b>, <b>kein Spam-Schutz</b>. <b>Bedeutungs-Sortierung</b>
-    (Knopf oben) ist <b>optional</b>: erst auf bewusste Nutzer-Aktion lädt das
-    Embedding-Modell (Modul 03, <code>Xenova/multilingual-e5-small</code>) — das
-    ist der <i>einzige</i> Teil, der ein CDN/Internet nutzt (einmalig ~30&nbsp;MB,
-    dann im Browser-Cache); es sortiert nach Nähe zur Frage und filtert nichts
-    weg, fail-soft. Der Score ist ein <b>zentrierter (whitened) Cosinus</b>:
-    der gemeinsame Mittelwert-Vektor wird abgezogen, damit der <i>Inhalt</i>
-    entscheidet und nicht die Hülle (gleiche Sprache/Stil) — Hintergrund:
-    Anisotropie-Befund, <code>docs/LEHRE-EMBEDDING-MATCH-KALIBRIERUNG.md</code>.
-    Hier mit lokal wachsendem Referenz-Schwerpunkt (die netzweite Konstante
-    liefert erst Bau „Modul&nbsp;04 Whitening"). <b>Ehrlich:</b> dieser Cosinus
-    ist eine <b>Rangfolge</b> (was näher dran ist, steht oben) — <i>kein</i>
-    Verwandt-/Unverwandt-Urteil; die Messreihe (LEHRE-Doc) zeigt, dass der
-    gratis Cosinus verwandt von unverwandt nicht zuverlässig trennt. Das echte
-    Urteil liefert der <b>KI-Richter</b> (⚖️), eine zweite, <b>optionale</b>
-    Stufe: er versteht <i>Absicht/Verneinung</i>
-    („alkoholfrei = KEIN Alkohol"), was der Vektor nicht kann. Drei Stufen, keine
-    erzwingt Bezahlung: <b>(1)</b> gratis &amp; überall — lokales Embedding;
-    <b>(2)</b> gratis, gerät-hungrig — KI im Browser (WebLLM, Modell-Wahl
-    Trabant→Mercedes; lädt Bibliothek + Modell einmalig aus dem Netz, dann im
-    Cache; langsamer + nicht ganz so stark wie die Cloud);
-    <b>(3)</b> bezahlt &amp; am stärksten — Cloud mit eigenem Schlüssel. Der
-    Schlüssel wird <b>nur mit Häkchen „auf diesem Gerät merken"</b> lokal
-    gespeichert (<code>localStorage</code>, im Klartext, nur auf diesem Gerät —
-    kein Server, kein Tracker); Häkchen weg = sofort gelöscht. Krypto bleibt
-    lokal vendoriert.
+  <footer class="honest-short">
+    &#128275; <b>Alles hier ist &ouml;ffentlich</b> &mdash; jeder, der dasselbe Brett
+    liest, sieht deine Fragen und Antworten. Nichts bleibt garantiert gespeichert.
+    <button type="button" class="info-open" id="footer-hilfe">&#8505;&#65039; Wie funktioniert das?</button>
   </footer>
 </div>
 
@@ -2001,5 +1980,16 @@ window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubH
 <!-- Hilfe: ❓-Knopf mit Anleitung + ein-/ausschaltbare Erklär-Blasen für alle
      Knöpfe, Felder und Bereiche. Zuletzt geladen, damit alle Elemente stehen. -->
 <script src="./assets/hilfe.js"></script>
+
+<script>
+(function(){
+  var f = document.getElementById('footer-hilfe');
+  if (!f) return;
+  f.addEventListener('click', function(){
+    var b = document.getElementById('hilfe-btn');
+    if (b) b.click();
+  });
+})();
+</script>
 </body>
 </html>

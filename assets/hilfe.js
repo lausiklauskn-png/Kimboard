@@ -31,6 +31,7 @@
     'tb-full':    ['🔳 Vollbild', 'Blendet die Leisten des Browsers aus, damit die Pinnwand den ganzen Bildschirm nutzt. Nochmal tippen beendet es.'],
     'tb-reload':  ['🔄 Neu laden', 'Lädt die Seite frisch und wirft den Zwischenspeicher weg. Immer dann nützlich, wenn du eine neue Version bekommen hast und noch die alte siehst.'],
     'hilfe-btn':  ['❓ Hilfe', 'Öffnet die Anleitung und den Schalter für diese Erklär-Blasen.'],
+    'footer-hilfe': ['ℹ️ Wie funktioniert das?', 'Öffnet dieselbe Anleitung wie der ❓-Knopf oben — dort steht in einfachen Worten, was Kimboard ist, worin es sich von WhatsApp unterscheidet und was du wissen solltest, bevor du etwas schreibst.'],
 
     // — Identität / Gerät —
     'geraetename': ['🏷️ Gerätename', 'Ein frei wählbarer Anzeige-Name (z. B. „Klaus-Handy"), damit man deine Zettel zuordnen kann — praktisch, wenn du mehrere Geräte hast. Nur ein Hinweis, KEIN Echtheits-Beweis: jeder kann jeden Namen wählen. Die kryptische Kennung daneben ist das Verlässliche.'],
@@ -87,10 +88,33 @@
 
   /* ---------------- Testanleitung ---------------- */
   var ANLEITUNG =
-    '<h3>Was ist diese Pinnwand?</h3>' +
-    '<p>Ein <b>geborgtes schwarzes Brett</b>: Du heftest eine Frage oder Notiz an, andere sehen sie und antworten — ' +
-    'auch von einem anderen Gerät. Es gibt <b>keinen eigenen Server</b> und <b>kein Konto</b>. Zusätzlich kannst du ' +
-    '<b>privat und verschlüsselt</b> an einzelne Kontakte schreiben.</p>' +
+    '<h3>Was ist Kimboard?</h3>' +
+    '<p><b>In einem Satz:</b> ein schwarzes Brett. Du heftest eine Frage oder Notiz an, andere Geräte sehen sie ' +
+    'und hängen ihre Antwort daneben. Zusätzlich kannst du <b>privat und verschlüsselt</b> an einzelne Kontakte schreiben.</p>' +
+    '<p><b>Was daran anders ist als bei WhatsApp &amp; Co.:</b> Dort läuft jede Nachricht durch die Rechner <i>einer Firma</i> — ' +
+    'mit Konto, Anmeldung und jemandem, dem das alles gehört. <b>Hier gibt es das nicht.</b> Kimboard leiht sich frei ' +
+    'zugängliche „Bretter“ im Netz und hängt den Zettel dort hin: kein Konto, keine Anmeldung, keine Firma dahinter, ' +
+    'niemand verdient daran — und fällt ein Brett aus, nimmt die App einfach ein anderes.</p>' +
+    '<p><b>Der Vergleich:</b> WhatsApp ist ein verschlossener Brief bei der Post. Kimboard ist ein Zettel am schwarzen ' +
+    'Brett im Supermarkt — jeder, der vorbeigeht, kann ihn lesen.</p>' +
+    '<p style="border-left:3px solid #e0a35a;background:rgba(224,163,90,.08);border-radius:0 8px 8px 0;padding:.6em .9em">' +
+    '<b>⚠️ Bevor du etwas schreibst:</b><br>' +
+    '• <b>Alles ist öffentlich</b> — jeder, der dasselbe Brett liest, sieht es. Schreib nichts hinein, was niemand ' +
+    'sonst lesen soll. <i>Ausnahme:</i> „Privat an“ verschlüsselt den Zettel für die gewählten Personen.<br>' +
+    '• <b>Nichts bleibt garantiert</b> — die Bretter gehören anderen, ein Zettel kann jederzeit verschwinden. ' +
+    'Kein Archiv, keine Sicherung.<br>' +
+    '• <b>Kein Spam-Schutz</b> — es kann auch Unsinn ankommen.</p>' +
+    '<h3>Was „nach Bedeutung sortieren“ macht</h3>' +
+    '<p>Normalerweise stehen Antworten so da, wie sie eintreffen. Auf Knopfdruck sortiert Kimboard sie danach, wie gut ' +
+    'sie <i>zur Frage passen</i> — nicht nach Stichwörtern, sondern nach Sinn. Dafür lädt die App <b>einmalig</b> ein ' +
+    'kleines Sprach-Modell (~30 MB) und rechnet danach <b>auf deinem Gerät</b>. Nur auf Knopfdruck, von allein nie.</p>' +
+    '<p><b>Ehrlich dazu:</b> das ist eine <b>Rangfolge</b>, kein Urteil — „passt eher“, nicht „ist richtig“. Wer ein ' +
+    'echtes Urteil will (dass „alkoholfrei“ das Gegenteil von „mit Alkohol“ ist), kann freiwillig den <b>KI-Richter</b> ' +
+    'zuschalten. Drei Stufen, keine zwingt zu bezahlen — <b>ohne all das funktioniert Kimboard vollständig</b>. Ein ' +
+    'eigener Schlüssel wird nur mit dem Häkchen „auf diesem Gerät merken“ gespeichert, und dann nur dort.</p>' +
+    '<details style="margin:1em 0;border-top:1px solid #2b3d43;padding-top:.8em">' +
+    '<summary style="cursor:pointer;opacity:.75;font-size:.9rem">Technische Einzelheiten (für Interessierte)</summary>' +
+    '<div style="font-size:.84rem;opacity:.75;margin-top:.6em"><b>Ehrlich:</b> Beweist, dass <i>Frage→Antwort</i> über das geborgte Brett läuft (NIP-01-Reply via <code>e</code>-Tag). Immer noch <b>öffentlich</b> (jeder Relay-Leser sieht Fragen + Antworten), <b>keine garantierte Haltbarkeit</b>, <b>kein Spam-Schutz</b>. <b>Bedeutungs-Sortierung</b> (Knopf oben) ist <b>optional</b>: erst auf bewusste Nutzer-Aktion lädt das Embedding-Modell (Modul 03, <code>Xenova/multilingual-e5-small</code>) — das ist der <i>einzige</i> Teil, der ein CDN/Internet nutzt (einmalig ~30&nbsp;MB, dann im Browser-Cache); es sortiert nach Nähe zur Frage und filtert nichts weg, fail-soft. Der Score ist ein <b>zentrierter (whitened) Cosinus</b>: der gemeinsame Mittelwert-Vektor wird abgezogen, damit der <i>Inhalt</i> entscheidet und nicht die Hülle (gleiche Sprache/Stil) — Hintergrund: Anisotropie-Befund, <code>docs/LEHRE-EMBEDDING-MATCH-KALIBRIERUNG.md</code>. Hier mit lokal wachsendem Referenz-Schwerpunkt (die netzweite Konstante liefert erst Bau „Modul&nbsp;04 Whitening"). <b>Ehrlich:</b> dieser Cosinus ist eine <b>Rangfolge</b> (was näher dran ist, steht oben) — <i>kein</i> Verwandt-/Unverwandt-Urteil; die Messreihe (LEHRE-Doc) zeigt, dass der gratis Cosinus verwandt von unverwandt nicht zuverlässig trennt. Das echte Urteil liefert der <b>KI-Richter</b> (⚖️), eine zweite, <b>optionale</b> Stufe: er versteht <i>Absicht/Verneinung</i> („alkoholfrei = KEIN Alkohol"), was der Vektor nicht kann. Drei Stufen, keine erzwingt Bezahlung: <b>(1)</b> gratis &amp; überall — lokales Embedding; <b>(2)</b> gratis, gerät-hungrig — KI im Browser (WebLLM, Modell-Wahl Trabant→Mercedes; lädt Bibliothek + Modell einmalig aus dem Netz, dann im Cache; langsamer + nicht ganz so stark wie die Cloud); <b>(3)</b> bezahlt &amp; am stärksten — Cloud mit eigenem Schlüssel. Der Schlüssel wird <b>nur mit Häkchen „auf diesem Gerät merken"</b> lokal gespeichert (<code>localStorage</code>, im Klartext, nur auf diesem Gerät — kein Server, kein Tracker); Häkchen weg = sofort gelöscht. Krypto bleibt lokal vendoriert.</div></details>' +
 
     '<h3>Erster Test — allein, 2 Minuten</h3>' +
     '<ol>' +
