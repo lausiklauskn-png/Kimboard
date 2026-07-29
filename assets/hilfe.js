@@ -31,7 +31,6 @@
     'tb-full':    ['🔳 Vollbild', 'Blendet die Leisten des Browsers aus, damit die Pinnwand den ganzen Bildschirm nutzt. Nochmal tippen beendet es.'],
     'tb-reload':  ['🔄 Neu laden', 'Lädt die Seite frisch und wirft den Zwischenspeicher weg. Immer dann nützlich, wenn du eine neue Version bekommen hast und noch die alte siehst.'],
     'hilfe-btn':  ['❓ Hilfe', 'Öffnet die Anleitung und den Schalter für diese Erklär-Blasen.'],
-    'footer-hilfe': ['ℹ️ Wie funktioniert das?', 'Öffnet dieselbe Anleitung wie der ❓-Knopf oben — dort steht in einfachen Worten, was Kimboard ist, worin es sich von WhatsApp unterscheidet und was du wissen solltest, bevor du etwas schreibst.'],
 
     // — Identität / Gerät —
     'geraetename': ['🏷️ Gerätename', 'Ein frei wählbarer Anzeige-Name (z. B. „Klaus-Handy"), damit man deine Zettel zuordnen kann — praktisch, wenn du mehrere Geräte hast. Nur ein Hinweis, KEIN Echtheits-Beweis: jeder kann jeden Namen wählen. Die kryptische Kennung daneben ist das Verlässliche.'],
@@ -99,8 +98,17 @@
     'Brett im Supermarkt — jeder, der vorbeigeht, kann ihn lesen.</p>' +
     '<p style="border-left:3px solid #e0a35a;background:rgba(224,163,90,.08);border-radius:0 8px 8px 0;padding:.6em .9em">' +
     '<b>⚠️ Bevor du etwas schreibst:</b><br>' +
-    '• <b>Alles ist öffentlich</b> — jeder, der dasselbe Brett liest, sieht es. Schreib nichts hinein, was niemand ' +
-    'sonst lesen soll. <i>Ausnahme:</i> „Privat an“ verschlüsselt den Zettel für die gewählten Personen.<br>' +
+    '• <b>Wer mitlesen kann, bestimmst du.</b> Das offene Brett ist wie ein öffentlicher Beitrag auf ' +
+    '<b>Instagram oder Facebook</b> — sichtbar für alle, die dort sind. Daneben gibt es einen <b>Privatraum</b> ' +
+    'und den Weg an <b>einzelne Kontakte</b>. (Bei WhatsApp können ja auch nicht alle mitlesen, sondern nur ' +
+    'die, die du als Kontakt hast — genauso hier.)<br>' +
+    '&nbsp;&nbsp;<b>🔓 Offenes Brett</b> (Voreinstellung): alle, die <i>dieses</i> öffentliche Brett benutzen, ' +
+    'können mitlesen. Wer ein anderes Brett hat, sieht nichts davon. Trotzdem: dort nichts Privates.<br>' +
+    '&nbsp;&nbsp;<b>🔒 Brett-Passwort</b> (Privatraum): dein Zettel liegt weiter auf demselben Brett, ist aber ' +
+    'verschlüsselt — lesen kann nur, wer das Passwort hat; alle anderen und das Relais sehen Zeichensalat. ' +
+    'Ehrlich: dass ein Zettel da ist, bleibt sichtbar — geschützt ist der Inhalt.<br>' +
+    '&nbsp;&nbsp;<b>✉️ „Privat an“</b>: Ende-zu-Ende verschlüsselt, genau wie bei WhatsApp — nur die gewählte ' +
+    'Person kann es öffnen.<br>' +
     '• <b>Nichts bleibt garantiert</b> — die Bretter gehören anderen, ein Zettel kann jederzeit verschwinden. ' +
     'Kein Archiv, keine Sicherung.<br>' +
     '• <b>Kein Spam-Schutz</b> — es kann auch Unsinn ankommen.</p>' +
