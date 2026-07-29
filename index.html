@@ -356,7 +356,7 @@
     hat, sieht sie nicht.</span>
     <span class="fp-lvl">Es gibt einen <b>Privatraum</b>: mit <b>Brett-Passwort</b> liest nur
     mit, wer es kennt &mdash; mit <b>&#8222;Privat an&#8220;</b> nur die gew&auml;hlte Person
-    (Ende-zu-Ende, wie bei WhatsApp).<span id="echtheit" hidden></span></span>
+    (Ende-zu-Ende, wie bei WhatsApp).<span id="echtheit" hidden></span><span id="flut" hidden></span></span>
   </footer>
 </div>
 
@@ -416,6 +416,41 @@ function bumpForged() {
     el.hidden = false;
   }
 }
+
+// ── FLUT-BREMSE ─────────────────────────────────────────────────────────────
+// Eine Identität zu erzeugen kostet nichts — jemand kann tausende Zettel
+// schicken, aus einem Schlüssel oder aus vielen. Zwei gleitende Fenster über
+// eine Minute (Vorbild: RDV_QUERY_MAX_PER_MIN in Modul 23):
+//   - je Absender: begrenzt den Einzelnen
+//   - insgesamt:   begrenzt auch einen Schwarm vieler Identitäten
+// Überzähliges wird STILL verworfen — der Fluter erfährt nichts über die Grenze.
+// GILT NUR FÜR LIVE-ZETTEL (nach EOSE), nie für den Anfangs-Vorrat.
+// Bekannte (Kontakte) sind ausgenommen — Stufe 3 baut das aus.
+const FLUT_JE_ABSENDER_PRO_MIN = 12;   // normales Schreiben liegt weit darunter
+const FLUT_GESAMT_PRO_MIN = 120;       // Schwarm-Deckel über alle Absender
+let flutStempel = [];                              // [{pub, t}]
+let floodCount = 0;
+function underFlutLimit(pub) {
+  const cut = Date.now() - 60000;
+  flutStempel = flutStempel.filter((s) => s.t > cut);
+  if (flutStempel.length >= FLUT_GESAMT_PRO_MIN) return false;
+  let vonDiesem = 0;
+  for (const s of flutStempel) if (s.pub === pub) vonDiesem++;
+  if (vonDiesem >= FLUT_JE_ABSENDER_PRO_MIN) return false;
+  flutStempel.push({ pub, t: Date.now() });
+  return true;
+}
+function bumpFlood() {
+  floodCount++;
+  const el = $('flut');
+  if (el) {
+    el.textContent = ' · ' + floodCount + ' Zettel zurückgehalten (zu viele auf einmal)';
+    el.hidden = false;
+  }
+}
+
+// Welche Relais-Verbindungen sind über den gespeicherten Vorrat hinaus (EOSE)?
+const liveFrom = {};
 
 const TAG = 'sbkim-frage-antwort-test';
 // Breit gestreute öffentliche Relays (verschiedene Betreiber/Regionen). Wählbar.
@@ -601,9 +636,30 @@ function makeContactAction(pub) {
   }
   return el;
 }
+// „Stumm" — der Reaktions-Weg, wenn jemand stört. Steht bewusst NUR an fremden
+// Zetteln und nur, wenn die Person kein Kontakt ist (Kontakte entfernt man
+// über die Kontakt-Verwaltung, nicht mit einem Sperr-Knopf am Zettel).
+function makeMuteAction(pub) {
+  if (pub === pubHex || dmContacts[pub]) return null;
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'tbtn kb-mute';
+  b.dataset.mutePub = pub;
+  b.textContent = '🔇';
+  b.title = 'Diesen Absender stumm schalten — seine Zettel erscheinen bei dir nicht mehr (nur auf diesem Gerät)';
+  b.style.cssText = 'font-size:.72rem;padding:1px 6px;margin-left:4px;vertical-align:middle;opacity:.65;';
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!confirm('Diesen Absender stumm schalten?\n\nSeine Zettel erscheinen bei dir nicht mehr — nur auf diesem Gerät, und niemand erfährt davon.')) return;
+    sperreAbsender(pub);
+  });
+  return b;
+}
 function attachContactAction(head, pub) {
   const el = makeContactAction(pub);
   if (el) head.appendChild(el);
+  const m = makeMuteAction(pub);
+  if (m) head.appendChild(m);
 }
 // Nach dem Merken sofort überall nachziehen: Kennung → Name, Knopf → 👤.
 // (Ohne das behielten schon gezeigte Zettel die kryptische Kennung.)
@@ -734,6 +790,29 @@ const LS_HIDDEN = 'sbkim_pinnwand_hidden';
 let hidden = new Set();
 try { hidden = new Set(JSON.parse(localStorage.getItem(LS_HIDDEN) || '[]')); } catch { /* fail-soft */ }
 function saveHidden() { try { localStorage.setItem(LS_HIDDEN, JSON.stringify([...hidden])); } catch { /* */ } }
+
+// ── ABSENDER-SPERRE (nachträglich) ──────────────────────────────────────────
+// Vorbeugen ist begrenzt — reagieren nicht. Wer sich als Problem zeigt, wird
+// hier lokal stumm geschaltet: seine Zettel erscheinen gar nicht mehr.
+// EHRLICH: das wirkt NUR auf diesem Gerät. Die Liste wird NIE veröffentlicht
+// (Karte 12: eine offene Sperrliste verriete dem Gegenüber, was erkannt wurde).
+const LS_GESPERRT = 'sbkim_pinnwand_gesperrt';
+let gesperrt = new Set();
+try { gesperrt = new Set(JSON.parse(localStorage.getItem(LS_GESPERRT) || '[]')); } catch { /* fail-soft */ }
+function saveGesperrt() { try { localStorage.setItem(LS_GESPERRT, JSON.stringify([...gesperrt])); } catch { /* */ } }
+function istGesperrt(pub) { return gesperrt.has(pub); }
+function sperreAbsender(pub) {
+  if (!/^[0-9a-f]{64}$/.test(String(pub)) || pub === pubHex) return false;
+  gesperrt.add(pub); saveGesperrt();
+  // Schon angezeigte Zettel dieses Absenders sofort entfernen.
+  document.querySelectorAll('.q-card').forEach((c) => {
+    if (c.querySelector('[data-pub="' + pub + '"]')) {
+      const li = c.closest('li'); if (li && li.parentNode) li.parentNode.removeChild(li);
+    }
+  });
+  return true;
+}
+function entsperreAbsender(pub) { const w = gesperrt.delete(pub); if (w) saveGesperrt(); return w; }
 function hideQuestion(id, li) {
   hidden.add(id); saveHidden();
   if (li && li.parentNode) li.parentNode.removeChild(li);
@@ -1337,11 +1416,18 @@ $('judgerun').addEventListener('click', async () => {
   $('judgerun').disabled = false;
 });
 
-async function dispatch(ev, relay) {
+async function dispatch(ev, relay, istLive = false) {
   if (seen.has(ev.id)) return;
   // ZUERST die Echtheit — vor Entschlüsseln, Anzeigen, Merken. Alles Weitere
   // (Kontakte, Zugehörigkeit, Meldungen) baut darauf auf, dass der Absender echt ist.
   if (!(await isAuthentic(ev))) { bumpForged(); return; }
+  // Dann die Flut-Bremse — nur für LIVE-Zettel, nie für den Anfangs-Vorrat, und
+  // nie für eigene Zettel oder gespeicherte Kontakte (Bekannte werden nicht
+  // gedrosselt; Stufe 3 baut den Vorrang aus). Gesperrte fliegen ganz raus.
+  if (istGesperrt(ev.pubkey)) return;
+  if (istLive && ev.pubkey !== pubHex && !dmContacts[ev.pubkey] && !underFlutLimit(ev.pubkey)) {
+    bumpFlood(); return;
+  }
   // Verschlüsselte Notiz: nur zeigen, wenn wir sie mit dem Brett-Passwort lesen
   // können. Sonst (kein/falsches Passwort) überspringen — kein Geheimtext-Müll.
   if (isEnc(ev.content)) {
@@ -1430,6 +1516,7 @@ function connect(url) {
   let ws;
   try { ws = new WebSocket(url); } catch { setDot(url, 'down'); scheduleReconnect(url); return; }
   conns[url] = ws;
+  liveFrom[url] = false;   // bis EOSE: Vorrat, nicht bremsen
   ws.onopen = () => {
     backoff[url] = 0; // Erfolg → Backoff zurücksetzen
     setDot(url, 'up');
@@ -1438,7 +1525,13 @@ function connect(url) {
   };
   ws.onmessage = (e) => {
     let m; try { m = JSON.parse(e.data); } catch { return; }
-    if (Array.isArray(m) && m[0] === 'EVENT' && m[1] === SUB_ID && m[2]) dispatch(m[2], url);
+    if (!Array.isArray(m) || m[1] !== SUB_ID) return;
+    // EOSE = „ab hier ist der gespeicherte Vorrat durch". Alles davor ist der
+    // normale Anfangs-Schwall (bis 200 Zettel) und darf NICHT gebremst werden;
+    // erst danach greift die Flut-Bremse. Ohne diese Trennung würde die eigene
+    // Bremse das normale Laden abwürgen.
+    if (m[0] === 'EOSE') { liveFrom[url] = true; return; }
+    if (m[0] === 'EVENT' && m[2]) dispatch(m[2], url, liveFrom[url] === true);
   };
   ws.onclose = () => { setDot(url, 'down'); updateSendState(); scheduleReconnect(url); };
   ws.onerror = () => { setDot(url, 'down'); }; // onclose folgt → Reconnect dort
@@ -1958,7 +2051,8 @@ initRotationUi();   // Relais-Automatik (Default aus; startet nur mit Häkchen +
 // Test-Haken. `buildEvent` gehört dazu, seit eingehende Zettel auf Echtheit
 // geprüft werden: Tests dürfen keine Fantasie-Signaturen mehr einschleusen,
 // sondern müssen echt signieren — genau wie ein ehrlicher Absender.
-window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubHex, buildEvent };
+window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubHex, buildEvent,
+  sperreAbsender, entsperreAbsender, gesperrte: () => [...gesperrt], flutZaehler: () => floodCount };
 </script>
 
 <!-- ── SBKIM-Endknoten-Stack (byte-1:1-Kopien, Drift-Guard im Smoke-Test) ──
