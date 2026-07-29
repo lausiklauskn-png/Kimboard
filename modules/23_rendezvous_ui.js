@@ -46,6 +46,8 @@
   var cfg = { nodeName: "SBKIM-Knoten", createIdentity: null, dbSuffix: null, prepareCorpus: null, corner: "bl", accent: null, euOnly: false };
   var mounted = false;
   var btnEl = null, panelEl = null, outEl = null, cardsEl = null, relOnlyBtn = null, incomingEl = null;
+  // Stufe 0a (Identität haltbar machen) — zwei ehrliche Status-Zeilen im Panel.
+  var idValEl = null, persistValEl = null, persistHintEl = null;
 
   // Empfänger-Hinweis (Klaus 2026-07-11): wenn ein FREMDER Knoten sich mit
   // diesem hier verbindet, beantwortet Modul 05 den Handshake live und meldet
@@ -376,6 +378,44 @@
   function embedMod() { var e = global.SbkimEmbedding; return (e && typeof e.embedQuery === "function") ? e : null; }
   // Modul 04 nur, wenn der KI-Richter (hybridMatch) wirklich da ist — fail-soft.
   function matchMod() { var m = global.SbkimMatch; return (m && typeof m.hybridMatch === "function") ? m : null; }
+  // Modul 02 nur, wenn getOwnSpore wirklich da ist — fail-soft (Stufe 0a).
+  function sporeMod() { var s = global.SbkimSpore; return (s && typeof s.getOwnSpore === "function") ? s : null; }
+
+  // Stufe 0a — die zwei Status-Zeilen aktualisieren (Kennung + Speicher-
+  // Dauerhaftigkeit). Beide Werte existieren schon im Code; hier werden sie nur
+  // gelesen und angezeigt. REINE Anzeige, konsequent fail-soft. Wird beim Mount,
+  // beim Öffnen und nach Verbinden/Anmelden/Aufräumen gerufen — die Identität
+  // kann gerade erst entstanden sein.
+  function refreshStatus() {
+    // „Speicher dauerhaft" — true|false|null aus Modul 01 _meta.storagePersisted.
+    if (persistValEl) {
+      var p = null;
+      try { var st = global.SbkimStorage; p = (st && st._meta) ? st._meta.storagePersisted : null; } catch (_e) { p = null; }
+      if (p === true) {
+        persistValEl.textContent = "ja"; persistValEl.style.color = "#8fe0b0";
+        if (persistHintEl) persistHintEl.style.display = "none";
+      } else if (p === false) {
+        persistValEl.textContent = "nein"; persistValEl.style.color = "#e6b980";
+        if (persistHintEl) {
+          persistHintEl.textContent = "→ Der Browser darf diesen Speicher später aufräumen — dann wäre deine Kennung weg. Am sichersten: die App auf den Startbildschirm legen (installieren). Eine Sicherung deiner Identität schützt zusätzlich.";
+          persistHintEl.style.display = "block";
+        }
+      } else {
+        persistValEl.textContent = "unbekannt"; persistValEl.style.color = "#9aa7b6";
+        if (persistHintEl) persistHintEl.style.display = "none";
+      }
+    }
+    // „Meine Kennung" — aus Modul 02 getOwnSpore() (async, fail-soft).
+    if (idValEl) {
+      var sp = sporeMod();
+      if (!sp) { idValEl.textContent = "noch keine (erst verbinden)"; return; }
+      try {
+        Promise.resolve(sp.getOwnSpore()).then(function (own) {
+          if (idValEl) idValEl.textContent = (own && own.id) ? own.id : "noch keine (erst verbinden)";
+        }).catch(function () { if (idValEl) idValEl.textContent = "noch keine (erst verbinden)"; });
+      } catch (_e) { idValEl.textContent = "noch keine (erst verbinden)"; }
+    }
+  }
   // Anbieter-Liste aus Modul 04 (id/label/region), EU-gefiltert bei cfg.euOnly.
   function kiProviders() {
     var m = matchMod();
@@ -648,6 +688,31 @@
     panelEl.appendChild(el("p", "margin:0 0 10px;color:#9aa7b6",
       "Triff andere SBKIM-Knoten im gemeinsamen Raum — server-los, direkt aus deinem Browser. Du kannst dieses Fenster schließen und normal weiterarbeiten; nur die App-Seite selbst offen lassen, damit du erreichbar bleibst."));
 
+    // Stufe 0a — zwei ehrliche Status-Zeilen: „Meine Kennung" (aus Modul 02
+    // getOwnSpore) und „Speicher dauerhaft" (aus Modul 01 _meta.storagePersisted).
+    // Beide Werte existieren längst im Code; hier werden sie nur sichtbar, damit
+    // Klaus messen kann, ob die Kennung eine Sitzung überlebt. REINE Anzeige,
+    // konsequent fail-soft: fehlt ein Wert, steht „unbekannt"/„noch keine" da —
+    // nie ein Fehler, nie ein toter Knopf (Fremdnutzer-/Marktplatz-Brille).
+    var statusBox = el("div", "margin:0 0 10px;padding:8px 10px;border-radius:8px;" +
+      "border:1px solid rgba(154,167,182,.22);background:rgba(10,16,24,.35);font-size:.74rem;line-height:1.5");
+    var idRow = el("div", "color:#9aa7b6;margin-bottom:2px");
+    idRow.appendChild(el("span", "color:#c7d2de", "Meine Kennung: "));
+    idValEl = el("span", "font:.68rem/1.3 var(--mono,monospace);color:#cfe0ff;word-break:break-all", "…");
+    idValEl.id = "sbkim-rdv-myid";
+    idRow.appendChild(idValEl);
+    statusBox.appendChild(idRow);
+    var persistRow = el("div", "color:#9aa7b6");
+    persistRow.appendChild(el("span", "color:#c7d2de", "Speicher dauerhaft: "));
+    persistValEl = el("span", "color:#cfe0ff", "…");
+    persistValEl.id = "sbkim-rdv-persist";
+    persistRow.appendChild(persistValEl);
+    statusBox.appendChild(persistRow);
+    persistHintEl = el("div", "display:none;margin-top:3px;color:#e6b980;font-size:.7rem;line-height:1.45");
+    statusBox.appendChild(persistHintEl);
+    panelEl.appendChild(statusBox);
+    refreshStatus();
+
     // A15 — Zwei-Stufen-Hinweis (ehrliche Kosten-Benennung, reine Anzeige):
     // „nur stöbern" ist anonym (kein Modell/keine Identität, man wird nicht
     // gefunden); „voll mitmachen" legt einmal eine lokale Identität an und macht
@@ -866,6 +931,7 @@
     startModelProgress("🧹 Räume auf & melde neu an …");
     r.repairAndReconnect().then(function (res) {
       stopModelProgress(); if (outEl) outEl.textContent = "🧹 Aufgeräumt & neu angemeldet:\n";
+      refreshStatus();   // Stufe 0a: Identität kann sich geändert haben
       var c = res && res.cleaned;
       if (c) {
         appendOut("• Alt-Topf „sbkim“ gelöscht: " + (c.dbDeleted ? "ja" : "nein") + "\n");
@@ -890,6 +956,7 @@
     startModelProgress("→ Verbinde mit dem Netz …");
     r.connectAndAnnounce({ createIdentity: cfg.createIdentity || undefined }).then(function (res) {
       stopModelProgress(); if (outEl) outEl.textContent = "";
+      refreshStatus();   // Stufe 0a: Kennung kann gerade erst entstanden sein
       if (res.ok) {
         if (res.created) appendOut("✓ Identität erzeugt: " + res.nodeId + "\n");
         else appendOut("Identität vorhanden: " + res.nodeId + "\n");
@@ -909,6 +976,7 @@
     startModelProgress("→ Hefte deine Visitenkarte in den gemeinsamen Raum …");
     r.announce().then(function (res) {
       stopModelProgress(); if (outEl) outEl.textContent = "";
+      refreshStatus();   // Stufe 0a
       if (res.ok) appendOut("✓ Du bist im Raum (nodeId " + res.nodeId + "). Fenster darf zu — nur die App-Seite offen lassen.");
       else appendOut("✗ " + (res.reason || "Anmelden fehlgeschlagen."));
     }).catch(function (e) { stopModelProgress(); setOut("✗ Anmelden fehlgeschlagen: " + (e && e.message ? e.message : e)); });
@@ -1385,6 +1453,7 @@
   function show() {
     if (panelEl) { panelEl.style.display = "block"; var p = loadPos(); if (p) applyPos(panelEl, p); }
     if (btnEl) btnEl.style.display = "none";      // Panel offen → Blase weg (Flying-Widget)
+    refreshStatus();                              // Stufe 0a: Kennung + Speicher-Status frisch
     // A12: beim Öffnen automatisch nachlesen; sind neue Antworten da, zeigen.
     recheckMail({ surfaceIfNews: true });
   }
