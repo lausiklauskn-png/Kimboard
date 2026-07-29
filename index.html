@@ -356,7 +356,7 @@
     hat, sieht sie nicht.</span>
     <span class="fp-lvl">Es gibt einen <b>Privatraum</b>: mit <b>Brett-Passwort</b> liest nur
     mit, wer es kennt &mdash; mit <b>&#8222;Privat an&#8220;</b> nur die gew&auml;hlte Person
-    (Ende-zu-Ende, wie bei WhatsApp).</span>
+    (Ende-zu-Ende, wie bei WhatsApp).<span id="echtheit" hidden></span></span>
   </footer>
 </div>
 
@@ -367,6 +367,7 @@
 <script src="./modules/24_ocr_eingabe.js"></script>
 <script type="module">
 import { schnorr, utils } from './modules/noble-secp256k1.js';
+import { isAuthentic, eventId } from './modules/echtheit.js';
 import { dmEncrypt, dmDecrypt, isDm, safetyNumber } from './modules/dm_crypto.js';
 import { currentRelays as rotCurrentRelays, makeAnnouncement as rotMakeAnnouncement,
          parseAnnouncement as rotParseAnnouncement, isAnnouncement as rotIsAnnouncement } from './modules/relay_rotation.js';
@@ -399,6 +400,21 @@ function authorLabel(ev) {
 async function sha256Hex(str) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
   return toHex(new Uint8Array(buf));
+}
+
+// ── ECHTHEIT ────────────────────────────────────────────────────────────────
+// Die Prüfung selbst liegt in modules/echtheit.js (dort steht auch, warum sie
+// unverzichtbar ist). Ausgelagert, damit sie headless testbar ist und in jede
+// weitere App byte-gleich übernommen werden kann.
+// Ehrlichkeit statt stiller Magie: verworfene Zettel werden gezählt und gezeigt.
+let forgedCount = 0;
+function bumpForged() {
+  forgedCount++;
+  const el = $('echtheit');
+  if (el) {
+    el.textContent = ' · ' + forgedCount + ' Zettel verworfen (Echtheit nicht belegt)';
+    el.hidden = false;
+  }
 }
 
 const TAG = 'sbkim-frage-antwort-test';
@@ -691,7 +707,10 @@ async function buildEvent(content, extraTags = [], recipient = null) {
     outContent = await dmEncrypt(content, priv, recipient);
     tags.push(['p', recipient]); tags.push(['enc', 'dm1']);
   } else if (boardKey) { outContent = await encryptContent(content); tags.push(['enc', 'sbkim1']); }
-  const id = await sha256Hex(JSON.stringify([0, pubHex, created_at, kind, tags, outContent]));
+  // ID über dieselbe Funktion wie der Prüfer (modules/echtheit.js) — sonst
+  // könnten Sender und Prüfung auseinanderlaufen und die App würde ihre
+  // EIGENEN Zettel als unecht verwerfen.
+  const id = await eventId({ pubkey: pubHex, created_at, kind, tags, content: outContent });
   const sig = toHex(await schnorr.sign(fromHex(id), priv));
   return { id, pubkey: pubHex, created_at, kind, tags, content: outContent, sig };
 }
@@ -1320,6 +1339,9 @@ $('judgerun').addEventListener('click', async () => {
 
 async function dispatch(ev, relay) {
   if (seen.has(ev.id)) return;
+  // ZUERST die Echtheit — vor Entschlüsseln, Anzeigen, Merken. Alles Weitere
+  // (Kontakte, Zugehörigkeit, Meldungen) baut darauf auf, dass der Absender echt ist.
+  if (!(await isAuthentic(ev))) { bumpForged(); return; }
   // Verschlüsselte Notiz: nur zeigen, wenn wir sie mit dem Brett-Passwort lesen
   // können. Sonst (kein/falsches Passwort) überspringen — kein Geheimtext-Müll.
   if (isEnc(ev.content)) {
@@ -1933,7 +1955,10 @@ initRotationUi();   // Relais-Automatik (Default aus; startet nur mit Häkchen +
 
 // Schmaler Prüf-Zugang für die headless-Tests (Muster wie in Küchenzettel).
 // NUR Funktionen und die Kontakt-Liste — der private Schlüssel bleibt draußen.
-window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubHex };
+// Test-Haken. `buildEvent` gehört dazu, seit eingehende Zettel auf Echtheit
+// geprüft werden: Tests dürfen keine Fantasie-Signaturen mehr einschleusen,
+// sondern müssen echt signieren — genau wie ein ehrlicher Absender.
+window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubHex, buildEvent };
 </script>
 
 <!-- ── SBKIM-Endknoten-Stack (byte-1:1-Kopien, Drift-Guard im Smoke-Test) ──

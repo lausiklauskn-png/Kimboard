@@ -39,17 +39,33 @@ try {
   await p.goto(`http://127.0.0.1:${PORT}/index.html`, { waitUntil: 'domcontentloaded' });
   await p.waitForTimeout(1800);
 
-  const FREMD = 'b'.repeat(64);
-
   // Zwei Zettel einschleusen: einer von einem Fremden, einer von mir selbst.
-  await p.evaluate(async (fremd) => {
-    const mk = (pubkey, id, content) => ({
-      id, pubkey, created_at: Math.floor(Date.now() / 1000),
-      kind: 1, tags: [['t', 'sbkim-frage-antwort-test']], content, sig: '0'.repeat(128),
-    });
-    await window.__kb.dispatch(mk(fremd, 'f'.repeat(64), 'Zettel von einem Fremden'), 'wss://test');
-    await window.__kb.dispatch(mk(window.__kb.me(), 'e'.repeat(64), 'Mein eigener Zettel'), 'wss://test');
-  }, FREMD);
+  // WICHTIG: beide werden ECHT signiert. Seit der Echtheitsprüfung
+  // (modules/echtheit.js) verwirft die App Zettel mit Fantasie-Signatur —
+  // ein Test mit `sig: '0'.repeat(128)` würde (zu Recht) nichts mehr anzeigen.
+  const { FREMD, FREMD_ID } = await p.evaluate(async () => {
+    const { schnorr, utils } = await import('./modules/noble-secp256k1.js');
+    const { eventId } = await import('./modules/echtheit.js');
+    const toHex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+    const fromHex = (h) => {
+      const o = new Uint8Array(h.length / 2);
+      for (let i = 0; i < o.length; i++) o[i] = parseInt(h.substr(i * 2, 2), 16);
+      return o;
+    };
+    // Ein echter fremder Absender (eigenes Schlüsselpaar).
+    const priv = utils.randomPrivateKey();
+    const pub = toHex(schnorr.getPublicKey(priv));
+    const ev = {
+      pubkey: pub, created_at: Math.floor(Date.now() / 1000), kind: 1,
+      tags: [['t', 'sbkim-frage-antwort-test']], content: 'Zettel von einem Fremden',
+    };
+    ev.id = await eventId(ev);
+    ev.sig = toHex(await schnorr.sign(fromHex(ev.id), priv));
+    await window.__kb.dispatch(ev, 'wss://test');
+    // Mein eigener Zettel — von der App selbst signiert.
+    await window.__kb.dispatch(await window.__kb.buildEvent('Mein eigener Zettel'), 'wss://test');
+    return { FREMD: pub, FREMD_ID: ev.id };
+  });
   await p.waitForTimeout(600);
 
   console.log('== Stufe 1 — „➕ Kontakt" am Zettel ==');
@@ -80,18 +96,56 @@ try {
   ok(await p.evaluate((f) => !!document.querySelector('#dm-to option[value="' + f + '"]'), FREMD),
     'der Kontakt steht sofort in „Privat an" zur Auswahl');
 
-  // Auch an ANTWORTEN muss der Knopf erscheinen.
-  const FREMD2 = 'c'.repeat(64);
-  await p.evaluate(async (f2) => {
-    await window.__kb.dispatch({
-      id: 'a'.repeat(64), pubkey: f2, created_at: Math.floor(Date.now() / 1000), kind: 1,
-      tags: [['t', 'sbkim-frage-antwort-test'], ['e', 'f'.repeat(64)]],
-      content: 'Eine Antwort von jemand anderem', sig: '0'.repeat(128),
-    }, 'wss://test');
-  }, FREMD2);
+  // Auch an ANTWORTEN muss der Knopf erscheinen — ebenfalls echt signiert.
+  const FREMD2 = await p.evaluate(async (fragenId) => {
+    const { schnorr, utils } = await import('./modules/noble-secp256k1.js');
+    const { eventId } = await import('./modules/echtheit.js');
+    const toHex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+    const fromHex = (h) => {
+      const o = new Uint8Array(h.length / 2);
+      for (let i = 0; i < o.length; i++) o[i] = parseInt(h.substr(i * 2, 2), 16);
+      return o;
+    };
+    const priv = utils.randomPrivateKey();
+    const pub = toHex(schnorr.getPublicKey(priv));
+    const ev = {
+      pubkey: pub, created_at: Math.floor(Date.now() / 1000), kind: 1,
+      tags: [['t', 'sbkim-frage-antwort-test'], ['e', fragenId]],
+      content: 'Eine Antwort von jemand anderem',
+    };
+    ev.id = await eventId(ev);
+    ev.sig = toHex(await schnorr.sign(fromHex(ev.id), priv));
+    await window.__kb.dispatch(ev, 'wss://test');
+    return pub;
+  }, FREMD_ID);
   await p.waitForTimeout(600);
   ok(await p.evaluate((f2) => !!document.querySelector('.a-head .kb-addcontact[data-pub-btn="' + f2 + '"]'), FREMD2),
     'auch an einer Antwort steht der Knopf');
+
+  // ── ECHTHEIT, End-zu-End im echten Browser ────────────────────────────────
+  // Ein bösartiges Relais schiebt einen Zettel unter fremdem Namen ein. Er darf
+  // NICHT erscheinen — sonst wäre jede Kontakt-Regel wertlos.
+  const vorFaelschung = await p.evaluate(() => document.querySelectorAll('.q-card').length);
+  const faelschungAngenommen = await p.evaluate(async () => {
+    const { eventId } = await import('./modules/echtheit.js');
+    // Absender: ein bereits bekannter Kontakt — der schlimmste Fall.
+    const opfer = Object.keys(window.__kb.contacts())[0];
+    const ev = {
+      pubkey: opfer, created_at: Math.floor(Date.now() / 1000), kind: 1,
+      tags: [['t', 'sbkim-frage-antwort-test']],
+      content: 'GEFÄLSCHT — angeblich von einem Kontakt',
+    };
+    ev.id = await eventId(ev);                 // id sauber nachgerechnet …
+    ev.sig = '0'.repeat(128);                  // … aber Signatur erfunden
+    await window.__kb.dispatch(ev, 'wss://boeses-relais');
+    return document.body.textContent.includes('GEFÄLSCHT');
+  });
+  await p.waitForTimeout(400);
+  const nachFaelschung = await p.evaluate(() => document.querySelectorAll('.q-card').length);
+  ok(faelschungAngenommen === false, 'gefälschter Zettel wird NICHT angezeigt (Text kommt nirgends vor)');
+  ok(nachFaelschung === vorFaelschung, 'gefälschter Zettel erzeugt keine Karte (' + vorFaelschung + ' → ' + nachFaelschung + ')');
+  ok(await p.evaluate(() => { const e = document.getElementById('echtheit'); return !!e && !e.hidden && /verworfen/.test(e.textContent); }),
+    'die Verwerfung wird ehrlich angezeigt statt still verschluckt');
 
   // Erklär-Modus: der Knopf wird erklärt statt ausgeführt.
   await p.evaluate(() => window.__hilfe.setMode(true));
