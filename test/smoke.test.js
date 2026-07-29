@@ -38,10 +38,12 @@ const EXPECTED_SHA256 = {
   "21_spracheingabe.js": "6be3902c67c3ebfb24a845c59bad9147af903c467b7fb7535bc26cc7943b2a49",
   "17_floating_widget.js": "f48a95ac357ae212fe80e04e28426c43ae0ad9ab35de1eff42d19b8a3b0116c9",
   "23_rendezvous.js": "9f3a20856c33080989db278a54ee23d723eeec82e169e2c4aee67dbc236f992a",
-  "23_rendezvous_ui.js": "f117096e5bcdfe6161a411ed282166e181ad269a4475715ee4d880682f152cbd",
+  "23_rendezvous_ui.js": "c05f0d8e7449c07532c3df91235e4579cd306199e32038ab0aef0cb5974e7dd8",
   "24_ocr_eingabe.js": "c0d616ff763cae409f4ec3dd943326b04c8ec0275b404ddfac348dc4c402077e",
   "noble-secp256k1.js": "8f3879ca422c4fdfe7ca0361688636fa7cc550a59bd94d512ed6ec79aa3d55d1",
   "dm_crypto.js": "e9c973f0459c5f03fa80b47d3cd4505ef6d4bd689e409569370a59db2586ba63",
+  "echtheit.js": "14c164b2585fea56d082b17ede24933838a45fd8ac55d05818b5e45ef8d7fac3",
+  "relay_rotation.js": "112612567d56f068b8c0490e47fdd4c81469e935a91247b91cf5943966298ea0",
 };
 
 test("Drift-Guard: jede Modul-Kopie hält ihren aufgezeichneten sha256", () => {
