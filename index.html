@@ -227,8 +227,7 @@
 
   /* Kurzer, ehrlicher Fu&szlig; statt Fachtext-Wand (Klaus 2026-07-28) */
   .honest-short { font-size:.86rem; opacity:.85; line-height:1.5; padding:10px 0 4px; }
-  .info-open { background:none; border:none; padding:0; margin-left:.4em;
-    color:#36d6c3; text-decoration:underline; cursor:pointer; font:inherit; }
+  .honest-short .fp-lvl{display:block;margin-top:5px;opacity:.8;}
 </style>
 </head>
 <body>
@@ -352,9 +351,12 @@
   </div>
 
   <footer class="honest-short">
-    &#128275; <b>Alles hier ist &ouml;ffentlich</b> &mdash; jeder, der dasselbe Brett
-    liest, sieht deine Fragen und Antworten. Nichts bleibt garantiert gespeichert.
-    <button type="button" class="info-open" id="footer-hilfe">&#8505;&#65039; Wie funktioniert das?</button>
+    <span id="fp-mode">&#128275; <b>Offenes Brett</b> &mdash; alle, die <i>dieses</i>
+    &ouml;ffentliche Brett benutzen, k&ouml;nnen deine Zettel lesen. Wer ein anderes Brett
+    hat, sieht sie nicht.</span>
+    <span class="fp-lvl">Es gibt einen <b>Privatraum</b>: mit <b>Brett-Passwort</b> liest nur
+    mit, wer es kennt &mdash; mit <b>&#8222;Privat an&#8220;</b> nur die gew&auml;hlte Person
+    (Ende-zu-Ende, wie bei WhatsApp).</span>
   </footer>
 </div>
 
@@ -1981,15 +1983,56 @@ window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubH
      Knöpfe, Felder und Bereiche. Zuletzt geladen, damit alle Elemente stehen. -->
 <script src="./assets/hilfe.js"></script>
 
+
 <script>
+/* Fußzeile zeigt den WIRKLICHEN Zustand des Bretts. Liest nur mit, greift nicht ein. */
 (function(){
-  var f = document.getElementById('footer-hilfe');
-  if (!f) return;
-  f.addEventListener('click', function(){
-    var b = document.getElementById('hilfe-btn');
-    if (b) b.click();
-  });
+  var src = document.getElementById('boardkey-status'), out = document.getElementById('fp-mode');
+  if (!src || !out) return;
+  function sync(){
+    var t = src.textContent || '';
+    if (t.indexOf('Privates Brett') !== -1)
+      out.innerHTML = '\uD83D\uDD12 <b>Privates Brett aktiv</b> \u2014 nur wer das Passwort hat, kann mitlesen. Das Relais sieht nur Geheimtext.';
+    else if (t.indexOf('Offenes Brett') !== -1)
+      out.innerHTML = '\uD83D\uDD13 <b>Offenes Brett</b> \u2014 was du hier schreibst, kann jeder mitlesen, der dasselbe Brett liest.';
+  }
+  sync();
+  try { new MutationObserver(sync).observe(src,{childList:true,characterData:true,subtree:true}); } catch(e){}
 })();
 </script>
+
+<!-- ── family-projekt.de · dezenter Fuß-Verweis (netzweit identisch) ──────────
+     Zweck: Wer diese App irgendwo findet (GitHub-Download, Fork, geteilter Link),
+     kommt von hier zurück zum Marktplatz. Bewusst KLEIN und ganz unten — nicht
+     dominant auf der ersten Seite (Klaus 2026-07-28). Farbwelt = family-project
+     (--accent #6ee7d3). Selbst-enthalten, kein CDN, keine Abhängigkeit. -->
+<style>
+  .fp-badge-wrap{max-width:960px;margin:30px auto 18px;padding:0 16px;text-align:center;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}
+  .fp-badge{display:inline-flex;align-items:center;gap:.5em;padding:7px 15px;
+    border-radius:999px;border:1px solid rgba(110,231,211,.38);color:#6ee7d3;
+    background:rgba(110,231,211,.06);font-size:.82rem;text-decoration:none;
+    transition:background .18s ease,border-color .18s ease;}
+  .fp-badge:hover,.fp-badge:focus-visible{background:rgba(110,231,211,.15);
+    border-color:rgba(110,231,211,.72);outline:none;}
+  .fp-badge.fp-strong{background:rgba(110,231,211,.13);
+    border-color:rgba(110,231,211,.55);font-size:.86rem;padding:8px 17px;}
+  .fp-badge .fp-dot{width:7px;height:7px;border-radius:50%;background:#6ee7d3;
+    box-shadow:0 0 7px rgba(110,231,211,.85);flex:none;}
+  .fp-copy{margin-top:9px;font-size:.72rem;line-height:1.5;color:#9aa7b6;opacity:.78;}
+  @media (prefers-color-scheme: light){
+    .fp-badge{color:#0f766e;border-color:rgba(15,118,110,.35);background:rgba(15,118,110,.05);}
+    .fp-badge:hover,.fp-badge:focus-visible{background:rgba(15,118,110,.12);}
+    .fp-badge .fp-dot{background:#0f766e;box-shadow:0 0 7px rgba(15,118,110,.5);}
+    .fp-copy{color:#5b6b7a;}
+  }
+</style>
+<div class="fp-badge-wrap">
+  <a class="fp-badge fp-strong" href="https://family-projekt.de" target="_blank" rel="noopener"
+     title="Zum Marktplatz family-projekt.de — weitere Werkzeuge und Apps">
+    <span class="fp-dot"></span> Mehr Werkzeuge auf family-projekt.de
+  </a>
+  <div class="fp-copy">&copy; 2026 Klaus Nitzsche &middot; kostenlos, ohne Konto, offline nutzbar</div>
+</div>
 </body>
 </html>
