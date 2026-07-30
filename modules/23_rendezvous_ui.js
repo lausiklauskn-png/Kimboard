@@ -33,7 +33,7 @@
  *   init(opts) -> Promise<void>   (self-mount; idempotent)
  *   show() / hide() -> void
  *   isOpen() -> boolean
- *   _meta -> { version, mounted, open, nodeName, hasRendezvous, relatedOnly }
+ *   _meta -> { version, mounted, open, nodeName, hasRendezvous, relatedOnly, identity }
  *
  * Verfassungstreu: alle Aktionen sind nutzer-ausgelöst (Knöpfe). Kein Dauer-
  * Piepser, kein Auto-Connect beim Laden (init mountet nur den Knopf).
@@ -416,6 +416,306 @@
       } catch (_e) { idValEl.textContent = "noch keine (erst verbinden)"; }
     }
   }
+  // ==== Stufe 0b — die Identität REPARIERBAR machen (2026-07-30) ====
+  //
+  // Auslöser (Klaus' Messläufe 2026-07-29/30): eine Kennung kann verschwinden —
+  // auch bei „Speicher dauerhaft: ja". Ehrliche Grenze, die darum auch in der
+  // Oberfläche steht: eine Räumung durch den Browser lässt sich aus dem Browser
+  // heraus NICHT verhindern. Man kann sie nur unwahrscheinlicher machen (App
+  // installieren) und den Verlust REPARIERBAR halten (Sicherung).
+  //
+  // Drei Teile, alle über die öffentlichen Flächen von Modul 02 — die Kern-
+  // Module 01/02/05/23 bleiben unangetastet:
+  //   1. Sicherung anlegen    (exportBackup: PBKDF2-SHA256 600k + AES-GCM-256)
+  //   2. Sicherung einspielen (importBackup — Gegenprobe: ALTE Kennung zurück)
+  //   3. Schluss mit stummer Neu-Anlage: ist die Schublade leer, FRAGT der
+  //      Verbinden-Knopf erst, statt wortlos eine neue Kennung zu erzeugen.
+  // Dazu ein Aufräum-Knopf für die schon entstandenen Mehrfach-Fächer.
+  // Konsequent fail-soft (Fremdnutzer-/Marktplatz-Brille): fehlt Modul 02 oder
+  // eine Fläche daraus, sagt der Knopf das ehrlich — nie ein Crash, nie ein
+  // toter Knopf, die App bleibt voll nutzbar.
+  var idBoxEl = null, idHintEl = null, idFormEl = null;
+
+  function backupStampKey() { return "sbkim_backup_made_" + (cfg.dbSuffix || "default"); }
+  function loadBackupStamp() {
+    try { return global.localStorage ? global.localStorage.getItem(backupStampKey()) : null; } catch (_e) { return null; }
+  }
+  function saveBackupStamp(day) {
+    try { if (global.localStorage) global.localStorage.setItem(backupStampKey(), day); } catch (_e) { /* fail-soft */ }
+  }
+  // Modul 02 nur, wenn die Sicherungs-Fläche wirklich da ist — fail-soft.
+  function backupMod() {
+    var s = global.SbkimSpore;
+    return (s && typeof s.exportBackup === "function" && typeof s.importBackup === "function") ? s : null;
+  }
+  function errText(e) { return (e && e.message) ? e.message : String(e); }
+  function isoDay() {
+    try { return new Date().toISOString().slice(0, 10); } catch (_e) { return "heute"; }
+  }
+  // Liest den Identitäts-Stand, OHNE etwas anzulegen. `known:false` heißt „Modul
+  // 02 fehlt / Lesen ging schief" — dann wird NICHT gefragt und der bisherige
+  // Weg läuft unverändert weiter (keine neue Hürde durch ein Lese-Problem).
+  function readIdentityState() {
+    var s = global.SbkimSpore;
+    if (!s || typeof s.listIdentities !== "function") {
+      return Promise.resolve({ known: false, slots: [], nodeId: null });
+    }
+    return Promise.resolve(s.listIdentities()).then(function (slots) {
+      slots = Array.isArray(slots) ? slots : [];
+      var nidP = (typeof s.getNodeId === "function")
+        ? Promise.resolve(s.getNodeId()).catch(function () { return null; })
+        : Promise.resolve(null);
+      return nidP.then(function (nid) { return { known: true, slots: slots, nodeId: nid || null }; });
+    }).catch(function () { return { known: false, slots: [], nodeId: null }; });
+  }
+
+  function refreshIdentityBox() {
+    if (!idHintEl) return;
+    readIdentityState().then(function (st) {
+      if (!idHintEl) return;
+      var stamp = loadBackupStamp();
+      var lines = [], warn = false;
+      if (st.known && !st.nodeId) {
+        lines.push("Noch keine Kennung in diesem Browser — „🌐 Mit dem Knotennetz verbinden“ fragt dich vorher.");
+        warn = true;
+      } else if (!stamp) {
+        lines.push("⚠ Für diesen Knoten liegt hier noch KEINE Sicherung. Ohne sie ist ein Verlust nicht reparierbar.");
+        warn = true;
+      } else {
+        lines.push("Letzte Sicherung: " + stamp + " (nur hier vermerkt — die Datei selbst musst du aufbewahren).");
+      }
+      if (st.slots.length > 1) {
+        lines.push("🧹 " + st.slots.length + " Fächer belegt (" + st.slots.join(", ") + ") — Aufräumen behält das aktive.");
+        warn = true;
+      }
+      idHintEl.textContent = lines.join("\n");
+      idHintEl.style.color = warn ? "#e6b980" : "#9aa7b6";
+    });
+  }
+
+  function idBtnCss(primary) {
+    return primary
+      ? "padding:6px 11px;border-radius:8px;border:1px solid " + accent() + ";background:rgba(110,231,211,.12);color:#eef2f8;cursor:pointer;font:inherit;font-size:.74rem"
+      : "padding:6px 11px;border-radius:8px;border:1px solid var(--line,#2a3340);background:transparent;color:#eef2f8;cursor:pointer;font:inherit;font-size:.74rem";
+  }
+  function idNote(text, warn) {
+    var n = el("div", "margin-top:6px;font-size:.72rem;line-height:1.45;white-space:pre-wrap;color:" + (warn ? "#e6b980" : "#8fe0b0"));
+    n.textContent = text;
+    return n;
+  }
+  function idField(placeholder, type) {
+    var i = el("input", "flex:1;min-width:130px;padding:6px 9px;border-radius:8px;" +
+      "border:1px solid rgba(154,167,182,.35);background:rgba(10,16,24,.6);color:#e8eef6;font-size:.78rem");
+    i.type = type || "password";
+    if (type !== "file") { i.placeholder = placeholder; i.autocomplete = "new-password"; }
+    return i;
+  }
+  function setIdForm(node) {
+    if (!idFormEl) return;
+    clear(idFormEl);
+    if (node) {
+      idFormEl.appendChild(node);
+      idFormEl.style.display = "block";
+      try { if (idBoxEl && idBoxEl.scrollIntoView) idBoxEl.scrollIntoView({ block: "nearest" }); } catch (_e) { /* fail-soft */ }
+    } else {
+      idFormEl.style.display = "none";
+    }
+  }
+  function idCancelBtn() {
+    var b = el("button", idBtnCss(false), "Abbrechen");
+    b.type = "button";
+    b.addEventListener("click", function () { setIdForm(null); });
+    return b;
+  }
+
+  // Die Sicherungs-Datei ohne Umweg über eine Konsole herunterladen (Klaus'
+  // Regel: Knöpfe statt Konsole). Blob-URL wenn möglich, sonst data:-URI.
+  function downloadJson(obj, filename) {
+    var d = doc();
+    if (!d || !d.body) return false;
+    var text;
+    try { text = JSON.stringify(obj, null, 2); } catch (_e) { return false; }
+    var url = null;
+    try {
+      var B = global.Blob, U = global.URL || global.webkitURL;
+      if (B && U && typeof U.createObjectURL === "function") {
+        url = U.createObjectURL(new B([text], { type: "application/json" }));
+      }
+    } catch (_e) { url = null; }
+    if (!url) url = "data:application/json;charset=utf-8," + encodeURIComponent(text);
+    var a = d.createElement("a");
+    a.href = url; a.download = filename; a.style.display = "none";
+    d.body.appendChild(a);
+    a.click();
+    global.setTimeout(function () {
+      try { d.body.removeChild(a); } catch (_e) { /* fail-soft */ }
+      try { if (url.indexOf("blob:") === 0 && global.URL) global.URL.revokeObjectURL(url); } catch (_e) { /* fail-soft */ }
+    }, 0);
+    return true;
+  }
+
+  // ---- Teil 1: Sicherung anlegen ----
+  function openBackupForm() {
+    var s = backupMod();
+    if (!s) { setIdForm(idNote("Modul 02 (Sicherung) ist in dieser App nicht geladen — Sicherung nicht möglich.", true)); return; }
+    var box = el("div", "");
+    box.appendChild(el("div", "font-size:.72rem;color:#9aa7b6;line-height:1.45",
+      "Passwort für die Sicherungs-Datei (mindestens 8 Zeichen). Ohne dieses Passwort ist die Datei wertlos — es wird nirgends gespeichert, auch nicht hier."));
+    var row = el("div", "display:flex;gap:6px;flex-wrap:wrap;margin-top:6px");
+    var p1 = idField("Passwort"), p2 = idField("Passwort wiederholen");
+    row.appendChild(p1); row.appendChild(p2);
+    box.appendChild(row);
+    var row2 = el("div", "display:flex;gap:6px;flex-wrap:wrap;margin-top:6px");
+    var go = el("button", idBtnCss(true), "💾 Datei erzeugen"); go.type = "button";
+    row2.appendChild(go); row2.appendChild(idCancelBtn());
+    box.appendChild(row2);
+    go.addEventListener("click", function () {
+      var pw = String(p1.value || "");
+      if (pw.length < 8) { box.appendChild(idNote("Passwort zu kurz — mindestens 8 Zeichen.", true)); return; }
+      if (pw !== String(p2.value || "")) { box.appendChild(idNote("Die beiden Passwörter sind nicht gleich.", true)); return; }
+      go.disabled = true;
+      box.appendChild(idNote("→ Verschlüssele die Sicherung … (das dauert bewusst einen Moment)", false));
+      Promise.resolve(s.exportBackup(pw)).then(function (blob) {
+        var name = "sbkim-sicherung-" + (cfg.dbSuffix || "knoten") + "-" + isoDay() + ".json";
+        var ok = downloadJson(blob, name);
+        saveBackupStamp(isoDay());
+        refreshIdentityBox();
+        setIdForm(idNote(ok
+          ? "✓ Sicherung erzeugt: " + name + "\nBewahre die Datei getrennt vom Gerät auf. Mit ihr und dem Passwort ist eine verlorene Kennung wiederherstellbar."
+          : "✓ Sicherung erzeugt, aber der Download ging in diesem Browser nicht. Bitte nochmal versuchen.", !ok));
+      }).catch(function (e) {
+        go.disabled = false;
+        box.appendChild(idNote("✗ Sicherung fehlgeschlagen: " + errText(e), true));
+      });
+    });
+    setIdForm(box);
+  }
+
+  // ---- Teil 2: Sicherung einspielen ----
+  function runImport(blob, pw, force) {
+    var s = backupMod();
+    if (!s) { setIdForm(idNote("Modul 02 (Sicherung) ist in dieser App nicht geladen.", true)); return; }
+    setIdForm(idNote("→ Spiele die Sicherung ein …", false));
+    Promise.resolve(s.importBackup(blob, pw, force ? { force: true } : undefined)).then(function () {
+      refreshStatus();
+      refreshIdentityBox();
+      setIdForm(idNote("✓ Sicherung eingespielt — die Kennung aus der Datei ist wieder aktiv.\nOben unter „Meine Kennung“ steht sie jetzt. Danach einmal „🌐 Mit dem Knotennetz verbinden“, damit die Visitenkarte wieder im Raum hängt.", false));
+    }).catch(function (e) {
+      if (e && e.name === "BackupOverwriteError") {
+        // Der Normalfall nach einem Verlust: es liegt bereits eine (neue)
+        // Kennung im Fach. Ersetzen ist gewollt — aber nur ausdrücklich.
+        var box = el("div", "");
+        box.appendChild(idNote("In diesem Browser liegt schon eine Kennung. Einspielen ERSETZT sie durch die aus der Datei.\nDie jetzige Kennung ist danach weg — andere Knoten kennen wieder die alte.", true));
+        var row = el("div", "display:flex;gap:6px;flex-wrap:wrap;margin-top:6px");
+        var yes = el("button", idBtnCss(true), "📥 Ja, ersetzen"); yes.type = "button";
+        yes.addEventListener("click", function () { runImport(blob, pw, true); });
+        row.appendChild(yes); row.appendChild(idCancelBtn());
+        box.appendChild(row);
+        setIdForm(box);
+        return;
+      }
+      setIdForm(idNote("✗ Einspielen fehlgeschlagen: " + errText(e) +
+        "\n(Häufigster Grund: falsches Passwort oder eine Datei, die keine SBKIM-Sicherung ist.)", true));
+    });
+  }
+  function openImportForm() {
+    if (!backupMod()) { setIdForm(idNote("Modul 02 (Sicherung) ist in dieser App nicht geladen — Einspielen nicht möglich.", true)); return; }
+    var box = el("div", "");
+    box.appendChild(el("div", "font-size:.72rem;color:#9aa7b6;line-height:1.45",
+      "Sicherungs-Datei wählen und ihr Passwort eingeben. Danach ist die Kennung aus der Datei wieder die deine."));
+    var fileIn = idField("", "file");
+    fileIn.accept = ".json,application/json";
+    fileIn.style.cssText += ";padding:4px";
+    var frow = el("div", "display:flex;gap:6px;flex-wrap:wrap;margin-top:6px");
+    frow.appendChild(fileIn);
+    box.appendChild(frow);
+    var prow = el("div", "display:flex;gap:6px;flex-wrap:wrap;margin-top:6px");
+    var pw = idField("Passwort der Datei");
+    prow.appendChild(pw);
+    box.appendChild(prow);
+    var row2 = el("div", "display:flex;gap:6px;flex-wrap:wrap;margin-top:6px");
+    var go = el("button", idBtnCss(true), "📥 Einspielen"); go.type = "button";
+    row2.appendChild(go); row2.appendChild(idCancelBtn());
+    box.appendChild(row2);
+    go.addEventListener("click", function () {
+      var f = (fileIn.files && fileIn.files[0]) ? fileIn.files[0] : null;
+      if (!f) { box.appendChild(idNote("Erst eine Datei wählen.", true)); return; }
+      if (String(pw.value || "").length < 8) { box.appendChild(idNote("Passwort fehlt (mindestens 8 Zeichen).", true)); return; }
+      var FR = global.FileReader;
+      if (!FR) { box.appendChild(idNote("Dieser Browser kann keine Datei lesen (FileReader fehlt).", true)); return; }
+      var r = new FR();
+      r.onerror = function () { box.appendChild(idNote("Datei konnte nicht gelesen werden.", true)); };
+      r.onload = function () {
+        var blob;
+        try { blob = JSON.parse(String(r.result || "")); }
+        catch (_e) { box.appendChild(idNote("Das ist keine lesbare JSON-Sicherung.", true)); return; }
+        runImport(blob, String(pw.value || ""), false);
+      };
+      try { r.readAsText(f); } catch (_e) { box.appendChild(idNote("Datei konnte nicht gelesen werden.", true)); }
+    });
+    setIdForm(box);
+  }
+
+  // ---- Aufräumen: Mehrfach-Fächer entfernen, aktives behalten ----
+  function openCleanupForm() {
+    var s = global.SbkimSpore;
+    if (!s || typeof s.listIdentities !== "function" || typeof s.removeIdentity !== "function" ||
+        typeof s.getActiveIdentityKey !== "function") {
+      setIdForm(idNote("Modul 02 (Identitäts-Fächer) ist in dieser App nicht geladen.", true));
+      return;
+    }
+    setIdForm(idNote("→ Lese die Fächer …", false));
+    Promise.resolve(s.listIdentities()).then(function (slots) {
+      slots = Array.isArray(slots) ? slots : [];
+      if (slots.length < 2) { setIdForm(idNote("Nichts aufzuräumen — es gibt nur ein Fach.", false)); return null; }
+      return Promise.resolve(s.getActiveIdentityKey()).then(function (active) {
+        var others = slots.filter(function (k) { return k !== active; });
+        if (others.length === 0) { setIdForm(idNote("Nichts aufzuräumen — nur das aktive Fach ist belegt.", false)); return; }
+        var box = el("div", "");
+        box.appendChild(idNote("Aktives Fach BLEIBT: " + active +
+          "\nEntfernt werden: " + others.join(", ") +
+          "\nDas ist nicht umkehrbar. Wenn du unsicher bist: erst „💾 Sicherung anlegen“.", true));
+        var row = el("div", "display:flex;gap:6px;flex-wrap:wrap;margin-top:6px");
+        var yes = el("button", idBtnCss(true), "🧹 Ja, alte Fächer entfernen"); yes.type = "button";
+        yes.addEventListener("click", function () {
+          setIdForm(idNote("→ Entferne " + others.length + " Fach/Fächer …", false));
+          var chain = Promise.resolve(), removed = 0, failed = [];
+          others.forEach(function (k) {
+            chain = chain.then(function () {
+              return Promise.resolve(s.removeIdentity(k)).then(function () { removed++; },
+                function (e) { failed.push(k + " (" + errText(e) + ")"); });
+            });
+          });
+          chain.then(function () {
+            refreshStatus();
+            refreshIdentityBox();
+            setIdForm(idNote("✓ " + removed + " Fach/Fächer entfernt. Aktive Kennung unverändert: " + active +
+              (failed.length ? "\n⚠ Nicht entfernt: " + failed.join(", ") : ""), failed.length > 0));
+          });
+        });
+        row.appendChild(yes); row.appendChild(idCancelBtn());
+        box.appendChild(row);
+        setIdForm(box);
+      });
+    }).catch(function (e) { setIdForm(idNote("✗ Fächer lesen fehlgeschlagen: " + errText(e), true)); });
+  }
+
+  // ---- Teil 3: keine stumme Neu-Anlage — erst fragen ----
+  function askBeforeCreate() {
+    var box = el("div", "");
+    box.appendChild(idNote("In diesem Browser ist für diese App noch KEINE Kennung hinterlegt.\n" +
+      "Eine neue Kennung ist NICHT dieselbe wie eine frühere — andere Knoten sehen dich danach als neuen Knoten.\n" +
+      "Hast du eine Sicherung, spiel sie lieber ein.", true));
+    var row = el("div", "display:flex;gap:6px;flex-wrap:wrap;margin-top:6px");
+    var neu = el("button", idBtnCss(true), "🆕 Neue Kennung anlegen"); neu.type = "button";
+    neu.addEventListener("click", function () { setIdForm(null); onConnect({ skipIdentityGate: true }); });
+    var imp = el("button", idBtnCss(false), "📥 Sicherung einspielen"); imp.type = "button";
+    imp.addEventListener("click", function () { openImportForm(); });
+    row.appendChild(neu); row.appendChild(imp); row.appendChild(idCancelBtn());
+    box.appendChild(row);
+    setIdForm(box);
+  }
+
   // Anbieter-Liste aus Modul 04 (id/label/region), EU-gefiltert bei cfg.euOnly.
   function kiProviders() {
     var m = matchMod();
@@ -713,6 +1013,38 @@
     panelEl.appendChild(statusBox);
     refreshStatus();
 
+    // Stufe 0b — „🪪 Kennung sichern". Drei Knöpfe (Sicherung anlegen /
+    // einspielen / Fächer aufräumen), ein ehrlicher Hinweis darüber und die
+    // ehrliche Grenze darunter. Alles nutzer-ausgelöst; nichts läuft von selbst.
+    idBoxEl = el("div", "margin:0 0 10px;padding:8px 10px;border-radius:8px;" +
+      "border:1px solid rgba(154,167,182,.22);background:rgba(10,16,24,.35);font-size:.74rem;line-height:1.5");
+    idBoxEl.id = "sbkim-rdv-idbox";
+    idBoxEl.appendChild(el("div", "color:#c7d2de;margin-bottom:4px", "🪪 Kennung sichern"));
+    idHintEl = el("div", "color:#9aa7b6;font-size:.72rem;line-height:1.45;white-space:pre-wrap", "…");
+    idHintEl.id = "sbkim-rdv-idhint";
+    idBoxEl.appendChild(idHintEl);
+    var idRow2 = el("div", "display:flex;gap:6px;flex-wrap:wrap;margin-top:6px");
+    var backupBtn = el("button", idBtnCss(false), "💾 Sicherung anlegen"); backupBtn.type = "button";
+    backupBtn.title = "Kennung in eine verschlüsselte Datei sichern";
+    var restoreBtn = el("button", idBtnCss(false), "📥 Sicherung einspielen"); restoreBtn.type = "button";
+    restoreBtn.title = "Kennung aus einer Sicherungs-Datei zurückholen";
+    var slotsBtn = el("button", idBtnCss(false), "🧹 Fächer aufräumen"); slotsBtn.type = "button";
+    slotsBtn.title = "Alte Identitäts-Fächer entfernen, aktives behalten";
+    backupBtn.addEventListener("click", function () { openBackupForm(); });
+    restoreBtn.addEventListener("click", function () { openImportForm(); });
+    slotsBtn.addEventListener("click", function () { openCleanupForm(); });
+    idRow2.appendChild(backupBtn); idRow2.appendChild(restoreBtn); idRow2.appendChild(slotsBtn);
+    idBoxEl.appendChild(idRow2);
+    idFormEl = el("div", "display:none;margin-top:8px;padding-top:8px;border-top:1px solid rgba(154,167,182,.18)");
+    idFormEl.id = "sbkim-rdv-idform";
+    idBoxEl.appendChild(idFormEl);
+    // Die ehrliche Grenze — sie gehört sichtbar in die Oberfläche, nicht nur
+    // in die Doku: verhindern kann man eine Räumung nicht.
+    idBoxEl.appendChild(el("div", "margin-top:6px;color:#7e8b9a;font-size:.7rem;line-height:1.45",
+      "Eine Räumung durch den Browser lässt sich nicht verhindern — nur unwahrscheinlicher machen (App auf den Startbildschirm legen) und der Verlust reparierbar halten (Sicherung)."));
+    panelEl.appendChild(idBoxEl);
+    refreshIdentityBox();
+
     // A15 — Zwei-Stufen-Hinweis (ehrliche Kosten-Benennung, reine Anzeige):
     // „nur stöbern" ist anonym (kein Modell/keine Identität, man wird nicht
     // gefunden); „voll mitmachen" legt einmal eine lokale Identität an und macht
@@ -932,6 +1264,7 @@
     r.repairAndReconnect().then(function (res) {
       stopModelProgress(); if (outEl) outEl.textContent = "🧹 Aufgeräumt & neu angemeldet:\n";
       refreshStatus();   // Stufe 0a: Identität kann sich geändert haben
+      refreshIdentityBox();   // Stufe 0b: Fächer/Sicherungs-Hinweis frisch
       var c = res && res.cleaned;
       if (c) {
         appendOut("• Alt-Topf „sbkim“ gelöscht: " + (c.dbDeleted ? "ja" : "nein") + "\n");
@@ -949,14 +1282,31 @@
     }).catch(function (e) { stopModelProgress(); setOut("✗ Aufräumen fehlgeschlagen: " + (e && e.message ? e.message : e)); });
   }
 
-  function onConnect() {
+  function onConnect(opts) {
     var r = ensureRdv();
     if (!r) return;
+    // Stufe 0b Teil 3 — Schluss mit stummer Neu-Anlage. Ist die Schublade leer,
+    // wird EINMAL gefragt (neu anlegen ODER Sicherung einspielen), statt wortlos
+    // eine neue Kennung zu erzeugen. Ist eine Kennung da, ändert sich nichts —
+    // kein zusätzlicher Klick. Lässt sich der Stand nicht lesen, läuft der alte
+    // Weg unverändert weiter (ein Lese-Problem darf keine neue Hürde bauen).
+    if (!(opts && opts.skipIdentityGate)) {
+      readIdentityState().then(function (st) {
+        if (st.known && !st.nodeId) {
+          setOut("🪪 Bitte einmal entscheiden — siehe „Kennung sichern“ oben.");
+          askBeforeCreate();
+          return;
+        }
+        onConnect({ skipIdentityGate: true });
+      });
+      return;
+    }
     setOut("→ Verbinde mit dem Netz …\n");
     startModelProgress("→ Verbinde mit dem Netz …");
     r.connectAndAnnounce({ createIdentity: cfg.createIdentity || undefined }).then(function (res) {
       stopModelProgress(); if (outEl) outEl.textContent = "";
       refreshStatus();   // Stufe 0a: Kennung kann gerade erst entstanden sein
+      refreshIdentityBox();   // Stufe 0b
       if (res.ok) {
         if (res.created) appendOut("✓ Identität erzeugt: " + res.nodeId + "\n");
         else appendOut("Identität vorhanden: " + res.nodeId + "\n");
@@ -977,6 +1327,7 @@
     r.announce().then(function (res) {
       stopModelProgress(); if (outEl) outEl.textContent = "";
       refreshStatus();   // Stufe 0a
+      refreshIdentityBox();   // Stufe 0b
       if (res.ok) appendOut("✓ Du bist im Raum (nodeId " + res.nodeId + "). Fenster darf zu — nur die App-Seite offen lassen.");
       else appendOut("✗ " + (res.reason || "Anmelden fehlgeschlagen."));
     }).catch(function (e) { stopModelProgress(); setOut("✗ Anmelden fehlgeschlagen: " + (e && e.message ? e.message : e)); });
@@ -1454,6 +1805,7 @@
     if (panelEl) { panelEl.style.display = "block"; var p = loadPos(); if (p) applyPos(panelEl, p); }
     if (btnEl) btnEl.style.display = "none";      // Panel offen → Blase weg (Flying-Widget)
     refreshStatus();                              // Stufe 0a: Kennung + Speicher-Status frisch
+    refreshIdentityBox();                         // Stufe 0b: Sicherungs-/Fächer-Hinweis frisch
     // A12: beim Öffnen automatisch nachlesen; sind neue Antworten da, zeigen.
     recheckMail({ surfaceIfNews: true });
   }
@@ -1508,6 +1860,10 @@
         version: VERSION, mounted: mounted, open: isOpen(), nodeName: cfg.nodeName,
         hasRendezvous: rdv() !== null, relatedOnly: relatedOnly, euOnly: cfg.euOnly,
         kiRichter: { on: kiOn, provider: kiProvider, hasKey: !!(kiKey && kiKey.length) },
+        // Stufe 0b — Sicherungs-/Fächer-Fläche vorhanden + ob in DIESEM Browser
+        // schon einmal eine Sicherung angelegt wurde (nur ein Vermerk, kein Beweis,
+        // dass die Datei noch existiert — darum steht das auch so in der Oberfläche).
+        identity: { box: idBoxEl !== null, canBackup: backupMod() !== null, backupStamp: loadBackupStamp() },
       };
     },
     // Test-Brücke (headless): KI-Richter-Zustand setzen + eine Antwort rendern.
@@ -1527,6 +1883,35 @@
       saveToVault: function () { return onKiSaveToVault(); },
       unlockFromVault: function () { return onKiUnlockVault(); },
       vaultBtns: function () { return { save: !!(kiSaveBtnEl && kiSaveBtnEl.style.display !== "none"), unlock: !!(kiUnlockBtnEl && kiUnlockBtnEl.style.display !== "none") }; },
+      // Stufe 0b — Sicherung/Wiederherstellen/Aufräumen headless prüfbar machen.
+      identityState: function () { return readIdentityState(); },
+      idHint: function () { return idHintEl ? idHintEl.textContent : null; },
+      idFormText: function () { return (idFormEl && idFormEl.style.display !== "none") ? idFormEl.textContent : null; },
+      idFormButtons: function () {
+        if (!idFormEl || idFormEl.style.display === "none") return [];
+        var out = [], list = idFormEl.getElementsByTagName("button");
+        for (var i = 0; i < list.length; i++) out.push(list[i].textContent);
+        return out;
+      },
+      clickIdFormButton: function (label) {
+        if (!idFormEl) return false;
+        var list = idFormEl.getElementsByTagName("button");
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].textContent.indexOf(label) !== -1) { list[i].click(); return true; }
+        }
+        return false;
+      },
+      idFormInputs: function () {
+        if (!idFormEl) return [];
+        var out = [], list = idFormEl.getElementsByTagName("input");
+        for (var i = 0; i < list.length; i++) out.push(list[i]);
+        return out;
+      },
+      openBackupForm: function () { openBackupForm(); },
+      openImportForm: function () { openImportForm(); },
+      openCleanupForm: function () { openCleanupForm(); },
+      refreshIdentityBox: function () { refreshIdentityBox(); },
+      connect: function (o) { onConnect(o); },
     },
   };
 
