@@ -452,7 +452,7 @@
   // Konsequent fail-soft (Fremdnutzer-/Marktplatz-Brille): fehlt Modul 02 oder
   // eine Fläche daraus, sagt der Knopf das ehrlich — nie ein Crash, nie ein
   // toter Knopf, die App bleibt voll nutzbar.
-  var idBoxEl = null, idHintEl = null, idFormEl = null;
+  var idBoxEl = null, idHintEl = null, idFormEl = null, werkstattRowEl = null;
 
   function backupStampKey() { return "sbkim_backup_made_" + (cfg.dbSuffix || "default"); }
   function loadBackupStamp() {
@@ -509,6 +509,9 @@
       idHintEl.textContent = lines.join("\n");
       idHintEl.style.color = warn ? "#e6b980" : "#9aa7b6";
     });
+    // Das Siegel mountet sein Abzeichen ggf. später als dieses Panel — darum
+    // bei jedem Auffrischen erneut nachsehen, ob die Werkstatt erreichbar ist.
+    renderWerkstattRow(werkstattRowEl);
   }
 
   function idBtnCss(primary) {
@@ -716,6 +719,37 @@
         setIdForm(box);
       });
     }).catch(function (e) { setIdForm(idNote("✗ Fächer lesen fehlgeschlagen: " + errText(e), true)); });
+  }
+
+  // ---- Werkstatt-Verweis (Klaus' Arbeitsteilung 2026-07-30) ----
+  // „Das Netz-Panel ist die Alltagsansicht — was gerade los ist, wer da ist.
+  //  Sehe ich, dass etwas fehlt, gehe ich ins Siegel: dort liegt das ganze
+  //  Werkzeug (erzeugen · Spore signieren · wechseln · sichern · zurückholen)."
+  // Darum steht hier nur das Nötigste für den Alltag plus ein Weg dorthin.
+  // Fail-soft: ohne Siegel (Forker, fremde App) fehlt der Knopf, der Hinweis
+  // bleibt weg — nie ein toter Knopf.
+  function siegelBadge() {
+    var d = doc();
+    if (!d || typeof d.getElementById !== "function") return null;
+    try { return d.getElementById("sbkim-siegel-badge"); } catch (_e) { return null; }
+  }
+  function renderWerkstattRow(row) {
+    if (!row) return;
+    clear(row);
+    var badge = siegelBadge();
+    if (!badge) { row.style.display = "none"; return; }
+    row.style.display = "block";
+    row.appendChild(el("div", "color:#7e8b9a;font-size:.7rem;line-height:1.45",
+      "Hier steht nur das Nötigste für den Alltag. Das ganze Werkzeug — Identität erzeugen, wechseln, sichern, zurückholen — liegt im Siegel."));
+    var b = el("button", idBtnCss(false) + ";margin-top:5px", "🏅 Werkstatt im Siegel öffnen");
+    b.type = "button";
+    b.title = "Siegel öffnen";
+    b.addEventListener("click", function () {
+      var t = siegelBadge();
+      if (!t) { setIdForm(idNote("Das Siegel ist in dieser App nicht geladen.", true)); return; }
+      try { t.click(); } catch (_e) { setIdForm(idNote("Das Siegel ließ sich nicht öffnen — bitte das Siegel-Abzeichen direkt anklicken.", true)); }
+    });
+    row.appendChild(b);
   }
 
   // ---- Teil 3: keine stumme Neu-Anlage — erst fragen ----
@@ -1060,6 +1094,10 @@
     // in die Doku: verhindern kann man eine Räumung nicht.
     idBoxEl.appendChild(el("div", "margin-top:6px;color:#7e8b9a;font-size:.7rem;line-height:1.45",
       "Eine Räumung durch den Browser lässt sich nicht verhindern — nur unwahrscheinlicher machen (App auf den Startbildschirm legen) und der Verlust reparierbar halten (Sicherung)."));
+    werkstattRowEl = el("div", "display:none;margin-top:7px;padding-top:7px;border-top:1px solid rgba(154,167,182,.14)");
+    werkstattRowEl.id = "sbkim-rdv-werkstatt";
+    idBoxEl.appendChild(werkstattRowEl);
+    renderWerkstattRow(werkstattRowEl);
     panelEl.appendChild(idBoxEl);
     refreshIdentityBox();
     startIdentityWatch();   // Kennung anderswo entstanden (Siegel) → Anzeige zieht nach
@@ -1931,6 +1969,15 @@
       openCleanupForm: function () { openCleanupForm(); },
       refreshIdentityBox: function () { refreshIdentityBox(); },
       hasIdentityWatch: function () { return _aliveHandler !== null; },
+      werkstattVisible: function () { return !!(werkstattRowEl && werkstattRowEl.style.display !== "none"); },
+      werkstattText: function () { return werkstattRowEl ? werkstattRowEl.textContent : null; },
+      clickWerkstatt: function () {
+        if (!werkstattRowEl) return false;
+        var list = werkstattRowEl.getElementsByTagName("button");
+        if (!list.length) return false;
+        list[0].click();
+        return true;
+      },
       connect: function (o) { onConnect(o); },
     },
   };
