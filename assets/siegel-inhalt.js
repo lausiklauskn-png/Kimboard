@@ -8,8 +8,9 @@
  *
  * Muster 1:1 aus Kim-Bell/assets/siegel-inhalt.js (Ursprung: Sage index.html).
  * Drei Blöcke ins Modal:
- *   (1) 🔑 Eigene Identität & Spore erzeugen/verwalten — Wizard (4 Schritte:
- *       Identität · Spore signieren+Download · verschl. Backup · Wiederherstellen).
+ *   (1) 🔑 Eigene Identität & Spore erzeugen/verwalten — Wizard (5 Schritte:
+ *       Identität · Spore signieren+Download · verschl. Backup · Wiederherstellen ·
+ *       IDENTITÄTS-WECHSLER (Baustein 5, aktive Identität wählen)).
  *   (2) ✍ Semantische Beschreibung → Vektor & Spore neu signieren (gleiche nodeId).
  *   (3) 🛡 Schutz-Block + „Ausführlich erklärt →" (sicherheit.html als In-Page-Overlay).
  *
@@ -258,6 +259,9 @@
           '<input type="file" id="kbdwiz-s4-file" accept=".json,application/json" hidden />' +
           '<button type="button" id="kbdwiz-s4" style="margin:.4em 0;cursor:pointer;border-radius:8px;border:1px solid #C9A961;background:rgba(201,169,97,0.12);color:#F5E6B8;padding:.3em .7em;font:inherit">Backup-Datei wählen + wiederherstellen</button>' +
           '<div id="kbdwiz-o4" style="font-family:monospace;font-size:.8rem;color:#6ee7d3;word-break:break-all"></div></li>' +
+        '<li style="margin-top:.6em"><b>Identitäts-Wechsler</b> — welche Identität ist aktiv? Bei mehreren (z. B. aus altem Browser-Zustand) die kanonische wählen. Es wird nichts gelöscht.<br>' +
+          '<select id="kbdwiz-idsel" style="margin:.4em 0;max-width:100%;border-radius:8px;border:1px solid #C9A961;background:rgba(0,0,0,0.35);color:#F5E6B8;padding:.35em .5em;font:inherit"><option value="">— wird geladen … —</option></select>' +
+          '<div id="kbdwiz-o5" style="font-family:monospace;font-size:.8rem;color:#6ee7d3;word-break:break-all"></div></li>' +
       '</ol>' +
       '<p style="color:#9aa7b6;font-size:.78rem;margin:.7em 0 0">Die heruntergeladene <code>spore.json</code> nach <code>sbkim/spore.json</code> ins Repo legen. Backup-Datei + Passwort sicher aufbewahren — ohne beides keine Wiederherstellung.</p>' +
       '<button type="button" id="kbdwiz-close" style="margin-top:1em;cursor:pointer;border-radius:8px;border:1px solid rgba(154,167,182,.4);background:transparent;color:#eef2f8;padding:.4em .9em;font:inherit">Schließen</button>';
@@ -356,6 +360,8 @@
         dlg.querySelector("#kbdwiz-s2").disabled = false; dlg.querySelector("#kbdwiz-s3").disabled = false;
       } else { out("#kbdwiz-o4", "Nichts wiederhergestellt" + (res && res.reason ? " — " + res.reason : "") + ".", true); }
     }
+    // Baustein 5 — Identitäts-Wechsler (aktive Identität wählen; löscht nichts).
+    dlg.querySelector("#kbdwiz-idsel").addEventListener("change", function () { switchWizardIdentity(this.value); });
     dlg.querySelector("#kbdwiz-close").addEventListener("click", function () { closeWiz(dlg); });
     dlg.addEventListener("click", function (e) { if (e.target === dlg) closeWiz(dlg); });
     // Wizard-Init-Heilung (Klaus-Befund 2026-07-19: „Backup-Knopf loest nichts aus"):
@@ -372,7 +378,77 @@
       }).catch(function () {});
     }
   }
-  function openWizard() { var d = document.getElementById("kbd-ident-wizard"); if (d && d.showModal) d.showModal(); else if (d) d.setAttribute("open", ""); }
+  // ---- Baustein 5: Identitäts-Wechsler (Arbeitsteilung Klaus 2026-07-30) ----
+  // Das Siegel ist die WERKSTATT: erzeugen · Spore signieren · sichern ·
+  // zurückholen · wechseln. Das Netz-Panel bleibt die Alltagsansicht. Damit die
+  // Werkstatt in JEDER App gleich vollständig ist, bekommt Kimboard hier den
+  // Wechsler, den die Tresore + family-project längst haben (1:1 übernommen).
+  // Wählt nur die AKTIVE Identität — löscht nichts, erzeugt nichts.
+  function shortNode(id) {
+    if (!id) return "";
+    return id.length > 20 ? id.slice(0, 16) + "…" : id;
+  }
+  function refreshWizardIdentities() {
+    var sel = document.getElementById("kbdwiz-idsel");
+    var o = document.getElementById("kbdwiz-o5");
+    if (!sel) return;
+    if (!window.SbkimSpore || typeof window.SbkimSpore.listIdentities !== "function") {
+      if (o) { o.textContent = "Identitäts-Liste nicht verfügbar (Modul 02 zu alt)."; }
+      return;
+    }
+    window.SbkimSpore.listIdentities().then(function (ids) {
+      var activeP = (typeof window.SbkimSpore.getActiveIdentityKey === "function")
+        ? window.SbkimSpore.getActiveIdentityKey().catch(function () { return null; })
+        : Promise.resolve(null);
+      return activeP.then(function (active) {
+        sel.innerHTML = "";
+        if (!ids || !ids.length) {
+          var opt0 = document.createElement("option");
+          opt0.value = ""; opt0.textContent = "— keine geladen —";
+          sel.appendChild(opt0);
+          if (o) o.textContent = "Noch keine Identität — oben zuerst eine anlegen.";
+          return;
+        }
+        // Pro Fach die nodeId auflösen: getOrCreateIdentity(slot) gibt bei
+        // EXISTIERENDEM Fach nur zurück (erzeugt/ändert NICHTS) — alle Fächer
+        // hier stammen aus listIdentities. Fail-soft je Fach.
+        var canResolve = typeof window.SbkimSpore.getOrCreateIdentity === "function";
+        return Promise.all(ids.map(function (k) {
+          if (!canResolve) return Promise.resolve({ key: k, nodeId: null });
+          return window.SbkimSpore.getOrCreateIdentity(k)
+            .then(function (id) { return { key: k, nodeId: (id && id.nodeId) || null }; })
+            .catch(function () { return { key: k, nodeId: null }; });
+        })).then(function (rows) {
+          var activeNode = null;
+          rows.forEach(function (row) {
+            var opt = document.createElement("option");
+            opt.value = row.key;
+            var label = row.key + (row.nodeId ? " · " + shortNode(row.nodeId) : "");
+            if (row.key === active) { label += "  (aktiv)"; opt.selected = true; activeNode = row.nodeId; }
+            opt.textContent = label;
+            if (row.nodeId) opt.title = row.nodeId;
+            sel.appendChild(opt);
+          });
+          var tail = ids.length === 1 ? "Genau eine Identität — sauber." : (ids.length + " Identitäten — wähle die kanonische (aktiv markiert).");
+          if (o) o.textContent = activeNode ? (tail + " · aktive nodeId: " + activeNode) : tail;
+        });
+      });
+    }).catch(function (e) { if (o) o.textContent = "Fehler beim Lesen der Identitäten: " + (e && e.message || e); });
+  }
+  function switchWizardIdentity(key) {
+    var o = document.getElementById("kbdwiz-o5");
+    if (!key || !window.SbkimSpore || typeof window.SbkimSpore.setActiveIdentity !== "function") return;
+    window.SbkimSpore.setActiveIdentity(key).then(function () {
+      if (o) o.textContent = "✔ Aktive Identität gewechselt zu " + key + ". Die nächste Spore-Signatur nutzt diese nodeId.";
+      refreshWizardIdentities();
+    }).catch(function (err) { if (o) o.textContent = "Wechsel fehlgeschlagen: " + (err && err.message || err); });
+  }
+
+  function openWizard() {
+    var d = document.getElementById("kbd-ident-wizard");
+    if (d && d.showModal) d.showModal(); else if (d) d.setAttribute("open", "");
+    refreshWizardIdentities();
+  }
   function closeWiz(d) { if (d.close) d.close(); else d.removeAttribute("open"); }
 
   // ---- Modal beobachten (Modul 16 mountet es bei init; erscheint per Klick) --
