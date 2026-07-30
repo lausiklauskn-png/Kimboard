@@ -87,6 +87,24 @@
     try { global.addEventListener("sbkim:handshake", _hsHandler); } catch (_e) {}
   }
 
+  // Stufe 0b Nachtrag (Klaus' Frage 2026-07-30: „übernimmt das Netz-Panel die im
+  // Siegel erzeugte Kennung automatisch?"). Antwort: ja — beide greifen in
+  // DIESELBE Schublade, es gibt pro App nur EINE Identität, nichts wird kopiert.
+  // Was fehlte, war die ANZEIGE: entstand die Kennung woanders (Siegel-Wizard,
+  // Andock-Werkzeug) während das Panel offen stand, blieb hier der alte Stand
+  // stehen. Modul 02 feuert beim ersten getOrCreateIdentity `sbkim:alive` —
+  // darauf hören wir und frischen die zwei Statuszeilen + den Sicherungs-Hinweis
+  // auf. REINE Anzeige, fail-soft, kein Netz-Verkehr, keine eigene Anlage.
+  var _aliveHandler = null;
+  function startIdentityWatch() {
+    if (_aliveHandler) return;
+    _aliveHandler = function () {
+      try { refreshStatus(); } catch (_e) { /* fail-soft */ }
+      try { refreshIdentityBox(); } catch (_e) { /* fail-soft */ }
+    };
+    try { global.addEventListener("sbkim:alive", _aliveHandler); } catch (_e) {}
+  }
+
   // ── A12 Phase 2: Briefkasten-UI (offene Fragen + Antworten nachlesen) ──
   // LEHRE aus dem git-Briefkasten (Klaus 2026-07-11): ein Briefkasten scheitert
   // am LESEN, nicht am Schreiben — weil das Lesen freiwillig/unsichtbar ist.
@@ -1044,6 +1062,7 @@
       "Eine Räumung durch den Browser lässt sich nicht verhindern — nur unwahrscheinlicher machen (App auf den Startbildschirm legen) und der Verlust reparierbar halten (Sicherung)."));
     panelEl.appendChild(idBoxEl);
     refreshIdentityBox();
+    startIdentityWatch();   // Kennung anderswo entstanden (Siegel) → Anzeige zieht nach
 
     // A15 — Zwei-Stufen-Hinweis (ehrliche Kosten-Benennung, reine Anzeige):
     // „nur stöbern" ist anonym (kein Modell/keine Identität, man wird nicht
@@ -1911,6 +1930,7 @@
       openImportForm: function () { openImportForm(); },
       openCleanupForm: function () { openCleanupForm(); },
       refreshIdentityBox: function () { refreshIdentityBox(); },
+      hasIdentityWatch: function () { return _aliveHandler !== null; },
       connect: function (o) { onConnect(o); },
     },
   };
