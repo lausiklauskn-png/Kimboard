@@ -25,7 +25,7 @@ import { dirname, join } from "node:path";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 const EXPECTED_SHA256 = {
-  "01_storage.js": "3f4ac7df44141a75f9da77f24d7eff7d266ca982ca6b13f827532bf11b7287a6",
+  "01_storage.js": "5a5a4bf64dfcc107da7ed70fb755d7db5cce7d80e963b3e2fbc2004537747820",
   "02_spore.js": "6789fe6e903ad2e53f39b2dee576c640698555ef71ef4e9134eb75573fdb7d68",
   "03_embedding.js": "e4bb8bd6a237914e7841cab5165912daf636adf0ee90c5d4ffd0c74cc5d706e5",
   "04_match.js": "df367d113e3de250a27ab6268d20527ea6ef7eb52b7787f6832513b994a5cbb3",
