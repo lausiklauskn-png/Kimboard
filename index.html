@@ -321,6 +321,7 @@
       <!-- Auswahl wird aus RELAY_POOL erzeugt (wächst der Pool, wächst sie mit) -->
       <select id="rot-count" title="Wie viele Relais gleichzeitig"></select>
       <button id="rot-announce" class="tbtn" title="Umschalt-Ansage an deine Kontakte senden (Reserve, falls Uhren abweichen)">📢 ansagen</button>
+      <button id="nachholen" class="tbtn" title="Einmalig bei den zuletzt benutzten Relais nachfragen, was du verpasst hast">🕓 Älteres nachholen</button>
     </div>
     <div class="status" id="rot-status" style="margin-top:4px;">Aus — du wählst die Relais oben selbst. Automatik: alle im Kreis rechnen aus demselben Geheimnis dieselben Relais aus, ohne Absprache. Zweck: Ausfallsicherheit + Metadaten nicht an einem Relais bündeln — <b>kein</b> Schutz gegen Sperren oder Überwachung.</div>
     <div class="row" style="margin-top: 10px; gap: 8px;">
@@ -430,7 +431,8 @@ import { schnorr, utils } from './modules/noble-secp256k1.js';
 import { isAuthentic, eventId } from './modules/echtheit.js';
 import { dmEncrypt, dmDecrypt, isDm, safetyNumber } from './modules/dm_crypto.js';
 import { currentRelays as rotCurrentRelays, makeAnnouncement as rotMakeAnnouncement,
-         parseAnnouncement as rotParseAnnouncement, isAnnouncement as rotIsAnnouncement } from './modules/relay_rotation.js';
+         parseAnnouncement as rotParseAnnouncement, isAnnouncement as rotIsAnnouncement,
+         windowIndex as rotWindowIndex, relaysForRecentWindows as rotRecentRelays } from './modules/relay_rotation.js';
 
 // ---- Helpers ----
 const $ = (id) => document.getElementById(id);
@@ -2337,6 +2339,86 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+// ── Älteres nachholen (Stufe 5) ──────────────────────────────────────────────
+// DAS PROBLEM (Klaus' Fund): Beim Verbinden fragen wir jedes Relais nach seinem
+// Vorrat — aber nur die Relais, die GERADE dran sind. Wer später startet oder
+// dessen Rotation inzwischen weitergelaufen ist, sieht nie, was in früheren
+// Fenstern über ANDERE Relais lief. Er bleibt dauerhaft auf einem anderen Stand.
+//
+// DIE LÖSUNG fällt aus der berechneten Rotation ab: Die Fenster lassen sich
+// rückwärts ausrechnen, also weiß das Gerät, welche Relais zuletzt dran waren.
+// Dort wird EINMALIG der Vorrat nachgelesen — mit EIGENEN, kurzlebigen
+// Verbindungen, die sich nach dem Vorrat wieder schließen.
+//
+// WARUM EIGENE VERBINDUNGEN: Die Relais-Auswahl des Nutzers (`activeRelays`)
+// bleibt dadurch unangetastet — kein Umschalten, kein Streit mit dem
+// Auto-Reconnect, kein Dauerzustand. Empfangsmodus bleibt gewahrt: einmalig,
+// begrenzt, nutzer-ausgelöst bzw. einmal beim Start — keine Pulsation.
+//
+// FLUT-BREMSE: Die Zettel kommen mit `istLive = false` herein. Das ist keine
+// Umgehung, sondern genau richtig — die Bremse gilt für den LAUFENDEN Strom,
+// nicht für den gespeicherten Vorrat, den wir hier lesen. Beim Weiterbauen
+// muss das so bleiben.
+const NACHHOL_SUB = 'sbkim-fa-alt';
+const NACHHOL_FENSTER = 6;        // so viele Zeitfenster zurück
+let nachholLaeuft = false;
+async function nachholRelais() {
+  // Ohne Automatik gab es keinen Wechsel — dann ist der ganze Pool die
+  // ehrlichste Antwort auf „wo könnte etwas liegen, das ich nicht habe?".
+  if (!rot.on || !rot.secret) return RELAY_POOL.slice();
+  const w = rotWindowIndex(Date.now(), rot.periodMs);
+  const liste = await rotRecentRelays(rot.secret, RELAY_POOL, rot.count, w, NACHHOL_FENSTER);
+  return liste.length ? liste : RELAY_POOL.slice();
+}
+function nachholStatus(text) { const s = $('rot-status'); if (s) s.textContent = text; }
+async function holeAelteres(still) {
+  return holeAelteresMit(await nachholRelais(), still);
+}
+// Der eigentliche Lauf, mit ausdrücklicher Relais-Liste. Getrennt, damit die
+// Prüfung ihn gegen ein erreichbares Relais laufen lassen kann, ohne dass hier
+// eine Test-Sonderbehandlung im Code steht.
+async function holeAelteresMit(urls, still) {
+  if (nachholLaeuft) return 0;
+  const kandidaten = (urls || []).filter((u) => !activeRelais_verbunden(u));
+  if (!kandidaten.length) { if (!still) toast('Du bist bereits mit allen in Frage kommenden Relais verbunden.'); return 0; }
+  nachholLaeuft = true;
+  const knopf = $('nachholen');
+  if (knopf) { knopf.disabled = true; knopf.textContent = '🕓 hole Älteres …'; }
+  if (!still) toast('🕓 Frage ' + kandidaten.length + ' Relais nach Älterem …');
+  const vorher = seen.size;
+  let offen = kandidaten.length;
+  await new Promise((fertig) => {
+    const ende = setTimeout(() => fertig(), 12000);   // begrenzt: nie ein Dauerzustand
+    const runter = () => { if (--offen <= 0) { clearTimeout(ende); fertig(); } };
+    for (const url of kandidaten) {
+      let ws;
+      try { ws = new WebSocket(url); } catch { runter(); continue; }
+      const zu = () => { try { ws.close(); } catch (_e) { /* */ } runter(); };
+      ws.onopen = () => ws.send(JSON.stringify(['REQ', NACHHOL_SUB, { kinds: [1, 5], '#t': [TAG], limit: 300 }]));
+      ws.onmessage = (e) => {
+        let m; try { m = JSON.parse(e.data); } catch { return; }
+        if (!Array.isArray(m) || m[1] !== NACHHOL_SUB) return;
+        if (m[0] === 'EOSE') { zu(); return; }          // Vorrat durch → Leitung wieder zu
+        if (m[0] === 'EVENT' && m[2]) dispatch(m[2], url, false);   // false = Vorrat, nicht bremsen
+      };
+      ws.onerror = () => zu();
+      ws.onclose = () => runter();
+    }
+  });
+  const neu = Math.max(0, seen.size - vorher);
+  nachholLaeuft = false;
+  if (knopf) { knopf.disabled = false; knopf.textContent = '🕓 Älteres nachholen'; }
+  if (!still || neu) {
+    toast(neu
+      ? '🕓 ' + neu + ' ältere Nachricht(en) nachgeholt.'
+      : '🕓 Nichts Neues — was die Relais noch hatten, hast du schon.');
+  }
+  return neu;
+}
+function activeRelais_verbunden(url) {
+  const ws = conns[url];
+  return !!ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING);
+}
 const liveSockets = () => Object.values(conns).filter((w) => w.readyState === WebSocket.OPEN);
 function updateSendState() {
   const n = liveSockets().length;
@@ -3047,7 +3129,14 @@ function initRotationUi() {
   per.addEventListener('change', () => { rot.periodMs = parseInt(per.value, 10) || 900000; saveRot(); if (rot.on) runRotation(); });
   cnt.addEventListener('change', () => { rot.count = parseInt(cnt.value, 10) || ROT_COUNT_DEFAULT; saveRot(); if (rot.on) runRotation(); });
   $('rot-announce').addEventListener('click', announceSwitch);
+  $('nachholen').addEventListener('click', () => holeAelteres(false));
   if (rot.on && rot.secret) runRotation(); else stopRotation(false);
+  // Einmal beim Start nachholen — aber NUR, wenn die Rotation läuft. Genau dann
+  // entsteht die Lücke (andere Fenster = andere Relais). Ohne Automatik hängt
+  // man ohnehin immer an denselben Relais und hat nichts zu verpassen; dann
+  // bleibt es beim Knopf. Verzögert, damit erst die normalen Verbindungen
+  // stehen und wir nicht doppelt fragen.
+  if (rot.on && rot.secret) setTimeout(() => holeAelteres(true), 6000);
 }
 // 📢 Ansage an die Kontakte (Reserve-Weg) — reist über den verschlüsselten DM,
 // ist dadurch signiert und nur für den Kreis lesbar.
@@ -3266,6 +3355,7 @@ window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubH
   setPlatzhalterDauer: (ms) => { PLATZHALTER_DAUER = ms; }, raeumePlatzhalter,
   ausgeblendete: () => [...hidden], merkGrenze: () => MERK_GRENZE, toastRueckgaengig,
   gruppen: () => dmGroups, makeGroupInvite, parseGroupInvite, sendeAnGruppe,
+  holeAelteres, holeAelteresMit, nachholRelais, nachholLaeuft: () => nachholLaeuft,
   setGruppe: (gid) => { dmGroup = gid; dmRecipients = []; refreshRecipientSelect(); },
   makeContactCard, parseContactCard, setPrivatAn: (pubs) => { dmRecipients = pubs.slice(); refreshRecipientSelect(); } };
 </script>
