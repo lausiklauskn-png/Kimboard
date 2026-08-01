@@ -10,6 +10,10 @@ der private Schlüssel bleibt lokal.
 
 Live: <https://lausiklauskn-png.github.io/Kimboard/>
 
+> **Neue Sitzung? Zuerst [`docs/BRIEF_NAECHSTE_SITZUNG.md`](docs/BRIEF_NAECHSTE_SITZUNG.md) lesen** —
+> Stand, Architektur-Entscheidungen, Prüf-Fallen und was als Nächstes anstehen
+> könnte. Alles prüfen mit `node tests/alle.mjs` (nicht nur `npm test`).
+
 ## Was Kimboard kann
 
 - **Semantische Pinnwand.** Eine Frage aufs geborgte, dumme Brett (Nostr) legen;
