@@ -24,6 +24,17 @@ import { dirname, join } from "node:path";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+// ZWEI ARTEN von Dateien liegen in modules/ — der Unterschied war bisher nicht
+// sichtbar, und genau daran ist diese Prüfung 2026-08-01 rot geworden:
+//
+//   KOPIEN aus Sage („kopieren, nicht klonen"): Ändert sich hier etwas, ist das
+//   ein FEHLER. Reift ein Modul, wird es in Sage gepflegt und neu kopiert.
+//
+//   KIMBOARD-EIGENE Module (echtheit.js, relay_rotation.js): Die gibt es in
+//   Sage gar nicht, sie sind hier entstanden. Sie DÜRFEN wachsen — der
+//   Fingerabdruck ist für sie kein Verbot, sondern ein Merkposten: Wer sie
+//   ändert, trägt den neuen Wert bewusst nach (und merkt so, dass er ein
+//   geteiltes Modul angefasst hat).
 const EXPECTED_SHA256 = {
   "01_storage.js": "5a5a4bf64dfcc107da7ed70fb755d7db5cce7d80e963b3e2fbc2004537747820",
   "02_spore.js": "6789fe6e903ad2e53f39b2dee576c640698555ef71ef4e9134eb75573fdb7d68",
@@ -42,8 +53,9 @@ const EXPECTED_SHA256 = {
   "24_ocr_eingabe.js": "c0d616ff763cae409f4ec3dd943326b04c8ec0275b404ddfac348dc4c402077e",
   "noble-secp256k1.js": "8f3879ca422c4fdfe7ca0361688636fa7cc550a59bd94d512ed6ec79aa3d55d1",
   "dm_crypto.js": "e9c973f0459c5f03fa80b47d3cd4505ef6d4bd689e409569370a59db2586ba63",
+  // — Kimboard-eigen (dürfen wachsen, Wert bewusst nachtragen) —
   "echtheit.js": "14c164b2585fea56d082b17ede24933838a45fd8ac55d05818b5e45ef8d7fac3",
-  "relay_rotation.js": "112612567d56f068b8c0490e47fdd4c81469e935a91247b91cf5943966298ea0",
+  "relay_rotation.js": "ec6c11b6730c8a3ca5439b2cdfabc6aa9339b193db3c81b7f7d253e56ac92962",
 };
 
 test("Drift-Guard: jede Modul-Kopie hält ihren aufgezeichneten sha256", () => {
