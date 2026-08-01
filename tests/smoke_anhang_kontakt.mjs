@@ -43,9 +43,17 @@ try {
   await p.goto(`http://127.0.0.1:${PORT}/index.html`, { waitUntil: 'domcontentloaded' });
   await p.waitForTimeout(1800);
 
+  // WICHTIG: Sichtbarkeit IMMER an der Darstellung ablesen, nie am Attribut.
+  // Genau daran ist der Fehler vom 2026-08-01 durchgerutscht: `hidden` stand auf
+  // true, der Inline-Stil `display:flex` hielt das Menü aber offen — 21 grüne
+  // Prüfungen, und trotzdem klebte es am Tablet fest.
+  const menuOffen = () => p.evaluate(() => {
+    const m = document.getElementById('anhang-menu');
+    return !!m && m.offsetParent !== null;
+  });
   const menuText = () => p.evaluate(() => {
     const m = document.getElementById('anhang-menu');
-    return (m && !m.hidden) ? m.innerText : '';
+    return (m && m.offsetParent !== null) ? m.innerText : '';
   });
 
   console.log('== Stufe 2+3 — Anhang-Menü und Kontakt senden ==');
@@ -57,15 +65,36 @@ try {
   ok(await p.evaluate(() => document.getElementById('dmvoice').hidden && document.getElementById('dmimg').hidden),
     '…sind aber nicht mehr einzeln sichtbar');
 
-  // 2. Menü öffnet mit allen Einträgen
+  // 2. OHNE Empfänger: genau EIN Eintrag, der zum Ziel führt (statt drei gesperrter)
+  await p.click('#anhang'); await p.waitForTimeout(300);
+  ok(await menuOffen(), 'Menü öffnet');
+  const t0 = await menuText();
+  ok(/Erst Empfänger wählen/.test(t0), 'ohne Empfänger: der Weg zur Auswahl statt gesperrter Einträge');
+  ok(!/Sprachnotiz/.test(t0), '…keine toten Einträge daneben');
+  ok((await p.evaluate(() => document.querySelectorAll('#anhang-menu button').length)) === 1,
+    '…genau ein Eintrag (Menü bleibt flach, verdeckt nichts)');
+
+  // 3. SCHLIESSEN — der Fehler vom 2026-08-01
+  await p.click('#anhang'); await p.waitForTimeout(300);
+  ok(!(await menuOffen()), 'zweiter Tipp auf ➕ schließt WIRKLICH (Darstellung, nicht Attribut)');
+  await p.click('#anhang'); await p.waitForTimeout(300);
+  ok(await menuOffen(), 'dritter Tipp öffnet wieder');
+  await p.click('#qmsg'); await p.waitForTimeout(300);
+  ok(!(await menuOffen()), 'Tipp daneben schließt wirklich');
+  await p.click('#anhang'); await p.waitForTimeout(300);
+  await p.keyboard.press('Escape'); await p.waitForTimeout(300);
+  ok(!(await menuOffen()), 'Escape schließt wirklich');
+
+  // 3b. MIT Empfänger: die drei Anhang-Einträge
+  await p.evaluate(() => { window.__kb.pinContact('c'.repeat(64), 'Testfreund'); window.__kb.setPrivatAn(['c'.repeat(64)]); });
+  await p.waitForTimeout(300);
   await p.click('#anhang'); await p.waitForTimeout(300);
   const t = await menuText();
-  ok(/Sprachnotiz/.test(t) && /Bild/.test(t) && /Kontakt senden/.test(t), 'Menü enthält alle drei Einträge');
-  ok(/Privat an/.test(t), 'ohne privaten Empfänger sagt das Menü das vorher: „erst Privat an wählen"');
-
-  // 3. Schließt bei Klick daneben
-  await p.click('#qmsg'); await p.waitForTimeout(300);
-  ok((await menuText()) === '', 'Menü schließt bei Klick daneben');
+  ok(/Sprachnotiz/.test(t) && /Bild/.test(t) && /Kontakt senden/.test(t), 'mit Empfänger: alle drei Einträge');
+  await p.keyboard.press('Escape'); await p.waitForTimeout(300);
+  ok(!(await menuOffen()), 'Menü wieder zu');
+  await p.evaluate(() => window.__kb.setPrivatAn([]));
+  await p.waitForTimeout(200);
 
   // 4. Datenvertrag der Visitenkarte
   const vertrag = await p.evaluate(() => {

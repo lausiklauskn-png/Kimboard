@@ -62,7 +62,7 @@
     'ocrbtn':  ['📷 Foto → Text', 'Fotografiere einen Zettel oder eine Handschrift — der Text wird erkannt und ins Feld geschrieben. Braucht Internet und einen eigenen Schlüssel (Texterkennung in der EU).'],
     'dmvoice': ['🎙️ Sprachnotiz (privat)', 'Nimmt eine Sprachnachricht auf und schickt sie VERSCHLÜSSELT an deinen privaten Kontakt. Erstes Tippen startet, zweites sendet. Nur möglich, wenn oben „Privat an" gewählt ist. Kurz halten — die Relais mögen keine großen Pakete.'],
     'dmimg':   ['🖼️ Bild (privat)', 'Schickt ein Bild VERSCHLÜSSELT an deinen privaten Kontakt. Es wird vorher automatisch verkleinert, damit es durch die Relais passt. Nur möglich, wenn oben „Privat an" gewählt ist.'],
-    'anhang':  ['➕ Etwas mitschicken', 'Wie die Büroklammer bei WhatsApp: hier steckt alles, was du MITSCHICKEN kannst — 🎙️ Sprachnotiz, 🖼️ Bild und 👤 einen Kontakt weitergeben. Alles davon geht nur an private Kontakte (oben „Privat an" wählen) und wird verschlüsselt übertragen. Nicht zu verwechseln mit 🎤 und 📷 daneben: die schreiben nur Text in dein Feld.'],
+    'anhang':  ['➕ Etwas mitschicken', 'Wie die Büroklammer bei WhatsApp: hier steckt alles, was du MITSCHICKEN kannst — 🎙️ Sprachnotiz, 🖼️ Bild und 👤 einen Kontakt weitergeben. Das geht nur privat: hast du noch keinen Empfänger gewählt, führt dich das Menü mit einem Tipp dorthin. Nochmal auf ➕ tippen — oder daneben, oder Esc — schließt es wieder. Nicht zu verwechseln mit 🎤 und 📷 daneben: die schreiben nur Text in dein Feld.'],
     'ask':     ['Frage stellen', 'Sendet deinen Zettel. Ans offene Brett — oder verschlüsselt an die gewählte Person.'],
 
     // — Brett-Ansicht —
