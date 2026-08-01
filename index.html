@@ -233,11 +233,13 @@
   @keyframes micpulse { 0%,100% { box-shadow: 0 0 0 0 rgba(224,106,90,0.5); } 50% { box-shadow: 0 0 0 6px rgba(224,106,90,0); } }
   #board-clear { font-size: 0.78rem; padding: 5px 9px; }
   /* Löschen-Kreuz pro Frage. */
-  /* Auf schmalen Schirmen (Handy) rückt die Reihe zusammen: der Kontakt-Knopf
-     zeigt dann nur noch das Zeichen, damit alles nebeneinander passt. */
+  /* Auf schmalen Schirmen rücken die Knöpfe enger zusammen. Das WORT „Kontakt"
+     bleibt aber stehen — ein nacktes ➕ wirft die Frage „Was Plus?" auf
+     (Klaus 2026-08-01). Platz schafft stattdessen der reservierte Rand oben
+     (.q-head padding-right) plus der Umbruch der Kopfzeile. */
   @media (max-width: 560px) {
-    .kb-addcontact .kb-lbl { display: none; }
     .kb-addcontact, .kb-mute { padding: 1px 5px !important; margin-left: 4px !important; }
+    .kb-addcontact { font-size: .68rem !important; }
   }
   .q-del {
     z-index: 2;   /* das ✕ liegt IMMER über der Kopfzeile */
@@ -981,6 +983,121 @@ function hideQuestion(id, li) {
     e.textContent = 'Brett leer — neue Fragen erscheinen hier.'; threads.appendChild(e);
   }
 }
+// ── Zurückziehen für alle (NIP-09) ───────────────────────────────────────────
+// „Für alle löschen" wie bei WhatsApp: eine Lösch-Meldung (kind 5) geht raus,
+// die auf den eigenen Zettel zeigt. Relais und Gegenstellen nehmen ihn daraufhin
+// herunter.
+//
+// EHRLICHE GRENZE (steht auch im Dialog): Das ist eine BITTE, keine Garantie.
+// Ein Relais kann sie ignorieren, ein anderes Programm sie übergehen, und wer
+// den Zettel schon gelesen, kopiert oder abfotografiert hat, hat ihn weiterhin.
+// Genau wie bei WhatsApp — nur sagen wir es dazu.
+const LS_ZURUECKGEZOGEN = 'sbkim_pinnwand_zurueckgezogen';
+let zurueckgezogen = new Set();
+try { zurueckgezogen = new Set(JSON.parse(localStorage.getItem(LS_ZURUECKGEZOGEN) || '[]')); } catch { /* */ }
+function saveZurueckgezogen() {
+  try { localStorage.setItem(LS_ZURUECKGEZOGEN, JSON.stringify([...zurueckgezogen].slice(-500))); } catch { /* */ }
+}
+// Wer darf was zurückziehen? NUR der Autor seinen eigenen Zettel. Sonst könnte
+// ein Fremder fremde Zettel vom Brett räumen.
+function autorVon(id) {
+  const v = qViews.get(id);
+  if (v && v.qEv) return v.qEv.pubkey;
+  for (const view of qViews.values()) {
+    const a = (view.answers || []).find((x) => x && x.id === id);
+    if (a) return a.pubkey;
+  }
+  return null;
+}
+function handleDeletion(delEv) {
+  const ids = (delEv.tags || []).filter((t) => t[0] === 'e' && t[1]).map((t) => t[1]);
+  let entfernt = 0;
+  for (const id of ids) {
+    const autor = autorVon(id);
+    // Unbekannter Zettel: vormerken — er könnte gleich noch eintreffen.
+    if (autor && autor !== delEv.pubkey) continue;   // FREMDE Löschung: ignorieren
+    zurueckgezogen.add(id);
+    if (entferneZettel(id)) entfernt++;
+  }
+  saveZurueckgezogen();
+  if (entfernt) toast('🗑 Eine Nachricht wurde zurückgezogen.');
+}
+// Entfernt einen Zettel (Frage oder Antwort) aus der Anzeige.
+function entferneZettel(id) {
+  const v = qViews.get(id);
+  if (v) { const li = threads.querySelector('[data-qid="' + id + '"]'); if (li && li.parentNode) li.parentNode.removeChild(li); qViews.delete(id); return true; }
+  const a = threads.querySelector('[data-aid="' + id + '"]');
+  if (a && a.parentNode) { a.parentNode.removeChild(a); return true; }
+  return false;
+}
+// Der eigene Zettel wird zurückgezogen: Meldung an die Relais + lokal weg.
+async function zurueckziehenFuerAlle(id) {
+  const ev = {
+    pubkey: pubHex, created_at: Math.floor(Date.now() / 1000), kind: 5,
+    tags: [['t', TAG], ['e', id]], content: 'zurückgezogen',
+  };
+  ev.id = await sha256Hex(JSON.stringify([0, ev.pubkey, ev.created_at, ev.kind, ev.tags, ev.content]));
+  ev.sig = toHex(await schnorr.sign(fromHex(ev.id), priv));
+  const live = liveSockets();
+  for (const ws of live) ws.send(JSON.stringify(['EVENT', ev]));
+  zurueckgezogen.add(id); saveZurueckgezogen();
+  entferneZettel(id);
+  toast(live.length
+    ? '🗑 Zurückgezogen — die Relais wurden gebeten, ihn zu entfernen.'
+    : '🗑 Lokal entfernt — ohne Verbindung konnte die Bitte nicht rausgehen.');
+}
+// Der Lösch-Dialog: „nur bei mir" oder „bei allen" (Letzteres nur für eigene).
+function openLoeschDialog(ev, li) {
+  const eigen = ev.pubkey === pubHex;
+  const bg = document.createElement('div');
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(20,18,16,.6);display:flex;align-items:center;justify-content:center;z-index:96;padding:16px;';
+  const box = document.createElement('div');
+  box.id = 'loesch-dialog';
+  box.style.cssText = 'background:var(--card,#1c1a17);color:var(--fg,#eee);border:1px solid var(--acc,#c9a961);' +
+    'border-radius:14px;max-width:420px;width:100%;padding:16px 18px;font-size:.92rem;';
+  const zu = () => { if (bg.parentNode) document.body.removeChild(bg); };
+  const h = document.createElement('h3');
+  h.style.cssText = 'margin:.1em 0 .5em'; h.textContent = '🗑 Nachricht löschen';
+  box.appendChild(h);
+
+  const mine = document.createElement('button');
+  mine.className = 'tbtn kb-del-mine';
+  mine.style.cssText = 'display:block;width:100%;text-align:left;margin:0 0 8px;padding:10px 12px;';
+  mine.textContent = '👁 Nur bei mir ausblenden';
+  const mineSub = document.createElement('div');
+  mineSub.style.cssText = 'font-size:.8rem;opacity:.75;margin:-4px 0 12px 2px';
+  mineSub.textContent = 'Verschwindet nur auf diesem Gerät. Die anderen sehen sie weiterhin.';
+  mine.addEventListener('click', () => { hideQuestion(ev.id, li); zu(); });
+  box.appendChild(mine); box.appendChild(mineSub);
+
+  if (eigen) {
+    const alle = document.createElement('button');
+    alle.className = 'tbtn kb-del-all';
+    alle.style.cssText = 'display:block;width:100%;text-align:left;margin:0 0 8px;padding:10px 12px;';
+    alle.textContent = '🗑 Bei allen löschen';
+    const alleSub = document.createElement('div');
+    alleSub.style.cssText = 'font-size:.8rem;opacity:.75;margin:-4px 0 12px 2px;line-height:1.45';
+    alleSub.textContent = 'Bittet die Relais und die anderen Geräte, sie zu entfernen. Ehrlich dazu: ' +
+      'Das ist eine Bitte, keine Garantie — wer sie schon gelesen, kopiert oder fotografiert hat, ' +
+      'hat sie weiterhin. (Bei WhatsApp ist das genauso, es wird nur nicht dazugesagt.)';
+    alle.addEventListener('click', async () => { zu(); await zurueckziehenFuerAlle(ev.id); });
+    box.appendChild(alle); box.appendChild(alleSub);
+  } else {
+    const hinweis = document.createElement('div');
+    hinweis.style.cssText = 'font-size:.82rem;opacity:.75;margin:0 0 12px;line-height:1.45';
+    hinweis.textContent = 'Fremde Nachrichten kannst du nur bei dir ausblenden — löschen darf sie ' +
+      'nur, wer sie geschrieben hat. (Sonst könnte jeder das Brett leerräumen.)';
+    box.appendChild(hinweis);
+  }
+
+  const close = document.createElement('button');
+  close.className = 'ghost kb-del-close'; close.textContent = 'Abbrechen';
+  close.addEventListener('click', zu);
+  box.appendChild(close);
+  bg.appendChild(box);
+  bg.addEventListener('click', (e) => { if (e.target === bg) zu(); });
+  document.body.appendChild(bg);
+}
 function clearBoard() {
   for (const id of [...qViews.keys()]) hidden.add(id);
   saveHidden();
@@ -1002,8 +1119,10 @@ function renderQuestion(ev, relay) {
   // Löschen-Kreuz: blendet diese Suche lokal aus (persistent, kein Relay-Eingriff).
   const del = document.createElement('button');
   del.className = 'q-del'; del.textContent = '✕';
-  del.title = 'Diese Suche ausblenden (bleibt nach Neuladen weg)';
-  del.addEventListener('click', () => { hideQuestion(ev.id, li); });
+  del.title = ev.pubkey === pubHex
+    ? 'Löschen — nur bei dir oder bei allen'
+    : 'Bei dir ausblenden';
+  del.addEventListener('click', () => { openLoeschDialog(ev, li); });
   card.appendChild(del);
   const head = document.createElement('div');
   head.className = 'q-head';
@@ -1060,6 +1179,7 @@ function renderQuestion(ev, relay) {
 
   card.appendChild(head); card.appendChild(text);
   card.appendChild(answersUl); card.appendChild(form);
+  li.dataset.qid = ev.id;          // damit ein Zurückziehen den Zettel findet
   li.appendChild(card);
   threads.insertBefore(li, threads.firstChild); // neueste Frage oben
 
@@ -1083,6 +1203,7 @@ function renderAnswer(ev, relay) {
   if (view.answerIds.has(ev.id)) return;
   view.answerIds.add(ev.id);
   const li = document.createElement('li');
+  li.dataset.aid = ev.id;          // damit ein Zurückziehen die Antwort findet
   if (ev.pubkey === pubHex) li.className = 'mine';
   const head = document.createElement('div');
   head.className = 'a-head';
@@ -1598,9 +1719,15 @@ async function dispatch(ev, relay, istLive = false) {
   // nie für eigene Zettel oder gespeicherte Kontakte (Bekannte werden nicht
   // gedrosselt; Stufe 3 baut den Vorrang aus). Gesperrte fliegen ganz raus.
   if (istGesperrt(ev.pubkey)) return;
+  // Schon zurückgezogen? Dann gar nicht erst zeigen — auch nach dem Neuladen,
+  // wenn ein Relais den Zettel weiterhin ausliefert.
+  if (ev.kind !== 5 && zurueckgezogen.has(ev.id)) return;
   if (istLive && ev.pubkey !== pubHex && !dmContacts[ev.pubkey] && !underFlutLimit(ev.pubkey)) {
     bumpFlood(); return;
   }
+  // Lösch-Meldung (kind 5, NIP-09): „nimm meinen Zettel wieder runter".
+  // Sie ist bereits echtheitsgeprüft (oben) — der Absender steht also fest.
+  if (ev.kind === 5) { handleDeletion(ev); return; }
   // Verschlüsselte Notiz: nur zeigen, wenn wir sie mit dem Brett-Passwort lesen
   // können. Sonst (kein/falsches Passwort) überspringen — kein Geheimtext-Müll.
   if (isEnc(ev.content)) {
@@ -1693,7 +1820,7 @@ function connect(url) {
   ws.onopen = () => {
     backoff[url] = 0; // Erfolg → Backoff zurücksetzen
     setDot(url, 'up');
-    ws.send(JSON.stringify(['REQ', SUB_ID, { kinds: [1], '#t': [TAG], limit: 200 }]));
+    ws.send(JSON.stringify(['REQ', SUB_ID, { kinds: [1, 5], '#t': [TAG], limit: 200 }]));
     updateSendState();
   };
   ws.onmessage = (e) => {
@@ -1739,7 +1866,7 @@ function resubscribe() {
   const e = document.createElement('li'); e.className = 'empty';
   e.textContent = 'lade…'; threads.appendChild(e);
   for (const ws of liveSockets()) {
-    try { ws.send(JSON.stringify(['REQ', SUB_ID, { kinds: [1], '#t': [TAG], limit: 200 }])); } catch { /* */ }
+    try { ws.send(JSON.stringify(['REQ', SUB_ID, { kinds: [1, 5], '#t': [TAG], limit: 200 }])); } catch { /* */ }
   }
 }
 
@@ -2421,6 +2548,7 @@ initRotationUi();   // Relais-Automatik (Default aus; startet nur mit Häkchen +
 // sondern müssen echt signieren — genau wie ein ehrlicher Absender.
 window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubHex, buildEvent,
   sperreAbsender, entsperreAbsender, gesperrte: () => [...gesperrt], flutZaehler: () => floodCount,
+  zurueckziehenFuerAlle, zurueckgezogene: () => [...zurueckgezogen],
   makeContactCard, parseContactCard, setPrivatAn: (pubs) => { dmRecipients = pubs.slice(); refreshRecipientSelect(); } };
 </script>
 

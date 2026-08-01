@@ -11,12 +11,12 @@
  * Geprüft wird bei Handy-Breite (360 px):
  *   - Das ✕ ist frei treffbar (elementFromPoint trifft wirklich das ✕).
  *   - Weder der Kontakt-Knopf noch der Stumm-Knopf überlappen es.
- *   - Der Kontakt-Knopf zeigt nur noch das Zeichen (das Wort „Kontakt" wird
- *     ausgeblendet), damit die Reihe passt.
+ *   - Der Kontakt-Knopf bleibt beschriftet („Kontakt" steht auch am Handy dabei) —
+ *     ein nacktes ➕ wirft die Frage „Was Plus?" auf.
  *   - Das Antwort-Feld ist breit genug zum Schreiben (es brach vorher senkrecht
  *     um), die Knöpfe rücken darunter.
  * Und bei Tablet-/Desktop-Breite:
- *   - Das Wort „Kontakt" ist wieder sichtbar (kein Verlust auf großen Schirmen).
+ *   - dasselbe, mit voller Beschriftung.
  *
  * Voraussetzung: npm install --no-save playwright-core
  * Aufruf: node tests/smoke_handy_layout.mjs   ·   Exit 0 = grün.
@@ -96,7 +96,9 @@ try {
   ok(messung.xFrei, 'das ✕ ist frei treffbar (darauf liegt: ' + messung.daraufliegt + ')');
   ok(messung.muteUeberX === false, 'der Stumm-Knopf überlappt das ✕ nicht mehr');
   ok(messung.btnUeberX === false, 'der Kontakt-Knopf überlappt das ✕ nicht');
-  ok(messung.wortSichtbar === false, 'am Handy zeigt der Kontakt-Knopf nur das Zeichen');
+  // Klaus 2026-08-01: Das WORT muss bleiben — „es gibt Leute, die fragen: Was
+  // Plus?". Platz schafft der reservierte Rand oben, nicht das Weglassen.
+  ok(messung.wortSichtbar === true, 'am Handy steht „Kontakt" trotzdem dabei (kein nacktes ➕)');
   ok(messung.feldBreite >= 180, 'das Antwort-Feld ist breit genug zum Schreiben (' + messung.feldBreite + ' px)');
   ok(errs.length === 0, 'keine JS-Fehler im Browser (' + errs.slice(0, 2).join(' | ') + ')');
 
