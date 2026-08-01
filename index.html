@@ -106,6 +106,10 @@
   .q-head .who { color: var(--q); }
   .q-card.mine .q-head .who::after { content: " (ich)"; color: var(--accent); }
   .q-text { white-space: pre-wrap; word-break: break-word; font-weight: 600; }
+  /* Der vergängliche Hinweis auf eine zurückgezogene Nachricht — sichtbar
+     zurückhaltend (kursiv, blass): er sagt „hier war etwas", drängt sich aber
+     nicht auf. Verschwindet nach PLATZHALTER_DAUER von selbst. */
+  .kb-tombstone { font-style: italic; opacity: .55; font-size: .9rem; padding: 2px 0; }
   .answers { list-style: none; margin: 10px 0 0; padding: 0 0 0 12px;
     border-left: 2px solid var(--line); }
   .answers li { padding: 7px 0; }
@@ -1027,16 +1031,32 @@ function hideQuestion(id, li) {
 // die auf den eigenen Zettel zeigt. Relais und Gegenstellen nehmen ihn daraufhin
 // herunter.
 //
-// EHRLICHE GRENZE (steht auch im Dialog): Das ist eine BITTE, keine Garantie.
-// Ein Relais kann sie ignorieren, ein anderes Programm sie übergehen, und wer
-// den Zettel schon gelesen, kopiert oder abfotografiert hat, hat ihn weiterhin.
-// Genau wie bei WhatsApp — nur sagen wir es dazu.
+// EHRLICHE GRENZE (steht auch im Dialog): Wir können darum BITTEN — erzwingen
+// können wir es nicht. Ein Relais kann die Bitte ignorieren, ein anderes
+// Programm sie übergehen, und wer den Zettel schon gelesen, kopiert oder
+// abfotografiert hat, hat ihn weiterhin. Bei WhatsApp ist das genauso — dort
+// wird es nur nicht dazugesagt.
 const LS_ZURUECKGEZOGEN = 'sbkim_pinnwand_zurueckgezogen';
-let zurueckgezogen = new Set();
-try { zurueckgezogen = new Set(JSON.parse(localStorage.getItem(LS_ZURUECKGEZOGEN) || '[]')); } catch { /* */ }
+// id -> Zeitpunkt (ms), an dem wir vom Rückzug erfahren haben. Die ID bleibt
+// DAUERHAFT gemerkt (sonst käme der Zettel beim nächsten Relais-Vorrat wieder);
+// der sichtbare Platzhalter dagegen ist absichtlich VERGÄNGLICH (siehe unten).
+let zurueckgezogen = new Map();
+try {
+  const roh = JSON.parse(localStorage.getItem(LS_ZURUECKGEZOGEN) || '[]');
+  // Altbestand war eine reine ID-Liste ohne Zeit — die gilt als „lange her"
+  // (0), bekommt also keinen Platzhalter mehr.
+  for (const e of roh) Array.isArray(e) ? zurueckgezogen.set(e[0], e[1] || 0) : zurueckgezogen.set(e, 0);
+} catch { /* */ }
 function saveZurueckgezogen() {
   try { localStorage.setItem(LS_ZURUECKGEZOGEN, JSON.stringify([...zurueckgezogen].slice(-500))); } catch { /* */ }
 }
+// Wie lange der Platzhalter „🚫 zurückgezogen" stehen bleibt.
+// Klaus 2026-08-01: „bis zu einer gewissen Zeit … aber dass es dann nicht
+// dauerhaft zu sehen ist." Also: kurz genug sichtbar, dass der andere nicht
+// rätselt, wo etwas hin ist — danach spurlos weg, statt das Brett dauerhaft
+// mit Grabsteinen zu pflastern. Nach einem Neuladen erscheint er gar nicht
+// erst: dann ist der Zettel einfach nicht mehr da.
+let PLATZHALTER_DAUER = 60 * 60 * 1000;   // 1 Stunde
 // Wer darf was zurückziehen? NUR der Autor seinen eigenen Zettel. Sonst könnte
 // ein Fremder fremde Zettel vom Brett räumen.
 function autorVon(id) {
@@ -1055,20 +1075,76 @@ function handleDeletion(delEv) {
     const autor = autorVon(id);
     // Unbekannter Zettel: vormerken — er könnte gleich noch eintreffen.
     if (autor && autor !== delEv.pubkey) continue;   // FREMDE Löschung: ignorieren
-    zurueckgezogen.add(id);
-    if (entferneZettel(id)) entfernt++;
+    zurueckgezogen.set(id, Date.now());
+    if (entferneZettel(id, true)) entfernt++;        // mit sichtbarem Platzhalter
   }
   saveZurueckgezogen();
   if (entfernt) toast('🗑 Eine Nachricht wurde zurückgezogen.');
 }
-// Entfernt einen Zettel (Frage oder Antwort) aus der Anzeige.
-function entferneZettel(id) {
-  const v = qViews.get(id);
-  if (v) { const li = threads.querySelector('[data-qid="' + id + '"]'); if (li && li.parentNode) li.parentNode.removeChild(li); qViews.delete(id); return true; }
-  const a = threads.querySelector('[data-aid="' + id + '"]');
-  if (a && a.parentNode) { a.parentNode.removeChild(a); return true; }
-  return false;
+// Baut den vergänglichen Platzhalter (WhatsApp: „Diese Nachricht wurde
+// gelöscht"). Er steht bewusst DA, statt dass der Zettel spurlos verschwindet —
+// sonst rätselt der andere, ob da eben etwas war. Er verschwindet aber von
+// selbst wieder (PLATZHALTER_DAUER), damit das Brett nicht dauerhaft voller
+// Grabsteine steht.
+function machPlatzhalter(id) {
+  const d = document.createElement('div');
+  d.className = 'kb-tombstone';
+  d.dataset.tombId = id;
+  d.dataset.tombTs = String(Date.now());
+  d.textContent = '🚫 Diese Nachricht wurde zurückgezogen.';
+  return d;
 }
+// Entfernt einen Zettel (Frage oder Antwort) aus der Anzeige.
+// `platzhalter` = an seine Stelle tritt der vergängliche Hinweis; ohne das
+// verschwindet er sofort und ganz (z. B. beim Aufräumen abgelaufener Hinweise).
+function entferneZettel(id, platzhalter) {
+  const v = qViews.get(id);
+  if (v) {
+    const li = threads.querySelector('[data-qid="' + id + '"]');
+    if (!li) { qViews.delete(id); return false; }
+    if (platzhalter) {
+      // Den Zettel-Inhalt ersetzen, aber die ANTWORTEN anderer stehen lassen —
+      // die gehören ihnen, nicht mir. Antworten kann man darauf nicht mehr.
+      const text = li.querySelector('.q-text');
+      if (text) text.replaceWith(machPlatzhalter(id));
+      const form = li.querySelector('.answer-form');
+      if (form) form.remove();
+      v.qEv = null;                  // nichts mehr, worauf sich Sortierung bezieht
+      return true;
+    }
+    if (li.parentNode) li.parentNode.removeChild(li);
+    qViews.delete(id); return true;
+  }
+  const a = threads.querySelector('[data-aid="' + id + '"]');
+  if (!a) return false;
+  if (platzhalter) {
+    const text = a.querySelector('.a-text');
+    if (text) text.replaceWith(machPlatzhalter(id));
+    return true;
+  }
+  if (a.parentNode) a.parentNode.removeChild(a);
+  return true;
+}
+// Räumt abgelaufene Platzhalter weg. Läuft nebenher; die ID bleibt in
+// `zurueckgezogen`, der Zettel kommt also nicht wieder — nur der Hinweis geht.
+function raeumePlatzhalter() {
+  const jetzt = Date.now();
+  for (const d of [...document.querySelectorAll('.kb-tombstone')]) {
+    if (jetzt - Number(d.dataset.tombTs || 0) < PLATZHALTER_DAUER) continue;
+    const li = d.closest('li');
+    d.remove();
+    // Bleibt nichts Sichtbares übrig (keine fremden Antworten), geht der ganze
+    // Zettel — sonst stünde eine leere Karte da.
+    if (!li) continue;
+    const rest = li.querySelector('.answers li');
+    if (!rest) { const qid = li.dataset.qid; if (qid) qViews.delete(qid); li.remove(); }
+  }
+  if (!threads.children.length) {
+    const e = document.createElement('li'); e.className = 'empty';
+    e.textContent = 'Brett leer — neue Fragen erscheinen hier.'; threads.appendChild(e);
+  }
+}
+setInterval(raeumePlatzhalter, 60 * 1000);
 // Der eigene Zettel wird zurückgezogen: Meldung an die Relais + lokal weg.
 // `still` = Teil eines Sammel-Laufs: dann meldet der Aufrufer am Ende einmal,
 // statt bei jeder einzelnen Nachricht eine Blase zu zeigen.
@@ -1081,7 +1157,9 @@ async function zurueckziehenFuerAlle(id, still) {
   ev.sig = toHex(await schnorr.sign(fromHex(ev.id), priv));
   const live = liveSockets();
   for (const ws of live) ws.send(JSON.stringify(['EVENT', ev]));
-  zurueckgezogen.add(id); saveZurueckgezogen();
+  zurueckgezogen.set(id, Date.now()); saveZurueckgezogen();
+  // Beim EIGENEN Zettel braucht es keinen Platzhalter: ich weiß ja, was ich
+  // gerade weggenommen habe. Der Hinweis ist für die ANDEREN gedacht.
   entferneZettel(id);
   if (!still) {
     toast(live.length
@@ -1120,9 +1198,10 @@ function openLoeschDialog(ev, li) {
     alle.textContent = '🗑 Bei allen löschen';
     const alleSub = document.createElement('div');
     alleSub.style.cssText = 'font-size:.8rem;opacity:.75;margin:-4px 0 12px 2px;line-height:1.45';
-    alleSub.textContent = 'Bittet die Relais und die anderen Geräte, sie zu entfernen. Ehrlich dazu: ' +
-      'Das ist eine Bitte, keine Garantie — wer sie schon gelesen, kopiert oder fotografiert hat, ' +
-      'hat sie weiterhin. (Bei WhatsApp ist das genauso, es wird nur nicht dazugesagt.)';
+    alleSub.textContent = 'Bei den anderen erscheint kurz „zurückgezogen", danach ist die Nachricht weg. ' +
+      'Ehrlich dazu: Wir können die anderen Geräte darum BITTEN — erzwingen können wir es nicht. ' +
+      'Wer die Nachricht schon gelesen, kopiert oder abfotografiert hat, hat sie weiterhin. ' +
+      '(Bei WhatsApp ist das genauso, es wird nur nicht dazugesagt.)';
     alle.addEventListener('click', async () => { zu(); await zurueckziehenFuerAlle(ev.id); });
     box.appendChild(alle); box.appendChild(alleSub);
   } else {
@@ -1353,6 +1432,7 @@ function expandQuery(text) {
 }
 
 async function embedQuestion(view) {
+  if (!view.qEv) return;          // zurückgezogen — es gibt keine Frage mehr
   if (!view.qVecs) {
     view.qVecs = [];
     for (const q of expandQuery(view.qEv.content)) {
@@ -1575,7 +1655,7 @@ async function getVerdicts(prompt) {
 }
 
 async function judgeView(view) {
-  if (!view.answers.length) return;
+  if (!view.answers.length || !view.qEv) return;   // zurückgezogene Frage: nichts zu bewerten
   const verdicts = await getVerdicts(buildJudgePrompt(view.qEv.content, view.answers.map((e) => e.ev.content)));
   for (const v of verdicts) {
     const e = view.answers[v.i];
@@ -2442,9 +2522,10 @@ $('meine-zurueckziehen').addEventListener('click', async () => {
   }
   if (!meine.length) { toast('Hier ist gerade nichts von dir zu sehen.'); return; }
   if (!confirm('Alle ' + meine.length + ' Nachricht(en) von DIR zurückziehen?\n\n' +
-    'Die Relais und die anderen Geräte werden gebeten, sie zu entfernen.\n\n' +
-    'Ehrlich: Das ist eine Bitte, keine Garantie — wer sie schon gelesen, kopiert ' +
-    'oder fotografiert hat, hat sie weiterhin. Fremde Nachrichten bleiben unberührt.')) return;
+    'Bei den anderen erscheint kurz „zurückgezogen", danach sind sie weg.\n\n' +
+    'Ehrlich: Wir können darum BITTEN — erzwingen können wir es nicht. Wer sie schon ' +
+    'gelesen, kopiert oder abfotografiert hat, hat sie weiterhin. Fremde Nachrichten ' +
+    'bleiben unberührt.')) return;
   let n = 0;
   for (const id of meine) { await zurueckziehenFuerAlle(id, true); n++; }
   toast('🗑 ' + n + ' eigene Nachricht(en) zurückgezogen.');
@@ -2610,7 +2691,9 @@ initRotationUi();   // Relais-Automatik (Default aus; startet nur mit Häkchen +
 // sondern müssen echt signieren — genau wie ein ehrlicher Absender.
 window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubHex, buildEvent,
   sperreAbsender, entsperreAbsender, gesperrte: () => [...gesperrt], flutZaehler: () => floodCount,
-  zurueckziehenFuerAlle, zurueckgezogene: () => [...zurueckgezogen],
+  zurueckziehenFuerAlle, zurueckgezogene: () => [...zurueckgezogen.keys()],
+  // Nur für die Prüfung: die Platzhalter-Dauer verkürzen, statt eine Stunde zu warten.
+  setPlatzhalterDauer: (ms) => { PLATZHALTER_DAUER = ms; }, raeumePlatzhalter,
   makeContactCard, parseContactCard, setPrivatAn: (pubs) => { dmRecipients = pubs.slice(); refreshRecipientSelect(); } };
 </script>
 

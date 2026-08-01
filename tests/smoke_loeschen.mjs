@@ -14,7 +14,7 @@
  *   - Empfang: die Lösch-Meldung des AUTORS entfernt seinen Zettel.
  *   - SICHERHEIT: Die Lösch-Meldung eines FREMDEN entfernt den Zettel NICHT.
  *   - Zurückgezogenes bleibt weg, auch wenn ein Relais es erneut ausliefert.
- *   - Der Dialog benennt die ehrliche Grenze (Bitte, keine Garantie).
+ *   - Der Dialog benennt die ehrliche Grenze eindeutig (bitten ja, erzwingen nein).
  *
  * Voraussetzung: npm install --no-save playwright-core
  * Aufruf: node tests/smoke_loeschen.mjs   ·   Exit 0 = grün.
@@ -83,7 +83,9 @@ try {
   ok(await p.$('.kb-del-mine'), 'Wahl „nur bei mir" vorhanden');
   ok(await p.$('.kb-del-all'), 'Wahl „bei allen" vorhanden (eigener Zettel)');
   const dtxt = await p.textContent('#loesch-dialog');
-  ok(/Bitte, keine Garantie/.test(dtxt), 'der Dialog benennt die ehrliche Grenze');
+  // Formulierung geschärft (Klaus 2026-08-01): „Bitte, keine Garantie" las sich
+  // wie „ich bitte um keine Garantie" — jetzt steht da, wer was kann.
+  ok(/erzwingen können wir es nicht/.test(dtxt), 'der Dialog benennt die ehrliche Grenze eindeutig');
   await p.click('.kb-del-close'); await p.waitForTimeout(300);
 
   // --- Dialog am FREMDEN Zettel: nur „bei mir" ---
