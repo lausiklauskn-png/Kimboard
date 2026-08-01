@@ -51,6 +51,12 @@ const ZETTEL = async (p) => p.evaluate(async () => {
   ev.id = await eventId(ev);
   ev.sig = toHex(await schnorr.sign(fromHex(ev.id), priv));
   await window.__kb.dispatch(ev, 'wss://relay.family-projekt.de');
+  // Eine Antwort dazu — sonst gäbe es kein zweites ✕ zu vergleichen.
+  const a = { pubkey: pub, created_at: Math.floor(Date.now() / 1000), kind: 1,
+    tags: [['t', 'sbkim-frage-antwort-test'], ['e', ev.id]], content: 'Eine Antwort darauf' };
+  a.id = await eventId(a);
+  a.sig = toHex(await schnorr.sign(fromHex(a.id), priv));
+  await window.__kb.dispatch(a, 'wss://relay.family-projekt.de');
 });
 
 let browser;
@@ -100,6 +106,29 @@ try {
   // Plus?". Platz schafft der reservierte Rand oben, nicht das Weglassen.
   ok(messung.wortSichtbar === true, 'am Handy steht „Kontakt" trotzdem dabei (kein nacktes ➕)');
   ok(messung.feldBreite >= 180, 'das Antwort-Feld ist breit genug zum Schreiben (' + messung.feldBreite + ' px)');
+  // Klaus 2026-08-01 nach dem Sichttest: „Die X am rechten Rand sind immer
+  // noch nicht in einer Reihe." Ursache waren zwei Bezugsrahmen — das
+  // Zettel-✕ misst von der Kartenkante, das Antwort-✕ von der Innenkante.
+  const spalte = await p.evaluate(() => {
+    const q = document.querySelector('.q-del'), a = document.querySelector('.a-del');
+    if (!q || !a) return null;
+    const rq = q.getBoundingClientRect(), ra = a.getBoundingClientRect();
+    return {
+      rechtsQ: Math.round(rq.right), rechtsA: Math.round(ra.right),
+      mitteQ: Math.round(rq.left + rq.width / 2), mitteA: Math.round(ra.left + ra.width / 2),
+      breiteQ: Math.round(rq.width), breiteA: Math.round(ra.width),
+      imBild: ra.right <= document.documentElement.clientWidth,
+    };
+  });
+  ok(!!spalte, 'Zettel und Antwort haben beide ein ✕');
+  ok(spalte && Math.abs(spalte.rechtsQ - spalte.rechtsA) <= 1,
+    'beide ✕ haben dieselbe rechte Kante (' + (spalte && spalte.rechtsQ) + ' vs ' + (spalte && spalte.rechtsA) + ')');
+  ok(spalte && Math.abs(spalte.mitteQ - spalte.mitteA) <= 1,
+    '…und stehen damit in EINER Spalte (Mitte ' + (spalte && spalte.mitteQ) + ' vs ' + (spalte && spalte.mitteA) + ')');
+  ok(spalte && spalte.breiteQ === spalte.breiteA,
+    '…und sind gleich groß (' + (spalte && spalte.breiteQ) + '/' + (spalte && spalte.breiteA) + ' px)');
+  ok(spalte && spalte.imBild, '…und ragen nicht über den Rand hinaus');
+
   ok(errs.length === 0, 'keine JS-Fehler im Browser (' + errs.slice(0, 2).join(' | ') + ')');
 
   // ---------- Tablet/Desktop: 900 px ----------
@@ -124,6 +153,15 @@ try {
   ok(gross.wortSichtbar === true, 'auf großen Schirmen steht wieder „Kontakt" dabei');
   ok(/Kontakt/.test(gross.text), '…der Knopf ist dort voll beschriftet: ' + gross.text.trim());
   ok(gross.xFrei, 'auch dort bleibt das ✕ frei');
+  const spalte2 = await p2.evaluate(() => {
+    const q = document.querySelector('.q-del'), a = document.querySelector('.a-del');
+    if (!q || !a) return null;
+    const rq = q.getBoundingClientRect(), ra = a.getBoundingClientRect();
+    return { d: Math.abs(Math.round(rq.right) - Math.round(ra.right)),
+             m: Math.abs(Math.round(rq.left + rq.width / 2) - Math.round(ra.left + ra.width / 2)) };
+  });
+  ok(spalte2 && spalte2.d <= 1 && spalte2.m <= 1,
+    'auch auf großen Schirmen stehen die ✕ in einer Spalte (Versatz ' + (spalte2 && spalte2.d) + ' px)');
 } catch (e) {
   fail++; console.error(e);
 } finally {
