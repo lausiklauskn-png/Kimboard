@@ -112,7 +112,12 @@
   .kb-tombstone { font-style: italic; opacity: .55; font-size: .9rem; padding: 2px 0; }
   .answers { list-style: none; margin: 10px 0 0; padding: 0 0 0 12px;
     border-left: 2px solid var(--line); }
-  .answers li { padding: 7px 0; }
+  /* Platz rechts für das eigene ✕ der Antwort reservieren — sonst läuft der
+     Text darunter durch (dieselbe Falle wie am Zettel-Kopf, 2026-08-01). */
+  .answers li { padding: 7px 0; position: relative; padding-right: 30px; }
+  /* Kleiner als das ✕ am Zettel: eine Antwort ist der leisere Eintrag. */
+  .a-del { right: 0; top: 4px; width: 20px; height: 20px; font-size: .72rem; opacity: .55; }
+  .a-del:hover { opacity: 1; }
   .a-head { font-size: 0.74rem; color: var(--dim); margin-bottom: 2px; }
   .a-head .who { color: var(--mine); }
   .answers li.mine .a-head .who::after { content: " (ich)"; color: var(--accent); }
@@ -352,6 +357,7 @@
       <span class="label">Fragen &amp; Antworten (Tag <code>#sbkim-frage-antwort-test</code>)</span>
       <button id="meine-zurueckziehen" class="tbtn" title="Alle EIGENEN Nachrichten zurückziehen — bittet die Relais, sie zu entfernen">🗑 Meine zurückziehen</button>
       <button id="board-clear" class="tbtn" title="Angezeigte Suchen ausblenden (lokal, bleibt nach Neuladen weg)">🧹 leeren</button>
+      <button id="ausgeblendet" class="tbtn" title="Was du ausgeblendet oder stumm geschaltet hast — und wie du es zurückholst">👁 Ausgeblendet</button>
     </div>
     <div class="sort-ctl">
       <button id="semantic" class="ghost">🧠 Antworten nach Bedeutung sortieren</button>
@@ -578,17 +584,42 @@ async function decryptContent(s) {
 // TOFU (Ein-Klick-Freigabe, weil du die Gegenseite kennst) + Änderungs-Warnung +
 // optionale Sicherheitsnummer. Der Passwort-Weg (Brett) bleibt daneben unberührt.
 // Kleiner, selbst-enthaltener Hinweis-Balken (fail-soft) für die Kontakt-Freigabe.
+// z-index 10050: ÜBER der SBKIM-Status-Leiste (Modul 17 liegt bei 9990, ihr
+// Modal bei 9999). Vorher lag die Meldung mit 130 darunter — unten rechts
+// verdeckte die Leiste sie, und beim „↩ Rückgängig" fing sie den Tipp ab.
+// (Beim headless-Lauf 2026-08-01 aufgefallen; am Tablet wäre es genauso.)
 function toast(msg) {
   try {
     const t = document.createElement('div');
     t.textContent = msg;
     t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);' +
       'background:rgba(20,18,16,.96);color:#eee;border:1px solid var(--acc,#c9a961);' +
-      'padding:9px 14px;border-radius:10px;z-index:130;font-size:.9rem;max-width:90vw;' +
+      'padding:9px 14px;border-radius:10px;z-index:10050;font-size:.9rem;max-width:90vw;' +
       'box-shadow:0 4px 16px rgba(0,0,0,.4);';
     document.body.appendChild(t);
     setTimeout(() => { try { document.body.removeChild(t); } catch (_e) { /* */ } }, 2600);
   } catch (_e) { /* fail-soft: Hinweis ist optional */ }
+}
+// Meldung MIT „Rückgängig"-Knopf (WhatsApp-Muster). Steht länger als eine
+// normale Meldung, weil man sie lesen und drücken können muss.
+function toastRueckgaengig(msg, zurueck) {
+  try {
+    const t = document.createElement('div');
+    t.className = 'kb-undo-toast';
+    t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);' +
+      'background:rgba(20,18,16,.96);color:#eee;border:1px solid var(--acc,#c9a961);' +
+      'padding:9px 14px;border-radius:10px;z-index:10050;font-size:.9rem;max-width:90vw;' +
+      'box-shadow:0 4px 16px rgba(0,0,0,.4);display:flex;align-items:center;gap:12px;';
+    const s = document.createElement('span'); s.textContent = msg;
+    const b = document.createElement('button');
+    b.className = 'tbtn kb-undo'; b.textContent = '↩ Rückgängig';
+    b.style.cssText = 'font-size:.82rem;padding:2px 9px;white-space:nowrap;';
+    const weg = () => { try { document.body.removeChild(t); } catch (_e) { /* */ } };
+    b.addEventListener('click', () => { weg(); try { zurueck(); } catch (_e) { /* */ } });
+    t.appendChild(s); t.appendChild(b);
+    document.body.appendChild(t);
+    setTimeout(weg, 8000);   // genug Zeit zum Lesen und Treffen
+  } catch (_e) { toast(msg); }
 }
 const LS_DM_CONTACTS = 'sbkim_pinnwand_contacts';
 let dmContacts = {}; // pubHex -> { name, pinnedAt }
@@ -669,9 +700,15 @@ function askAndPin(pub) {
 // sich hier auch bei bekannten Kontakten nur die Namens-Abfrage, und die
 // Sicherheitsnummer lag versteckt in der Kontakt-Verwaltung — also genau nicht
 // dort, wo man sie sucht. Jetzt: bekannt → Profil, unbekannt → aufnehmen.
+//
+// z-index 10040 (gilt für ALLE Fenster dieser App): Die SBKIM-Status-Leiste
+// (Modul 17) schwebt bei 9990, ihr Modal bei 9999. Unsere Fenster lagen bei
+// 80–96 und damit DARUNTER — die Lampen-Leiste saß auf jedem Dialog und fing
+// unten rechts Tipps ab. Beim headless-Lauf 2026-08-01 aufgefallen. Modul 17
+// selbst bleibt unangetastet (byte-1:1-Kopie, Drift-Guard).
 async function openKontaktProfil(pub) {
   const bg = document.createElement('div');
-  bg.style.cssText = 'position:fixed;inset:0;background:rgba(20,18,16,.6);display:flex;align-items:center;justify-content:center;z-index:95;padding:16px;';
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(20,18,16,.6);display:flex;align-items:center;justify-content:center;z-index:10040;padding:16px;';
   const box = document.createElement('div');
   box.id = 'kontakt-profil';
   box.style.cssText = 'background:var(--card,#1c1a17);color:var(--fg,#eee);border:1px solid var(--acc,#c9a961);' +
@@ -850,7 +887,7 @@ function refreshAuthorLabels(pub) {
 }
 async function openContacts() {
   const bg = document.createElement('div');
-  bg.style.cssText = 'position:fixed;inset:0;background:rgba(20,18,16,.6);display:flex;align-items:center;justify-content:center;z-index:80;padding:16px;';
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(20,18,16,.6);display:flex;align-items:center;justify-content:center;z-index:10040;padding:16px;';
   const box = document.createElement('div');
   box.style.cssText = 'background:var(--card,#1c1a17);color:var(--fg,#eee);border:1px solid var(--acc,#c9a961);border-radius:14px;max-width:520px;width:100%;max-height:82vh;overflow:auto;padding:16px 18px;font-size:.92rem;';
   // WICHTIG (Klaus' Frage 2026-08-01: „muss ich meine Kennung kopieren und
@@ -993,7 +1030,25 @@ const pendingAnswers = new Map();        // frageId -> [ev,...] (Antwort vor Fra
 const LS_HIDDEN = 'sbkim_pinnwand_hidden';
 let hidden = new Set();
 try { hidden = new Set(JSON.parse(localStorage.getItem(LS_HIDDEN) || '[]')); } catch { /* fail-soft */ }
-function saveHidden() { try { localStorage.setItem(LS_HIDDEN, JSON.stringify([...hidden])); } catch { /* */ } }
+// Wie viele Kennungen wir uns merken — für BEIDE Listen gleich (ausgeblendet
+// und zurückgezogen). Vorher: ausgeblendet unbegrenzt, zurückgezogen nur 500.
+//
+// WARUM NICHT WENIGER, sondern mehr (Klaus' Überlegung 2026-08-01 „vielleicht
+// die 500 runternehmen"): Die Grenze schützt nicht vor Wiederauftauchen, sie
+// VERURSACHT es. Vergessen wir eine Kennung, kommt der Zettel beim nächsten
+// Verbinden aus dem Relais-Vorrat zurück. Und der Vorrat ist größer als 500:
+// Wir fragen JEDES Relais nach bis zu 200 Zetteln, bei 9 Relais also bis zu
+// 1800 Kandidaten. 500 lag damit UNTER der Wiederkehr-Grenze — 2000 liegt
+// darüber. Der Preis ist Speicher: eine Kennung sind 64 Zeichen, 2000 davon
+// rund 130 KB je Liste. Verkraftbar, auch auf der geteilten Adresse.
+// Verdrängt wird immer das ÄLTESTE (Sets und Maps behalten die Reihenfolge).
+const MERK_GRENZE = 2000;
+function saveHidden() {
+  try {
+    if (hidden.size > MERK_GRENZE) hidden = new Set([...hidden].slice(-MERK_GRENZE));
+    localStorage.setItem(LS_HIDDEN, JSON.stringify([...hidden]));
+  } catch { /* */ }
+}
 
 // ── ABSENDER-SPERRE (nachträglich) ──────────────────────────────────────────
 // Vorbeugen ist begrenzt — reagieren nicht. Wer sich als Problem zeigt, wird
@@ -1017,14 +1072,140 @@ function sperreAbsender(pub) {
   return true;
 }
 function entsperreAbsender(pub) { const w = gesperrt.delete(pub); if (w) saveGesperrt(); return w; }
+// Ausblenden ist der häufigste Griff — und war bisher ENDGÜLTIG: einmal
+// danebengetippt, und der Zettel war nicht mehr zu holen (wir speichern seinen
+// INHALT bewusst nicht — was weg soll, soll auch nicht heimlich weiterliegen).
+// Also der WhatsApp-Weg: ein „Rückgängig" direkt in der Meldung, solange der
+// Zettel noch im Arbeitsspeicher liegt. Danach hilft nur „alle wieder
+// einblenden" im Ausgeblendet-Fenster — und auch nur, soweit die Relais den
+// Zettel noch haben.
+function merkeAusblendung(id, li) {
+  const e = { id, li, parent: li && li.parentNode, next: li && li.nextSibling,
+    view: null, answerEntry: null, answerIndex: 0, qid: null };
+  const v = qViews.get(id);
+  if (v) { e.view = v; qViews.delete(id); return e; }
+  for (const [qid, view] of qViews) {
+    const i = (view.answers || []).findIndex((x) => x && x.ev && x.ev.id === id);
+    if (i < 0) continue;
+    e.qid = qid; e.answerIndex = i; e.answerEntry = view.answers[i];
+    view.answers.splice(i, 1); view.answerIds.delete(id);
+    break;
+  }
+  return e;
+}
+function zeigeWieder(e) {
+  hidden.delete(e.id); saveHidden();
+  if (e.view) qViews.set(e.id, e.view);
+  if (e.answerEntry) {
+    const v = qViews.get(e.qid);
+    if (v) { v.answers.splice(Math.min(e.answerIndex, v.answers.length), 0, e.answerEntry); v.answerIds.add(e.id); }
+  }
+  const leer = threads.querySelector('.empty'); if (leer) leer.remove();
+  if (e.parent && e.parent.isConnected) e.parent.insertBefore(e.li, (e.next && e.next.isConnected) ? e.next : null);
+  else threads.insertBefore(e.li, threads.firstChild);
+}
+function bretLeerHinweis() {
+  if (threads.children.length) return;
+  const e = document.createElement('li'); e.className = 'empty';
+  e.textContent = 'Brett leer — neue Fragen erscheinen hier.'; threads.appendChild(e);
+}
 function hideQuestion(id, li) {
   hidden.add(id); saveHidden();
+  const e = merkeAusblendung(id, li);
   if (li && li.parentNode) li.parentNode.removeChild(li);
-  qViews.delete(id);
-  if (!threads.children.length) {
-    const e = document.createElement('li'); e.className = 'empty';
-    e.textContent = 'Brett leer — neue Fragen erscheinen hier.'; threads.appendChild(e);
+  bretLeerHinweis();
+  toastRueckgaengig('Ausgeblendet — nur bei dir.', () => { zeigeWieder(e); toast('Wieder eingeblendet.'); });
+}
+// Das Fenster „👁 Ausgeblendet": der eine Ort, an dem man alles Weggeklickte
+// wiederfindet. Vorher versprach die Hilfe „Rückgängig geht es in den
+// Einstellungen" — es GAB keine Einstellungen. Das war eine falsche Zusage.
+function openAusgeblendet() {
+  const bg = document.createElement('div');
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(20,18,16,.6);display:flex;align-items:center;justify-content:center;z-index:10040;padding:16px;';
+  const box = document.createElement('div');
+  // Kennung am INNEREN Kasten (wie beim Lösch-Dialog): Ein `position:fixed`-
+  // Element hat immer `offsetParent === null`, an ihm ist Sichtbarkeit nicht
+  // messbar. Und z-index über der Status-Leiste, sonst liegt das Fenster darunter.
+  box.id = 'ausgeblendet-fenster';
+  box.style.cssText = 'background:var(--card,#1c1a17);color:var(--fg,#eee);border:1px solid var(--acc,#c9a961);border-radius:14px;max-width:520px;width:100%;max-height:82vh;overflow:auto;padding:16px 18px;font-size:.92rem;';
+  const zu = () => { try { document.body.removeChild(bg); } catch (_e) { /* */ } };
+
+  const h = document.createElement('h3');
+  h.style.cssText = 'margin:.1em 0 .5em'; h.textContent = '👁 Ausgeblendet & stumm';
+  box.appendChild(h);
+
+  // — Ausgeblendete Zettel —
+  const s1 = document.createElement('div');
+  s1.style.cssText = 'border-top:1px solid rgba(255,255,255,.12);padding:10px 0;';
+  const t1 = document.createElement('div');
+  t1.innerHTML = '<b>Ausgeblendete Nachrichten:</b> ' + hidden.size + ' von ' + MERK_GRENZE;
+  const e1 = document.createElement('div');
+  e1.style.cssText = 'opacity:.78;margin:.35em 0 .6em;line-height:1.5';
+  e1.textContent = 'Diese siehst du nicht mehr — nur auf diesem Gerät, die anderen sehen sie weiter. '
+    + 'Was du ausblendest, wird NICHT gespeichert: Wir merken uns nur die Kennung, nicht den Text. '
+    + 'Darum kann man einzelne Nachrichten hier nicht heraussuchen — nur alle zusammen zurückholen. '
+    + 'Und auch das nur, soweit die Relais sie noch vorrätig haben.';
+  s1.appendChild(t1); s1.appendChild(e1);
+  const b1 = document.createElement('button');
+  b1.className = 'tbtn kb-unhide-all';
+  b1.textContent = '👁 Alle wieder einblenden (' + hidden.size + ')';
+  b1.disabled = hidden.size === 0;
+  b1.addEventListener('click', () => {
+    if (!confirm('Alle ' + hidden.size + ' ausgeblendeten Nachrichten wieder zeigen?\n\n'
+      + 'Die Seite lädt danach neu und holt sie sich von den Relais — soweit die sie noch haben.')) return;
+    hidden.clear(); saveHidden();
+    zu(); location.reload();
+  });
+  s1.appendChild(b1);
+  box.appendChild(s1);
+
+  // — Stummgeschaltete Absender —
+  const s2 = document.createElement('div');
+  s2.style.cssText = 'border-top:1px solid rgba(255,255,255,.12);padding:10px 0;';
+  const t2 = document.createElement('div');
+  t2.innerHTML = '<b>Stummgeschaltete Absender:</b> ' + gesperrt.size;
+  s2.appendChild(t2);
+  if (!gesperrt.size) {
+    const leer = document.createElement('div');
+    leer.style.cssText = 'opacity:.7;margin-top:.3em'; leer.textContent = 'Niemand — du siehst alle Absender.';
+    s2.appendChild(leer);
   }
+  for (const pub of [...gesperrt]) {
+    const z = document.createElement('div');
+    z.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap;';
+    const n = document.createElement('span');
+    n.className = 'mono'; n.style.opacity = '.85';
+    n.textContent = contactName(pub);        // textContent: fremde Namen nie als HTML
+    const f = document.createElement('button');
+    f.className = 'tbtn kb-unmute'; f.textContent = '🔔 wieder zeigen';
+    f.addEventListener('click', () => {
+      entsperreAbsender(pub);
+      zu(); openAusgeblendet();
+      toast('Wieder sichtbar — seine Zettel erscheinen ab dem nächsten Laden.');
+    });
+    z.appendChild(n); z.appendChild(f); s2.appendChild(z);
+  }
+  box.appendChild(s2);
+
+  // — Zurückgezogene (nur zur Information) —
+  const s3 = document.createElement('div');
+  s3.style.cssText = 'border-top:1px solid rgba(255,255,255,.12);padding:10px 0;';
+  s3.innerHTML = '<b>Zurückgezogene Nachrichten:</b> ' + zurueckgezogen.size + ' von ' + MERK_GRENZE;
+  const e3 = document.createElement('div');
+  e3.style.cssText = 'opacity:.78;margin-top:.35em;line-height:1.5';
+  e3.textContent = 'Das sind Nachrichten, deren Absender sie zurückgezogen hat (auch deine eigenen). '
+    + 'Sie bleiben weg, auch wenn ein Relais sie später erneut ausliefert — das ist der Sinn. '
+    + 'Deshalb kann man sie hier nicht zurückholen: Es war der Wunsch dessen, der sie geschrieben hat.';
+  s3.appendChild(e3);
+  box.appendChild(s3);
+
+  const close = document.createElement('button');
+  close.className = 'ghost kb-ausg-close'; close.textContent = 'Schließen'; close.style.marginTop = '12px';
+  close.addEventListener('click', zu);
+  box.appendChild(close);
+  bg.appendChild(box);
+  bg.addEventListener('click', (e) => { if (e.target === bg) zu(); });
+  document.body.appendChild(bg);
 }
 // ── Zurückziehen für alle (NIP-09) ───────────────────────────────────────────
 // „Für alle löschen" wie bei WhatsApp: eine Lösch-Meldung (kind 5) geht raus,
@@ -1048,7 +1229,12 @@ try {
   for (const e of roh) Array.isArray(e) ? zurueckgezogen.set(e[0], e[1] || 0) : zurueckgezogen.set(e, 0);
 } catch { /* */ }
 function saveZurueckgezogen() {
-  try { localStorage.setItem(LS_ZURUECKGEZOGEN, JSON.stringify([...zurueckgezogen].slice(-500))); } catch { /* */ }
+  try {
+    // Gleiche Grenze wie beim Ausblenden (siehe MERK_GRENZE) — vorher standen
+    // hier 500, ausgerechnet bei der Liste, die am wichtigsten ist.
+    if (zurueckgezogen.size > MERK_GRENZE) zurueckgezogen = new Map([...zurueckgezogen].slice(-MERK_GRENZE));
+    localStorage.setItem(LS_ZURUECKGEZOGEN, JSON.stringify([...zurueckgezogen]));
+  } catch { /* */ }
 }
 // Wie lange der Platzhalter „🚫 zurückgezogen" stehen bleibt.
 // Klaus 2026-08-01: „bis zu einer gewissen Zeit … aber dass es dann nicht
@@ -1171,7 +1357,7 @@ async function zurueckziehenFuerAlle(id, still) {
 function openLoeschDialog(ev, li) {
   const eigen = ev.pubkey === pubHex;
   const bg = document.createElement('div');
-  bg.style.cssText = 'position:fixed;inset:0;background:rgba(20,18,16,.6);display:flex;align-items:center;justify-content:center;z-index:96;padding:16px;';
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(20,18,16,.6);display:flex;align-items:center;justify-content:center;z-index:10040;padding:16px;';
   const box = document.createElement('div');
   box.id = 'loesch-dialog';
   box.style.cssText = 'background:var(--card,#1c1a17);color:var(--fg,#eee);border:1px solid var(--acc,#c9a961);' +
@@ -1221,12 +1407,24 @@ function openLoeschDialog(ev, li) {
   document.body.appendChild(bg);
 }
 function clearBoard() {
-  for (const id of [...qViews.keys()]) hidden.add(id);
+  // Auch hier ein Rückgängig: „🧹 leeren" nimmt auf einen Schlag alles weg,
+  // das ist der Griff, den man am ehesten bereut.
+  const merker = [];
+  for (const id of [...qViews.keys()]) {
+    hidden.add(id);
+    const li = threads.querySelector('[data-qid="' + id + '"]');
+    merker.push(merkeAusblendung(id, li));
+  }
   saveHidden();
   threads.innerHTML = '';
   const e = document.createElement('li'); e.className = 'empty';
   e.textContent = 'Brett geleert — neue Fragen erscheinen wieder hier.'; threads.appendChild(e);
   qViews.clear();
+  if (!merker.length) return;
+  toastRueckgaengig(merker.length + ' Zettel ausgeblendet — nur bei dir.', () => {
+    for (const m of merker.reverse()) zeigeWieder(m);
+    toast('Wieder eingeblendet.');
+  });
 }
 
 function timeStr(ts) { return new Date(ts * 1000).toLocaleTimeString('de-DE'); }
@@ -1315,6 +1513,7 @@ function renderQuestion(ev, relay) {
 }
 
 function renderAnswer(ev, relay) {
+  if (hidden.has(ev.id)) return;   // einzeln ausgeblendete Antwort bleibt weg
   const qid = refOf(ev);
   const view = qViews.get(qid);
   if (!view) { // Frage noch nicht da → puffern
@@ -1327,6 +1526,14 @@ function renderAnswer(ev, relay) {
   const li = document.createElement('li');
   li.dataset.aid = ev.id;          // damit ein Zurückziehen die Antwort findet
   if (ev.pubkey === pubHex) li.className = 'mine';
+  // Eigenes ✕ pro Antwort (Klaus 2026-08-01): Bisher saß das ✕ nur am Zettel
+  // und nahm den GANZEN Strang mit. Stört nur eine einzelne Antwort, fehlte
+  // der Knopf dafür ganz.
+  const adel = document.createElement('button');
+  adel.className = 'q-del a-del'; adel.textContent = '✕';
+  adel.title = ev.pubkey === pubHex ? 'Löschen — nur bei dir oder bei allen' : 'Bei dir ausblenden';
+  adel.addEventListener('click', () => { openLoeschDialog(ev, li); });
+  li.appendChild(adel);
   const head = document.createElement('div');
   head.className = 'a-head';
   const who = document.createElement('span');
@@ -2036,7 +2243,7 @@ $('boardkey-set').addEventListener('click', async () => {
 function openRecipientChooser() {
   const keys = Object.keys(dmContacts);
   const bg = document.createElement('div');
-  bg.style.cssText = 'position:fixed;inset:0;background:rgba(20,18,16,.6);display:flex;align-items:center;justify-content:center;z-index:80;padding:16px;';
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(20,18,16,.6);display:flex;align-items:center;justify-content:center;z-index:10040;padding:16px;';
   const box = document.createElement('div');
   box.style.cssText = 'background:var(--card,#1c1a17);color:var(--fg,#eee);border:1px solid var(--acc,#c9a961);border-radius:14px;max-width:520px;width:100%;max-height:82vh;overflow:auto;padding:16px 18px;font-size:.92rem;';
   const chosen = new Set(dmRecipients);
@@ -2310,7 +2517,7 @@ function openKontaktSenden() {
   if (!empfaenger.length) { toast('Erst oben „Privat an" wählen — an wen soll der Kontakt gehen?'); return; }
   const keys = Object.keys(dmContacts).filter((k) => !empfaenger.includes(k));
   const bg = document.createElement('div');
-  bg.style.cssText = 'position:fixed;inset:0;background:rgba(20,18,16,.6);display:flex;align-items:center;justify-content:center;z-index:90;padding:16px;';
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(20,18,16,.6);display:flex;align-items:center;justify-content:center;z-index:10040;padding:16px;';
   const box = document.createElement('div');
   box.id = 'kontakt-senden';
   box.style.cssText = 'background:var(--card,#1c1a17);color:var(--fg,#eee);border:1px solid var(--acc,#c9a961);border-radius:14px;max-width:460px;width:100%;max-height:82vh;overflow:auto;padding:16px 18px;font-size:.92rem;';
@@ -2510,6 +2717,7 @@ function handleAnnouncement(ev) {
 
 // ---- Werkzeug-Knöpfe (leeren / vergrößern / vollbild / neu laden) ----
 $('board-clear').addEventListener('click', clearBoard);
+$('ausgeblendet').addEventListener('click', openAusgeblendet);
 
 // „Alles zurückziehen, was ich geschickt habe" (Klaus 2026-08-01). Einzeln geht
 // es über das ✕ am Zettel — das hier ist der Sammelweg für alle eigenen auf
@@ -2694,6 +2902,7 @@ window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubH
   zurueckziehenFuerAlle, zurueckgezogene: () => [...zurueckgezogen.keys()],
   // Nur für die Prüfung: die Platzhalter-Dauer verkürzen, statt eine Stunde zu warten.
   setPlatzhalterDauer: (ms) => { PLATZHALTER_DAUER = ms; }, raeumePlatzhalter,
+  ausgeblendete: () => [...hidden], merkGrenze: () => MERK_GRENZE, toastRueckgaengig,
   makeContactCard, parseContactCard, setPrivatAn: (pubs) => { dmRecipients = pubs.slice(); refreshRecipientSelect(); } };
 </script>
 
