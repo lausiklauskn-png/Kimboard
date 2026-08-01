@@ -21,6 +21,7 @@
  */
 import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
+import { starteRelais, testSeite } from './_werkzeug.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -30,6 +31,12 @@ const PORT = 8463;
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL ' + m); } };
 
+// Seit dem Heim-Relais gilt: Was nirgends ankommt, wird auch nicht als
+// gesendet ausgegeben. Ohne Relais verweigert der Antwort-Knopf also — richtig
+// so, aber dann ließe sich am Knopf nichts mehr messen. Darum ein echtes
+// kleines Relais und dieselbe Seite mit dessen Adresse.
+const RELAY = await starteRelais(8464);
+const SEITE = testSeite(ROOT, [RELAY.url], '.tmp-antwort-privat.html');
 const srv = spawn('python3', ['-m', 'http.server', String(PORT)], { cwd: ROOT, stdio: 'ignore' });
 await new Promise((r) => setTimeout(r, 800));
 
@@ -39,7 +46,7 @@ try {
   const p = await browser.newPage({ viewport: { width: 900, height: 1000 } });
   const errs = [];
   p.on('pageerror', (e) => errs.push(String(e)));
-  await p.goto(`http://127.0.0.1:${PORT}/index.html`, { waitUntil: 'domcontentloaded' });
+  await p.goto(`http://127.0.0.1:${PORT}/${SEITE.datei}`, { waitUntil: 'domcontentloaded' });
   await p.waitForTimeout(1800);
 
   const GEHEIM = 'Ja, ich komme um 18 Uhr';
@@ -127,6 +134,8 @@ try {
 } finally {
   if (browser) await browser.close();
   srv.kill();
+  SEITE.weg();
+  try { await RELAY.aus(); } catch (_e) { /* */ }
 }
 console.log(`\n== Ergebnis: ${pass} ok, ${fail} FAIL ==`);
 process.exit(fail ? 1 : 0);
