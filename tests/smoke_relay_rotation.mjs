@@ -87,6 +87,29 @@ ok(R.parseAnnouncement('nur ein normaler Zettel', POOL) === null, 'normaler Text
 ok(R.parseAnnouncement('{kaputt', POOL) === null, 'kaputtes JSON → null (kein Absturz)');
 ok(R.isAnnouncement('Frage: was kochen wir?') === false, 'normaler Zettel wird nicht als Ansage verwechselt');
 
+// --- Nachholen: die Relais der letzten Fenster (Stufe 5) ---
+// Das ist die Rechnung hinter „🕓 Älteres nachholen": Wer später startet, hängt
+// nur an den JETZIGEN Relais. Was vorher über andere lief, fehlt ihm dauerhaft.
+const W = 500;
+const jetzt = await R.relaysForWindow(SECRET, POOL, 2, W);
+const letzte1 = await R.relaysForRecentWindows(SECRET, POOL, 2, W, 1);
+ok(letzte1.join() === jetzt.join(), 'ein Fenster zurück = genau das aktuelle Fenster');
+const letzte3 = await R.relaysForRecentWindows(SECRET, POOL, 2, W, 3);
+ok(new Set(letzte3).size === letzte3.length, 'keine Doppelten über mehrere Fenster');
+ok(letzte3.every((u) => POOL.includes(u)), 'nur Relais aus dem erlaubten Pool');
+ok(letzte3.length >= jetzt.length, 'mehr Fenster → mindestens so viele Relais wie jetzt');
+ok(jetzt.every((u) => letzte3.includes(u)), 'die aktuellen Relais sind immer dabei');
+// Genau der Punkt, um den es geht: ein früheres Fenster hatte ANDERE Relais,
+// und die stehen jetzt mit auf der Liste.
+const vorher = await R.relaysForWindow(SECRET, POOL, 2, W - 1);
+ok(vorher.some((u) => !jetzt.includes(u)), 'ein früheres Fenster benutzte auch andere Relais');
+ok(vorher.every((u) => letzte3.includes(u)), '…und genau die holt die Nachhol-Liste dazu');
+const viele = await R.relaysForRecentWindows(SECRET, POOL, 2, W, 999);
+ok(viele.length === POOL.length, 'nach genug Fenstern ist es der ganze Pool — mehr gibt es nicht');
+ok((await R.relaysForRecentWindows(SECRET, [], 2, W, 5)).length === 0, 'leerer Pool → leer (kein Wurf)');
+ok((await R.relaysForRecentWindows(SECRET, POOL, 2, W, 0)).join() === jetzt.join(), '0 Fenster → mindestens das aktuelle');
+ok((await R.relaysForRecentWindows('', POOL, 2, W, 3)).join() === POOL.slice(0, 2).join(), 'ohne Geheimnis → unveränderte Reihenfolge');
+
 // --- fail-soft ---
 ok((await R.relaysForWindow(SECRET, [], 3, 1)).length === 0, 'leerer Pool → leere Auswahl (kein Wurf)');
 ok((await R.relaysForWindow('', POOL, 2, 1)).join() === POOL.slice(0, 2).join(), 'ohne Geheimnis → unveränderte Reihenfolge');

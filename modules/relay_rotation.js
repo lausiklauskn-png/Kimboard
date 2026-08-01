@@ -73,6 +73,37 @@ export async function relaysForWindow(secret, pool, count, windowIdx) {
 }
 
 /**
+ * Die Relais der letzten `howMany` Fenster — als Menge, ohne Doppelte.
+ *
+ * WOFÜR: Wer später dazukommt, verbindet sich nur mit den AKTUELLEN Relais.
+ * Was in früheren Fenstern über andere Relais lief, sieht er nie — er ist
+ * dauerhaft auf einem anderen Stand als die anderen. Weil sich die Fenster
+ * aber rückwärts ausrechnen lassen, weiß jedes Gerät genau, welche Relais
+ * zuletzt dran waren, und kann dort einmalig den Vorrat nachlesen.
+ *
+ * EHRLICH: Nach wenigen Fenstern ist das praktisch der ganze Pool — das ist
+ * kein Fehler, sondern der Normalfall bei kleinen Pools. Die Funktion bleibt
+ * trotzdem richtig: Sie liefert die Relais, die wirklich dran waren, in der
+ * Reihenfolge „neuestes Fenster zuerst", und bei großen Pools ist das
+ * deutlich weniger als alles.
+ *
+ * Fail-soft: leerer Pool → [], howMany ≤ 0 → nur das aktuelle Fenster.
+ */
+export async function relaysForRecentWindows(secret, pool, count, windowIdx, howMany) {
+  const list = (Array.isArray(pool) ? pool : []).filter((u) => typeof u === 'string' && u);
+  if (!list.length) return [];
+  const n = Math.max(1, Math.floor(howMany || 1));
+  const w = Math.floor(windowIdx || 0);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const fenster = await relaysForWindow(secret, list, count, w - i);
+    for (const u of fenster) if (!out.includes(u)) out.push(u);
+    if (out.length >= list.length) break;   // mehr als den Pool gibt es nicht
+  }
+  return out;
+}
+
+/**
  * Aktueller Stand der Rotation.
  * Liefert `current` (jetziges Fenster), `previous` (voriges, fürs Mithören) und
  * `union` — die Menge, mit der man verbunden sein sollte (Überlappung), damit
