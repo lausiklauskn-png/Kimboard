@@ -625,11 +625,102 @@ function askAndPin(pub) {
   if (name === null) return; // abgebrochen
   pinContact(pub, name);
 }
+// ── Kontakt-Profil (WhatsApp-Muster) ─────────────────────────────────────────
+// Bei WhatsApp tippt man auf einen Namen und sieht das PROFIL. Vorher öffnete
+// sich hier auch bei bekannten Kontakten nur die Namens-Abfrage, und die
+// Sicherheitsnummer lag versteckt in der Kontakt-Verwaltung — also genau nicht
+// dort, wo man sie sucht. Jetzt: bekannt → Profil, unbekannt → aufnehmen.
+async function openKontaktProfil(pub) {
+  const bg = document.createElement('div');
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(20,18,16,.6);display:flex;align-items:center;justify-content:center;z-index:95;padding:16px;';
+  const box = document.createElement('div');
+  box.id = 'kontakt-profil';
+  box.style.cssText = 'background:var(--card,#1c1a17);color:var(--fg,#eee);border:1px solid var(--acc,#c9a961);' +
+    'border-radius:14px;max-width:440px;width:100%;max-height:82vh;overflow:auto;padding:16px 18px;font-size:.92rem;';
+  const zu = () => { if (bg.parentNode) document.body.removeChild(bg); };
+
+  // Kopf: Name + Kennung (beides über textContent — Namen sind frei wählbar).
+  const h = document.createElement('h3');
+  h.style.cssText = 'margin:.1em 0 .2em;display:flex;align-items:center;gap:8px;';
+  h.textContent = '👤 ' + contactName(pub);
+  const kennung = document.createElement('div');
+  kennung.className = 'mono';
+  kennung.style.cssText = 'font-size:.74rem;opacity:.6;word-break:break-all;margin-bottom:10px';
+  kennung.textContent = pub;
+  box.appendChild(h); box.appendChild(kennung);
+
+  // Sicherheitsnummer — hier gehört sie hin, nicht in eine Verwaltung.
+  const snBox = document.createElement('div');
+  snBox.style.cssText = 'border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:10px 12px;margin-bottom:12px;';
+  const snTitel = document.createElement('div');
+  snTitel.style.cssText = 'font-weight:600;margin-bottom:4px'; snTitel.textContent = '🔢 Sicherheitsnummer';
+  const snWert = document.createElement('div');
+  snWert.className = 'mono kb-sn';
+  snWert.style.cssText = 'font-size:.9rem;letter-spacing:.5px;margin:3px 0;word-break:break-all';
+  snWert.textContent = '…';
+  const snHinweis = document.createElement('div');
+  snHinweis.style.cssText = 'font-size:.8rem;opacity:.75';
+  snHinweis.textContent = 'Einmal gemeinsam vorlesen (Telefon oder persönlich). Stimmt sie bei euch beiden ' +
+    'überein, ist sicher kein Fremder dazwischen. Sie ist aus euren beiden Schlüsseln berechnet.';
+  snBox.appendChild(snTitel); snBox.appendChild(snWert); snBox.appendChild(snHinweis);
+  box.appendChild(snBox);
+  try { snWert.textContent = await safetyNumber(pubHex, pub); }
+  catch (_e) { snWert.textContent = '(konnte nicht berechnet werden)'; }
+
+  // Handlungen
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
+  const schreiben = document.createElement('button');
+  schreiben.className = 'tbtn kb-prof-write'; schreiben.textContent = '🔒 Privat schreiben';
+  schreiben.addEventListener('click', () => {
+    dmRecipients = [pub];
+    refreshRecipientSelect();
+    zu();
+    const feld = $('qmsg');
+    if (feld) { feld.scrollIntoView({ block: 'center', behavior: 'smooth' }); try { feld.focus(); } catch (_e) { /* */ } }
+    toast('Der nächste Zettel geht privat an ' + contactName(pub) + '.');
+  });
+  const umbenennen = document.createElement('button');
+  umbenennen.className = 'tbtn kb-prof-rename'; umbenennen.textContent = '✏️ Umbenennen';
+  umbenennen.addEventListener('click', () => {
+    const n = prompt('Name für diesen Kontakt:', contactName(pub));
+    if (n === null) return;
+    if (pinContact(pub, n)) { h.textContent = '👤 ' + contactName(pub); }
+  });
+  const entfernen = document.createElement('button');
+  entfernen.className = 'tbtn kb-prof-remove'; entfernen.textContent = '🗑 Entfernen';
+  entfernen.style.opacity = '.8';
+  entfernen.addEventListener('click', () => {
+    if (!confirm('„' + contactName(pub) + '" aus deinen Kontakten entfernen?\n\n' +
+      'Ihr könnt euch danach nicht mehr privat schreiben, bis du ihn wieder aufnimmst. ' +
+      'Nur auf diesem Gerät — der andere erfährt nichts davon.')) return;
+    delete dmContacts[pub];
+    saveContacts(); refreshRecipientSelect(); refreshAuthorLabels(pub);
+    zu(); toast('Kontakt entfernt.');
+  });
+  row.appendChild(schreiben); row.appendChild(umbenennen); row.appendChild(entfernen);
+  box.appendChild(row);
+
+  const close = document.createElement('button');
+  close.className = 'ghost kb-prof-close'; close.textContent = 'Schließen'; close.style.marginTop = '12px';
+  close.addEventListener('click', zu);
+  box.appendChild(close);
+  bg.appendChild(box);
+  bg.addEventListener('click', (e) => { if (e.target === bg) zu(); });
+  document.body.appendChild(bg);
+}
 function makeWhoClickable(who, pub) {
   who.dataset.pub = pub;               // für die Sofort-Aktualisierung nach dem Merken
+  if (pub === pubHex) return;          // der eigene Name ist kein Kontakt
   who.style.cursor = 'pointer';
-  who.title = 'Klick: als Kontakt merken (für private Nachrichten)';
-  who.addEventListener('click', () => askAndPin(pub));
+  who.classList.add('kb-who-click');
+  // Bekannt → Profil (WhatsApp-Muster). Unbekannt → aufnehmen.
+  who.title = dmContacts[pub]
+    ? 'Tippen: Profil ansehen (Sicherheitsnummer, privat schreiben)'
+    : 'Tippen: als Kontakt merken (für private Nachrichten)';
+  who.addEventListener('click', () => {
+    if (dmContacts[pub]) openKontaktProfil(pub); else askAndPin(pub);
+  });
 }
 // Baut den sichtbaren Kontakt-Knopf (bzw. das Kontakt-Zeichen, wenn man ihn
 // schon hat). Am eigenen Zettel: nichts. Erzeugen und Einfügen sind getrennt,
@@ -683,6 +774,12 @@ function attachContactAction(head, pub) {
 function refreshAuthorLabels(pub) {
   document.querySelectorAll('[data-pub="' + pub + '"]').forEach((n) => {
     n.textContent = authorLabel({ pubkey: pub, tags: [] });
+    // Der Tipp-Hinweis wechselt mit: aus „merken" wird „Profil ansehen".
+    if (pub !== pubHex) {
+      n.title = dmContacts[pub]
+        ? 'Tippen: Profil ansehen (Sicherheitsnummer, privat schreiben)'
+        : 'Tippen: als Kontakt merken (für private Nachrichten)';
+    }
   });
   document.querySelectorAll('[data-pub-btn="' + pub + '"]').forEach((n) => {
     const el = makeContactAction(pub);

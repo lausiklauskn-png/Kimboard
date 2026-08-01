@@ -49,6 +49,7 @@
 
     // — Kontakt-Knopf am Zettel (Stufe 1) —
     '.kb-mute': ['🔇 Stumm schalten', 'Blendet ALLE Zettel dieses Absenders bei dir aus — dauerhaft, auch nach dem Neuladen. Wirkt NUR auf diesem Gerät: der andere erfährt nichts davon, und niemand sonst sieht deine Liste. Gedacht für den Fall, dass jemand stört oder Unsinn schickt. Rückgängig geht es in den Einstellungen.'],
+    '.kb-who-click': ['👤 Der Name über einem Zettel', 'Tippen lohnt sich: Ist die Person schon dein Kontakt, öffnet sich ihr PROFIL — mit der Sicherheitsnummer zum Vergleichen, „privat schreiben", umbenennen und entfernen. Ist sie noch kein Kontakt, kannst du sie mit einem Tipp aufnehmen.'],
     '.kb-addcontact': ['➕ Kontakt', 'Merkt sich die Person, die diesen Zettel geschrieben hat — danach kannst du ihr privat und verschlüsselt schreiben. Du musst dafür KEINEN Schlüssel abtippen: er steckt schon in ihrem Zettel. Ein Tipp, ein Name, fertig. Sobald sie dein Kontakt ist, erscheint bei ihr auch die Sicherheitsnummer zum Vergleichen.'],
 
     // — Private Nachrichten —
