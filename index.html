@@ -791,36 +791,29 @@ async function openContacts() {
   bg.style.cssText = 'position:fixed;inset:0;background:rgba(20,18,16,.6);display:flex;align-items:center;justify-content:center;z-index:80;padding:16px;';
   const box = document.createElement('div');
   box.style.cssText = 'background:var(--card,#1c1a17);color:var(--fg,#eee);border:1px solid var(--acc,#c9a961);border-radius:14px;max-width:520px;width:100%;max-height:82vh;overflow:auto;padding:16px 18px;font-size:.92rem;';
+  // WICHTIG (Klaus' Frage 2026-08-01: „muss ich meine Kennung kopieren und
+  // schicken?"): NEIN — der Schlüssel reist in jedem Zettel mit. Der eigene
+  // Schlüssel stand hier ganz oben und groß und las sich dadurch wie der
+  // normale Weg. Er ist aber die AUSNAHME und sitzt jetzt unten im
+  // zugeklappten Bereich. Oben steht, was wirklich zählt.
   box.innerHTML = '<h3 style="margin:.1em 0 .5em">🔒 Kontakte (private Nachrichten)</h3>' +
     '<p style="opacity:.8;margin:.2em 0 .8em">Du kannst an einen Kontakt <b>privat</b> schreiben — nur ihr beide könnt es lesen. ' +
-    'Das sind <b>nicht</b> die Kontakte deines Telefons — nur Leute, mit denen du hier verschlüsselt schreiben willst.</p>';
-  // Eigener Schlüssel zum Weitergeben — ohne ihn kann dich niemand hinzufügen.
-  const mine = document.createElement('div');
-  mine.style.cssText = 'border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:10px 12px;margin:0 0 12px;';
-  mine.innerHTML = '<div style="font-weight:700;margin-bottom:4px">🔑 Dein eigener Schlüssel</div>' +
-    '<div style="opacity:.8;font-size:.86rem;margin-bottom:6px">Gib ihn der Person, die dir schreiben soll (vorlesen, schicken, zeigen). Er ist <b>öffentlich</b> — er verrät nichts Geheimes.</div>' +
-    '<div class="mono" style="font-size:.76rem;word-break:break-all;opacity:.9">' + pubHex + '</div>';
-  const cp = document.createElement('button'); cp.className = 'tbtn'; cp.textContent = '📋 Kopieren';
-  cp.style.marginTop = '7px';
-  cp.addEventListener('click', () => { try { navigator.clipboard.writeText(pubHex); toast('Schlüssel kopiert'); } catch (_e) { toast('Bitte von Hand markieren.'); } });
-  mine.appendChild(cp); box.appendChild(mine);
+    'Das sind <b>nicht</b> die Kontakte deines Telefons — nur Leute, mit denen du hier verschlüsselt schreiben willst.</p>' +
+    '<div style="border:1px solid rgba(54,214,195,.35);background:rgba(54,214,195,.07);border-radius:10px;' +
+    'padding:10px 12px;margin:0 0 12px;line-height:1.5">' +
+    '<div style="font-weight:700;margin-bottom:3px">So bekommst du Kontakte</div>' +
+    'Sobald jemand einen Zettel aufs Brett stellt, <b>tippe auf seinen Namen</b> → Name vergeben → fertig. ' +
+    '<b>Du musst nichts abtippen und nichts verschicken</b> — der Schlüssel steckt schon in jedem Zettel.' +
+    '</div>';
 
   const list = document.createElement('div');
   const keys = Object.keys(dmContacts);
   if (!keys.length) {
-    // Leere Liste = der Moment, in dem man am ehesten rätselt → Anleitung zeigen.
     const p = document.createElement('div');
     p.style.cssText = 'border:1px dashed rgba(255,255,255,.22);border-radius:10px;padding:11px 13px;line-height:1.55;';
-    p.innerHTML = '<b>Noch keine Kontakte.</b> So bekommst du deinen ersten — zwei Wege:' +
-      '<ol style="margin:.5em 0 .2em;padding-left:1.25em">' +
-      '<li><b>Der einfache Weg:</b> Lass die andere Person einen Zettel aufs Brett stellen. ' +
-      'Dann <b>tippe auf ihren Namen</b> über dem Zettel → Namen vergeben → fertig.</li>' +
-      '<li><b>Ohne Zettel:</b> Lass dir ihren Schlüssel geben (sie findet ihn hier oben unter „Dein eigener Schlüssel") ' +
-      'und füge ihn unten ein.</li>' +
-      '</ol>' +
-      '<div style="margin-top:.5em;opacity:.85">Die <b>Sicherheitsnummer</b> gibt es erst, <b>sobald ein Kontakt da ist</b> — ' +
-      'sie erscheint dann automatisch hier in der Liste. Du musst sie nirgends beantragen oder ausdenken: ' +
-      'sie wird aus euren beiden Schlüsseln berechnet und ist bei euch beiden dieselbe.</div>';
+    p.innerHTML = '<b>Noch keine Kontakte.</b> Die <b>Sicherheitsnummer</b> gibt es erst, ' +
+      '<b>sobald ein Kontakt da ist</b> — sie erscheint dann automatisch hier. Du musst sie nirgends ' +
+      'beantragen oder ausdenken: sie wird aus euren beiden Schlüsseln berechnet und ist bei euch beiden dieselbe.';
     list.appendChild(p);
   } else {
     const p = document.createElement('div');
@@ -847,14 +840,44 @@ async function openContacts() {
   const addBtn = document.createElement('button'); addBtn.className = 'tbtn'; addBtn.textContent = '＋ merken';
   addBtn.addEventListener('click', () => { if (pinContact(inp.value, nm.value)) { document.body.removeChild(bg); openContacts(); } });
   add.appendChild(inp); add.appendChild(nm); add.appendChild(addBtn);
-  // Handeingabe ist der AUSNAHMEFALL — sie wird zugeklappt, damit der normale
-  // Weg (Knopf „➕ Kontakt" am Zettel) nicht danebensteht wie gleichwertig.
+  // AUSNAHME-BEREICH: beides hier drin — der eigene Schlüssel zum Weitergeben
+  // UND die Handeingabe. Beides braucht man nur, wenn jemand noch NIE einen
+  // Zettel geschrieben hat; sonst geht alles über den Namen am Zettel.
   const details = document.createElement('details');
+  details.id = 'kontakte-ausnahme';
   details.style.marginTop = '12px';
   const sum = document.createElement('summary');
-  sum.textContent = 'Ohne Zettel: Schlüssel von Hand eingeben';
+  sum.textContent = 'Nur nötig, wenn jemand noch nie geschrieben hat';
   sum.style.cssText = 'cursor:pointer;opacity:.8;font-size:.88rem;';
-  details.appendChild(sum); details.appendChild(add); box.appendChild(details);
+  details.appendChild(sum);
+
+  const erklaer = document.createElement('div');
+  erklaer.style.cssText = 'opacity:.8;font-size:.86rem;margin:8px 0 10px;line-height:1.5;';
+  erklaer.textContent = 'Wer noch keinen Zettel geschrieben hat, taucht nirgends auf — dann müsst ihr die ' +
+    'Schlüssel einmal von Hand austauschen. Sie sind öffentlich und verraten nichts Geheimes.';
+  details.appendChild(erklaer);
+
+  const mine = document.createElement('div');
+  mine.style.cssText = 'border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:10px 12px;margin:0 0 10px;';
+  const mTitel = document.createElement('div');
+  mTitel.style.cssText = 'font-weight:700;margin-bottom:4px'; mTitel.textContent = '🔑 Dein eigener Schlüssel';
+  const mSub = document.createElement('div');
+  mSub.style.cssText = 'opacity:.8;font-size:.86rem;margin-bottom:6px';
+  mSub.textContent = 'Zum Vorlesen oder Schicken, falls dich jemand aufnehmen will, ohne dass du geschrieben hast.';
+  const mKey = document.createElement('div');
+  mKey.className = 'mono';
+  mKey.style.cssText = 'font-size:.76rem;word-break:break-all;opacity:.9'; mKey.textContent = pubHex;
+  const cp = document.createElement('button');
+  cp.className = 'tbtn'; cp.textContent = '📋 Kopieren'; cp.style.marginTop = '7px';
+  cp.addEventListener('click', () => { try { navigator.clipboard.writeText(pubHex); toast('Schlüssel kopiert'); } catch (_e) { toast('Bitte von Hand markieren.'); } });
+  mine.appendChild(mTitel); mine.appendChild(mSub); mine.appendChild(mKey); mine.appendChild(cp);
+  details.appendChild(mine);
+
+  const aTitel = document.createElement('div');
+  aTitel.style.cssText = 'font-weight:700;margin-bottom:4px'; aTitel.textContent = '➕ Fremden Schlüssel eintragen';
+  details.appendChild(aTitel);
+  details.appendChild(add);
+  box.appendChild(details);
   const close = document.createElement('button'); close.className = 'ghost'; close.textContent = 'Schließen'; close.style.marginTop = '12px';
   close.addEventListener('click', () => document.body.removeChild(bg));
   box.appendChild(close);
