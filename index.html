@@ -238,8 +238,8 @@
      (Klaus 2026-08-01). Platz schafft stattdessen der reservierte Rand oben
      (.q-head padding-right) plus der Umbruch der Kopfzeile. */
   @media (max-width: 560px) {
-    .kb-addcontact, .kb-mute { padding: 1px 5px !important; margin-left: 4px !important; }
-    .kb-addcontact { font-size: .68rem !important; }
+    .kb-addcontact, .kb-iscontact, .kb-mute { padding: 1px 5px !important; margin-left: 4px !important; }
+    .kb-addcontact, .kb-iscontact { font-size: .68rem !important; }
   }
   .q-del {
     z-index: 2;   /* das ✕ liegt IMMER über der Kopfzeile */
@@ -346,6 +346,7 @@
   <div class="card">
     <div class="row" style="justify-content: space-between; margin-bottom: 8px;">
       <span class="label">Fragen &amp; Antworten (Tag <code>#sbkim-frage-antwort-test</code>)</span>
+      <button id="meine-zurueckziehen" class="tbtn" title="Alle EIGENEN Nachrichten zurückziehen — bittet die Relais, sie zu entfernen">🗑 Meine zurückziehen</button>
       <button id="board-clear" class="tbtn" title="Angezeigte Suchen ausblenden (lokal, bleibt nach Neuladen weg)">🧹 leeren</button>
     </div>
     <div class="sort-ctl">
@@ -615,6 +616,21 @@ function pinContact(pub, name) {
   toast(existed ? 'Kontakt aktualisiert: ' + name : '🔒 Freigegeben: ' + name);
   return true;
 }
+// Das Gegenstück zu pinContact — an EINER Stelle, damit die drei Wege dorthin
+// (➖ am Zettel, Profil, Kontakt-Verwaltung) sich nicht auseinanderentwickeln.
+// Fragt immer nach: Kontakte sind mühsam aufgebaut, ein Fehlgriff ärgert.
+function entferneKontakt(pub) {
+  if (!dmContacts[pub]) return false;
+  if (!confirm('„' + contactName(pub) + '" aus deinen Kontakten entfernen?\n\n' +
+    'Ihr könnt euch danach nicht mehr privat schreiben, bis du ihn wieder aufnimmst. ' +
+    'Nur auf diesem Gerät — der andere erfährt nichts davon.')) return false;
+  delete dmContacts[pub];
+  // Empfänger-Auswahl mitziehen: sonst stünde er noch in „Privat an".
+  dmRecipients = dmRecipients.filter((p) => p !== pub);
+  saveContacts(); refreshRecipientSelect(); updateDmStatus(); refreshAuthorLabels(pub);
+  toast('Kontakt entfernt.');
+  return true;
+}
 function refreshRecipientSelect() {
   const sel = $('dm-to'); if (!sel) return;
   // Nur gültige (noch bekannte) Empfänger behalten.
@@ -709,14 +725,7 @@ async function openKontaktProfil(pub) {
   const entfernen = document.createElement('button');
   entfernen.className = 'tbtn kb-prof-remove'; entfernen.textContent = '🗑 Entfernen';
   entfernen.style.opacity = '.8';
-  entfernen.addEventListener('click', () => {
-    if (!confirm('„' + contactName(pub) + '" aus deinen Kontakten entfernen?\n\n' +
-      'Ihr könnt euch danach nicht mehr privat schreiben, bis du ihn wieder aufnimmst. ' +
-      'Nur auf diesem Gerät — der andere erfährt nichts davon.')) return;
-    delete dmContacts[pub];
-    saveContacts(); refreshRecipientSelect(); refreshAuthorLabels(pub);
-    zu(); toast('Kontakt entfernt.');
-  });
+  entfernen.addEventListener('click', () => { if (entferneKontakt(pub)) zu(); });
   row.appendChild(schreiben); row.appendChild(umbenennen); row.appendChild(entfernen);
   box.appendChild(row);
 
@@ -748,12 +757,29 @@ function makeWhoClickable(who, pub) {
 function makeContactAction(pub) {
   if (pub === pubHex) return null;
   const known = !!dmContacts[pub];
-  const el = document.createElement(known ? 'span' : 'button');
-  el.className = known ? 'who kb-iscontact' : 'tbtn kb-addcontact';
+  // Beide Zustände sind KNÖPFE — Hinzufügen und Verwalten müssen an derselben
+  // Stelle gehen. Vorher war „ist Kontakt" nur ein totes 👤: man konnte jemanden
+  // am Zettel aufnehmen, aber nicht wieder entfernen (Klaus 2026-08-01:
+  // „Kontakt entfernen geht aber nicht direkt im Antwortfeld").
+  const el = document.createElement('button');
+  el.type = 'button';
+  el.className = known ? 'tbtn kb-iscontact' : 'tbtn kb-addcontact';
   el.dataset.pubBtn = pub;
   if (known) {
-    el.textContent = ' 👤';
-    el.title = 'Ist dein Kontakt — du kannst ihm privat schreiben';
+    // Klaus 2026-08-01: „Kontakt plus und minus würde auch gehen." Genau
+    // spiegelbildlich zum ➕: derselbe Platz, dieselbe Größe, umgekehrte
+    // Wirkung. Das Profil (Sicherheitsnummer, privat schreiben, umbenennen)
+    // liegt weiterhin auf dem Namen daneben.
+    el.textContent = '➖';
+    const lbl = document.createElement('span');
+    lbl.className = 'kb-lbl'; lbl.textContent = ' Kontakt';
+    el.appendChild(lbl);
+    el.title = 'Ist dein Kontakt — tippen, um ihn wieder aus deinen Kontakten zu entfernen';
+    el.style.cssText = 'font-size:.72rem;padding:1px 7px;margin-left:6px;vertical-align:middle;opacity:.85;';
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      entferneKontakt(pub);
+    });
   } else {
     el.type = 'button';
     // Das Wort steckt in einem eigenen span: auf schmalen Schirmen wird es
@@ -806,8 +832,16 @@ function refreshAuthorLabels(pub) {
     }
   });
   document.querySelectorAll('[data-pub-btn="' + pub + '"]').forEach((n) => {
+    const head = n.parentNode;
     const el = makeContactAction(pub);
     if (el) n.replaceWith(el); else n.remove();   // an DERSELBEN Stelle ersetzen
+    // Der Stumm-Knopf steht nur bei Nicht-Kontakten — beim Entfernen kommt er
+    // also zurück, beim Aufnehmen verschwindet er. Ohne das bliebe die Reihe
+    // bis zum nächsten Neuladen im alten Zustand stehen.
+    if (!head) return;
+    const stumm = head.querySelector('[data-mute-pub="' + pub + '"]');
+    if (dmContacts[pub]) { if (stumm) stumm.remove(); }
+    else if (!stumm) { const m = makeMuteAction(pub); if (m) head.appendChild(m); }
   });
 }
 async function openContacts() {
@@ -853,8 +887,13 @@ async function openContacts() {
     const sn = await safetyNumber(pubHex, pub);
     row.innerHTML = '<b>' + contactName(pub).replace(/</g, '&lt;') + '</b> <span class="mono" style="opacity:.6">' + short(pub) + '</span>' +
       '<div class="mono" style="font-size:.82rem;opacity:.85;margin:.2em 0">🔢 Sicherheitsnummer: ' + sn + '</div>';
-    const rm = document.createElement('button'); rm.className = 'tbtn'; rm.textContent = 'Entfernen';
-    rm.addEventListener('click', () => { delete dmContacts[pub]; saveContacts(); refreshRecipientSelect(); document.body.removeChild(bg); openContacts(); });
+    // Deutlich als Löschen erkennbar + Rückfrage (wie im Kontakt-Profil).
+    const rm = document.createElement('button');
+    rm.className = 'tbtn kb-contact-remove'; rm.textContent = '🗑 Kontakt entfernen';
+    rm.addEventListener('click', () => {
+      if (!entferneKontakt(pub)) return;
+      document.body.removeChild(bg); openContacts();
+    });
     row.appendChild(rm); list.appendChild(row);
   }
   box.appendChild(list);
@@ -1031,7 +1070,9 @@ function entferneZettel(id) {
   return false;
 }
 // Der eigene Zettel wird zurückgezogen: Meldung an die Relais + lokal weg.
-async function zurueckziehenFuerAlle(id) {
+// `still` = Teil eines Sammel-Laufs: dann meldet der Aufrufer am Ende einmal,
+// statt bei jeder einzelnen Nachricht eine Blase zu zeigen.
+async function zurueckziehenFuerAlle(id, still) {
   const ev = {
     pubkey: pubHex, created_at: Math.floor(Date.now() / 1000), kind: 5,
     tags: [['t', TAG], ['e', id]], content: 'zurückgezogen',
@@ -1042,9 +1083,11 @@ async function zurueckziehenFuerAlle(id) {
   for (const ws of live) ws.send(JSON.stringify(['EVENT', ev]));
   zurueckgezogen.add(id); saveZurueckgezogen();
   entferneZettel(id);
-  toast(live.length
-    ? '🗑 Zurückgezogen — die Relais wurden gebeten, ihn zu entfernen.'
-    : '🗑 Lokal entfernt — ohne Verbindung konnte die Bitte nicht rausgehen.');
+  if (!still) {
+    toast(live.length
+      ? '🗑 Zurückgezogen — die Relais wurden gebeten, ihn zu entfernen.'
+      : '🗑 Lokal entfernt — ohne Verbindung konnte die Bitte nicht rausgehen.');
+  }
 }
 // Der Lösch-Dialog: „nur bei mir" oder „bei allen" (Letzteres nur für eigene).
 function openLoeschDialog(ev, li) {
@@ -2387,6 +2430,25 @@ function handleAnnouncement(ev) {
 
 // ---- Werkzeug-Knöpfe (leeren / vergrößern / vollbild / neu laden) ----
 $('board-clear').addEventListener('click', clearBoard);
+
+// „Alles zurückziehen, was ich geschickt habe" (Klaus 2026-08-01). Einzeln geht
+// es über das ✕ am Zettel — das hier ist der Sammelweg für alle eigenen auf
+// einmal. Fremde Zettel sind NIE dabei.
+$('meine-zurueckziehen').addEventListener('click', async () => {
+  const meine = [];
+  for (const [id, v] of qViews.entries()) {
+    if (v.qEv && v.qEv.pubkey === pubHex) meine.push(id);
+    for (const a of (v.answers || [])) if (a && a.pubkey === pubHex) meine.push(a.id);
+  }
+  if (!meine.length) { toast('Hier ist gerade nichts von dir zu sehen.'); return; }
+  if (!confirm('Alle ' + meine.length + ' Nachricht(en) von DIR zurückziehen?\n\n' +
+    'Die Relais und die anderen Geräte werden gebeten, sie zu entfernen.\n\n' +
+    'Ehrlich: Das ist eine Bitte, keine Garantie — wer sie schon gelesen, kopiert ' +
+    'oder fotografiert hat, hat sie weiterhin. Fremde Nachrichten bleiben unberührt.')) return;
+  let n = 0;
+  for (const id of meine) { await zurueckziehenFuerAlle(id, true); n++; }
+  toast('🗑 ' + n + ' eigene Nachricht(en) zurückgezogen.');
+});
 
 // Mikrofon: Frage einsprechen (Browser-Spracherkennung, gratis, server-los,
 // kein Schlüssel). Fail-soft, wenn der Browser es nicht kann.

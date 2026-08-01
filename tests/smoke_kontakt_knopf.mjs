@@ -92,7 +92,7 @@ try {
   const nachher = await p.evaluate((f) => document.querySelector('[data-pub="' + f + '"]').textContent, FREMD);
   ok(/Freundin Anna/.test(nachher), 'Beschriftung wechselt SOFORT auf den Namen: ' + nachher.slice(0, 30));
   ok((await p.evaluate(() => document.querySelectorAll('.kb-addcontact').length)) === 0, 'Knopf verschwindet nach dem Merken');
-  ok((await p.evaluate(() => document.querySelectorAll('.kb-iscontact').length)) >= 1, 'stattdessen steht das Kontakt-Zeichen 👤 da');
+  ok((await p.evaluate(() => document.querySelectorAll('.kb-iscontact').length)) >= 1, 'stattdessen steht der Kontakt-Zustand da (➖ Kontakt — zum Wieder-Entfernen)');
   ok(await p.evaluate((f) => !!document.querySelector('#dm-to option[value="' + f + '"]'), FREMD),
     'der Kontakt steht sofort in „Privat an" zur Auswahl');
 
