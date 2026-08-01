@@ -99,7 +99,10 @@
     border: 1px solid var(--line); border-radius: 10px;
     padding: 12px 14px; margin-bottom: 12px; background: var(--panel2);
   }
-  .q-head { font-size: 0.78rem; color: var(--dim); margin-bottom: 3px; }
+  /* Rechts oben schwebt das ✕ (.q-del, 24px). Ohne reservierten Platz lief die
+     Knopfreihe darunter durch und verdeckte es — am Handy war das ✕ dadurch
+     nicht mehr treffbar (Klaus' Befund 2026-08-01). */
+  .q-head { font-size: 0.78rem; color: var(--dim); margin-bottom: 3px; padding-right: 38px; }
   .q-head .who { color: var(--q); }
   .q-card.mine .q-head .who::after { content: " (ich)"; color: var(--accent); }
   .q-text { white-space: pre-wrap; word-break: break-word; font-weight: 600; }
@@ -135,7 +138,14 @@
   .status.err { color: var(--bad); }
   .judge-ctl { border-top: 1px dashed var(--line); padding-top: 10px; }
   .answer-form { margin-top: 8px; display: flex; gap: 8px; align-items: flex-end; }
-  .answer-form textarea { min-height: 38px; }
+  .answer-form textarea { min-height: 38px; flex: 1; min-width: 0; }
+  /* Am Handy passten Feld + 🎤 + „Antworten" nicht nebeneinander — das Feld
+     wurde so schmal, dass „Antwort…" senkrecht umbrach. Jetzt bekommt es die
+     volle Zeile, die Knöpfe rücken darunter. */
+  @media (max-width: 560px) {
+    .answer-form { flex-wrap: wrap; }
+    .answer-form textarea { flex: 1 0 100%; }
+  }
   .empty { color: var(--dim); font-style: italic; }
   footer {
     color: var(--dim); font-size: 0.78rem; line-height: 1.5;
@@ -223,7 +233,14 @@
   @keyframes micpulse { 0%,100% { box-shadow: 0 0 0 0 rgba(224,106,90,0.5); } 50% { box-shadow: 0 0 0 6px rgba(224,106,90,0); } }
   #board-clear { font-size: 0.78rem; padding: 5px 9px; }
   /* Löschen-Kreuz pro Frage. */
+  /* Auf schmalen Schirmen (Handy) rückt die Reihe zusammen: der Kontakt-Knopf
+     zeigt dann nur noch das Zeichen, damit alles nebeneinander passt. */
+  @media (max-width: 560px) {
+    .kb-addcontact .kb-lbl { display: none; }
+    .kb-addcontact, .kb-mute { padding: 1px 5px !important; margin-left: 4px !important; }
+  }
   .q-del {
+    z-index: 2;   /* das ✕ liegt IMMER über der Kopfzeile */
     position: absolute; right: 10px; top: 10px; width: 24px; height: 24px;
     border-radius: 8px; border: 1px solid var(--line); background: var(--panel2);
     color: var(--dim); font-size: 0.85rem; line-height: 1; cursor: pointer;
@@ -737,7 +754,12 @@ function makeContactAction(pub) {
     el.title = 'Ist dein Kontakt — du kannst ihm privat schreiben';
   } else {
     el.type = 'button';
-    el.textContent = '➕ Kontakt';
+    // Das Wort steckt in einem eigenen span: auf schmalen Schirmen wird es
+    // ausgeblendet (siehe @media), damit die Reihe neben dem ✕ Platz findet.
+    el.textContent = '➕';
+    const lbl = document.createElement('span');
+    lbl.className = 'kb-lbl'; lbl.textContent = ' Kontakt';
+    el.appendChild(lbl);
     el.title = 'Diese Person als Kontakt merken — danach kannst du ihr privat (verschlüsselt) schreiben';
     el.style.cssText = 'font-size:.72rem;padding:1px 7px;margin-left:6px;vertical-align:middle;';
     el.addEventListener('click', (e) => { e.stopPropagation(); askAndPin(pub); });
