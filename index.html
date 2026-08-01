@@ -311,6 +311,12 @@
       <span style="display:flex; gap:8px; align-items:center;">
         <button id="mic" class="tbtn" title="Frage einsprechen">🎤</button>
         <button id="ocrbtn" class="tbtn" title="Foto/Handschrift → Frage (Mistral OCR, EU)">📷</button>
+        <!-- Anhang-Menü (WhatsApp-Büroklammer): bündelt alles, was man MITSCHICKT.
+             🎤/📷 bleiben außerhalb — die füllen nur das Textfeld. -->
+        <span style="position:relative;display:inline-flex;">
+          <button id="anhang" class="tbtn" title="Etwas mitschicken: Sprachnotiz, Bild oder einen Kontakt">➕</button>
+          <div id="anhang-menu" hidden></div>
+        </span>
         <button id="dmvoice" class="tbtn" title="🔒 Sprachnotiz an privaten Kontakt (nur bei „Privat an")">🎙️</button>
         <button id="dmimg" class="tbtn" title="🔒 Bild an privaten Kontakt (nur bei „Privat an")">🖼️</button>
         <input type="file" id="dmimgfile" accept="image/*" style="display:none">
@@ -869,7 +875,10 @@ function renderQuestion(ev, relay) {
   const text = document.createElement('div');
   text.className = 'q-text';
   const _media = ev._dm ? parseDmMedia(ev.content) : null;
-  if (_media) { renderDmMedia(text, _media); } else { text.textContent = ev.content; }
+  const _card = (!_media && ev._dm) ? parseContactCard(ev.content) : null;
+  if (_media) renderDmMedia(text, _media);
+  else if (_card) renderContactCard(text, _card, ev.pubkey);
+  else text.textContent = ev.content;
   const answersUl = document.createElement('ul');
   answersUl.className = 'answers';
 
@@ -1795,6 +1804,172 @@ function blobToB64(blob) {
   });
 }
 
+// ============ Anhang-Menü + Kontakt senden (WhatsApp-Muster) ============
+// WhatsApp bündelt alles Mitzuschickende hinter EINER Büroklammer. Genauso hier:
+// ➕ öffnet ein Menü mit Sprachnotiz · Bild · Kontakt senden. Die vorhandenen
+// Knöpfe werden dabei NICHT nachgebaut, sondern samt ihrer Handler ins Menü
+// verschoben — dadurch bleibt die geprüfte Mechanik unverändert.
+const ANHANG_STYLE = 'position:absolute;bottom:calc(100% + 8px);right:0;z-index:60;' +
+  'background:var(--card,#161b1f);border:1px solid var(--acc,#36d6c3);border-radius:12px;' +
+  'padding:6px;min-width:210px;box-shadow:0 10px 30px rgba(0,0,0,.5);display:flex;flex-direction:column;gap:2px;';
+function anhangItem(icon, text, sub, onClick) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.style.cssText = 'display:flex;align-items:flex-start;gap:9px;width:100%;text-align:left;' +
+    'background:none;border:none;color:inherit;font:inherit;padding:8px 9px;border-radius:8px;cursor:pointer;';
+  b.innerHTML = '<span style="font-size:1.15rem;line-height:1.2">' + icon + '</span>' +
+    '<span><span style="font-weight:600">' + text + '</span>' +
+    (sub ? '<br><span style="font-size:.78rem;opacity:.7">' + sub + '</span>' : '') + '</span>';
+  b.addEventListener('mouseenter', () => { b.style.background = 'rgba(255,255,255,.07)'; });
+  b.addEventListener('mouseleave', () => { b.style.background = 'none'; });
+  b.addEventListener('click', () => { closeAnhang(); onClick(); });
+  return b;
+}
+function closeAnhang() { const m = $('anhang-menu'); if (m) m.hidden = true; }
+function buildAnhangMenu() {
+  const m = $('anhang-menu'); if (!m) return;
+  m.style.cssText = ANHANG_STYLE;
+  m.innerHTML = '';
+  const privat = dmRecipients.length > 0;
+  const hint = privat ? '' : 'erst oben „Privat an" wählen';
+  // Die echten Knöpfe bleiben im DOM (Handler unverändert) — wir lösen sie nur aus.
+  m.appendChild(anhangItem('🎙️', 'Sprachnotiz', privat ? 'aufnehmen und verschlüsselt senden' : hint,
+    () => $('dmvoice').click()));
+  m.appendChild(anhangItem('🖼️', 'Bild', privat ? 'wird verkleinert und verschlüsselt gesendet' : hint,
+    () => $('dmimg').click()));
+  m.appendChild(anhangItem('👤', 'Kontakt senden', privat ? 'einen deiner Kontakte weitergeben' : hint,
+    () => openKontaktSenden()));
+  m.hidden = false;
+}
+(function setupAnhang() {
+  const btn = $('anhang'); if (!btn) return;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const m = $('anhang-menu');
+    if (m && !m.hidden) { closeAnhang(); return; }
+    buildAnhangMenu();
+  });
+  document.addEventListener('click', (e) => {
+    const m = $('anhang-menu');
+    if (m && !m.hidden && !m.contains(e.target) && e.target !== btn) closeAnhang();
+  });
+  // Die Einzel-Knöpfe bleiben erreichbar, treten aber optisch zurück: der
+  // gebündelte Weg ist ab jetzt der normale.
+  ['dmvoice', 'dmimg'].forEach((id) => { const b = $(id); if (b) b.hidden = true; });
+})();
+
+// ── Kontakt senden (WhatsApps „Kontakt senden") ──────────────────────────────
+// Die Visitenkarte reist IM vorhandenen ECDH-Chiffrat — kein neuer Kanal, kein
+// neuer Schlüssel. Beim Empfänger wird sie NIE still gespeichert: er sieht eine
+// Karte mit [Annehmen]/[Ablehnen].
+function makeContactCard(name, pub) { return JSON.stringify({ kbct: 1, n: String(name || '').slice(0, 60), k: pub }); }
+function parseContactCard(s) {
+  if (typeof s !== 'string' || s.charCodeAt(0) !== 123 || s.indexOf('"kbct"') < 0) return null;
+  try {
+    const o = JSON.parse(s);
+    if (o && o.kbct === 1 && typeof o.k === 'string' && /^[0-9a-f]{64}$/.test(o.k)) {
+      return { name: String(o.n || '').slice(0, 60), pub: o.k };
+    }
+  } catch (_e) { /* fail-soft */ }
+  return null;
+}
+function openKontaktSenden() {
+  const empfaenger = dmRecipients.slice();
+  if (!empfaenger.length) { toast('Erst oben „Privat an" wählen — an wen soll der Kontakt gehen?'); return; }
+  const keys = Object.keys(dmContacts).filter((k) => !empfaenger.includes(k));
+  const bg = document.createElement('div');
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(20,18,16,.6);display:flex;align-items:center;justify-content:center;z-index:90;padding:16px;';
+  const box = document.createElement('div');
+  box.id = 'kontakt-senden';
+  box.style.cssText = 'background:var(--card,#1c1a17);color:var(--fg,#eee);border:1px solid var(--acc,#c9a961);border-radius:14px;max-width:460px;width:100%;max-height:82vh;overflow:auto;padding:16px 18px;font-size:.92rem;';
+  box.innerHTML = '<h3 style="margin:.1em 0 .5em">👤 Kontakt senden</h3>' +
+    '<p style="opacity:.8;margin:.2em 0 .8em">Gib einen deiner Kontakte an <b>' +
+    (empfaenger.length === 1 ? contactName(empfaenger[0]) : empfaenger.length + ' Kontakte') +
+    '</b> weiter. Die Visitenkarte geht <b>verschlüsselt</b> — und wird beim Empfänger erst nach seiner Zustimmung gespeichert.</p>';
+  if (!keys.length) {
+    const p = document.createElement('p');
+    p.style.opacity = '.75';
+    p.textContent = 'Du hast (außer dem Empfänger) noch niemanden, den du weitergeben könntest.';
+    box.appendChild(p);
+  }
+  keys.forEach((pub) => {
+    const b = document.createElement('button');
+    b.className = 'tbtn';
+    b.style.cssText = 'display:block;width:100%;text-align:left;margin:0 0 6px;padding:9px 11px;';
+    b.textContent = '👤 ' + contactName(pub);
+    b.addEventListener('click', async () => {
+      document.body.removeChild(bg);
+      const text = makeContactCard(contactName(pub), pub);
+      const live = liveSockets();
+      for (const r of empfaenger) {
+        const ev = await buildEvent(text, [], r);
+        for (const ws of live) ws.send(JSON.stringify(['EVENT', ev]));
+        dispatch(ev, live[0] ? live[0].url : 'lokal');
+      }
+      toast('👤 Kontakt „' + contactName(pub) + '" gesendet');
+    });
+    box.appendChild(b);
+  });
+  const close = document.createElement('button');
+  close.className = 'ghost'; close.textContent = 'Abbrechen'; close.style.marginTop = '10px';
+  close.addEventListener('click', () => document.body.removeChild(bg));
+  box.appendChild(close);
+  bg.appendChild(box);
+  bg.addEventListener('click', (e) => { if (e.target === bg) document.body.removeChild(bg); });
+  document.body.appendChild(bg);
+}
+// Anzeige einer empfangenen Visitenkarte — mit ausdrücklicher Zustimmung.
+function renderContactCard(container, card, absender) {
+  const box = document.createElement('div');
+  box.className = 'kb-contactcard';
+  box.style.cssText = 'border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:10px 12px;';
+  const schon = !!dmContacts[card.pub];
+  // WICHTIG: Name und Kennung kommen aus einer FREMDEN Nachricht. Sie werden
+  // ausschließlich über textContent gesetzt — niemals über innerHTML, sonst
+  // könnte ein Absender Auszeichnung oder Skript einschleusen. (`esc` ist in
+  // dieser App bewusst ein No-Op, weil sonst überall textContent benutzt wird.)
+  const t1 = document.createElement('div');
+  t1.style.cssText = 'font-weight:600;margin-bottom:3px'; t1.textContent = '👤 Kontakt erhalten';
+  const t2 = document.createElement('div');
+  t2.style.cssText = 'opacity:.85;font-size:.88rem';
+  t2.textContent = contactName(absender) + ' hat dir „' + (card.name || 'einen Kontakt') + '" geschickt.';
+  const t3 = document.createElement('div');
+  t3.className = 'mono';
+  t3.style.cssText = 'font-size:.74rem;opacity:.6;margin:5px 0;word-break:break-all';
+  t3.textContent = card.pub;
+  const t4 = document.createElement('div');
+  t4.style.cssText = 'font-size:.8rem;opacity:.75;margin-bottom:7px';
+  t4.textContent = 'Das ist die Angabe des Absenders — sie beweist nicht, dass der Schlüssel wirklich ' +
+    'dieser Person gehört. Für Gewissheit später einmal die Sicherheitsnummer vergleichen.';
+  box.appendChild(t1); box.appendChild(t2); box.appendChild(t3); box.appendChild(t4);
+  if (schon) {
+    const p = document.createElement('div');
+    p.style.cssText = 'font-size:.85rem;opacity:.8'; p.textContent = '✓ Hast du bereits als Kontakt.';
+    box.appendChild(p);
+  } else {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
+    const ja = document.createElement('button');
+    ja.className = 'tbtn kb-cc-accept'; ja.textContent = '✓ Annehmen';
+    const ersetze = (txt, dim) => {
+      box.textContent = '';
+      const d = document.createElement('div');
+      d.style.cssText = 'font-size:.9rem' + (dim ? ';opacity:.7' : '');
+      d.textContent = txt; box.appendChild(d);
+    };
+    ja.addEventListener('click', () => {
+      const name = prompt('Unter welchem Namen merken?', card.name || '');
+      if (name === null) return;
+      if (pinContact(card.pub, name)) ersetze('✓ Als Kontakt gemerkt.', false);
+    });
+    const nein = document.createElement('button');
+    nein.className = 'tbtn kb-cc-reject'; nein.textContent = '✕ Ablehnen';
+    nein.addEventListener('click', () => ersetze('Abgelehnt — nichts gespeichert.', true));
+    row.appendChild(ja); row.appendChild(nein); box.appendChild(row);
+  }
+  container.appendChild(box);
+}
+
 // ============ Schritt 3: automatischer Relais-Wechsel (Kreis-Rotation) ============
 // Berechnet: alle im Kreis rechnen aus Geheimnis + Zeitfenster DIESELBE Auswahl aus
 // (keine Absprache nötig); das vorige Fenster wird mitgehört, damit beim Umschalten
@@ -2063,7 +2238,8 @@ initRotationUi();   // Relais-Automatik (Default aus; startet nur mit Häkchen +
 // geprüft werden: Tests dürfen keine Fantasie-Signaturen mehr einschleusen,
 // sondern müssen echt signieren — genau wie ein ehrlicher Absender.
 window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubHex, buildEvent,
-  sperreAbsender, entsperreAbsender, gesperrte: () => [...gesperrt], flutZaehler: () => floodCount };
+  sperreAbsender, entsperreAbsender, gesperrte: () => [...gesperrt], flutZaehler: () => floodCount,
+  makeContactCard, parseContactCard, setPrivatAn: (pubs) => { dmRecipients = pubs.slice(); refreshRecipientSelect(); } };
 </script>
 
 <!-- ── SBKIM-Endknoten-Stack (byte-1:1-Kopien, Drift-Guard im Smoke-Test) ──
