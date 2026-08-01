@@ -28,10 +28,9 @@
  */
 import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
-import { createServer } from 'node:http';
-import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { starteRelais } from './_werkzeug.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const EXE = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -40,56 +39,9 @@ const RELAY_PORT = 8477;
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL ' + m); } };
 
-/* ---- Ein winziges Relais mit Vorrat (nur was der Test braucht) ---- */
-const vorrat = [];              // Zettel, die das Relais gespeichert hat
-let verbindungenOffen = 0, verbindungenGesamt = 0;
-const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
-const srvRelay = createServer();
-srvRelay.on('upgrade', (req, sock) => {
-  const key = req.headers['sec-websocket-key'];
-  sock.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n'
-    + 'Sec-WebSocket-Accept: ' + createHash('sha1').update(key + GUID).digest('base64') + '\r\n\r\n');
-  verbindungenOffen++; verbindungenGesamt++;
-  sock.on('close', () => { verbindungenOffen--; });
-  let puffer = Buffer.alloc(0);
-  const sende = (text) => {
-    const nutz = Buffer.from(text);
-    let kopf;
-    if (nutz.length < 126) { kopf = Buffer.from([0x81, nutz.length]); }
-    else { kopf = Buffer.alloc(4); kopf[0] = 0x81; kopf[1] = 126; kopf.writeUInt16BE(nutz.length, 2); }
-    sock.write(Buffer.concat([kopf, nutz]));
-  };
-  sock.on('data', (d) => {
-    puffer = Buffer.concat([puffer, d]);
-    // Nur einfache Text-Rahmen (< 64 KB) — mehr braucht der Test nicht.
-    while (puffer.length >= 2) {
-      const opcode = puffer[0] & 0x0f;
-      // Schließen-Rahmen beantworten und die Leitung wirklich beenden — sonst
-      // bliebe sie serverseitig offen und die Prüfung „schließt wieder zu"
-      // würde etwas Falsches messen (Schwäche des Spielzeug-Relais, nicht der App).
-      if (opcode === 0x8) { try { sock.end(); } catch (_e) { /* */ } return; }
-      const maskiert = (puffer[1] & 0x80) !== 0;
-      let len = puffer[1] & 0x7f, off = 2;
-      if (len === 126) { len = puffer.readUInt16BE(2); off = 4; }
-      else if (len === 127) return;
-      const maske = maskiert ? puffer.subarray(off, off + 4) : null;
-      const start = off + (maskiert ? 4 : 0);
-      if (puffer.length < start + len) return;
-      const roh = Buffer.from(puffer.subarray(start, start + len));
-      if (maske) for (let i = 0; i < roh.length; i++) roh[i] ^= maske[i % 4];
-      puffer = puffer.subarray(start + len);
-      let m; try { m = JSON.parse(roh.toString()); } catch { continue; }
-      if (!Array.isArray(m)) continue;
-      if (m[0] === 'REQ') {
-        for (const ev of vorrat) sende(JSON.stringify(['EVENT', m[1], ev]));
-        sende(JSON.stringify(['EOSE', m[1]]));
-      } else if (m[0] === 'EVENT') {
-        vorrat.push(m[1]);
-      }
-    }
-  });
-});
-await new Promise((r) => srvRelay.listen(RELAY_PORT, r));
+/* ---- Ein echtes Relais mit Vorrat (siehe _werkzeug.mjs) ---- */
+const RELAIS = await starteRelais(RELAY_PORT);
+const vorrat = RELAIS.vorrat;
 
 const srv = spawn('python3', ['-m', 'http.server', String(PORT)], { cwd: ROOT, stdio: 'ignore' });
 await new Promise((r) => setTimeout(r, 800));
@@ -141,8 +93,8 @@ try {
 
   // Leitungen wieder zu — kein Dauerzustand.
   await new Promise((r) => setTimeout(r, 600));
-  ok(verbindungenOffen === 0, 'der Lauf schließt seine Leitungen wieder (offen: ' + verbindungenOffen + ')');
-  ok(verbindungenGesamt >= 1, '…er hat wirklich verbunden (' + verbindungenGesamt + ' Verbindung(en))');
+  ok(RELAIS.offen() === 0, 'der Lauf schließt seine Leitungen wieder (offen: ' + RELAIS.offen() + ')');
+  ok(RELAIS.gesamt() >= 1, '…er hat wirklich verbunden (' + RELAIS.gesamt() + ' Verbindung(en))');
 
   // Die Relais-Wahl des Nutzers bleibt unberührt.
   const wahlDanach = await p.evaluate(() => JSON.parse(localStorage.getItem('sbkim_pinnwand_relays') || 'null'));
@@ -197,7 +149,7 @@ try {
 } finally {
   if (browser) await browser.close();
   srv.kill();
-  srvRelay.close();
+  try { await RELAIS.aus(); } catch (_e) { /* */ }
 }
 console.log(`\n== Ergebnis: ${pass} ok, ${fail} FAIL ==`);
 process.exit(fail ? 1 : 0);

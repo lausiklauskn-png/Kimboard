@@ -310,6 +310,12 @@
     <div class="status" id="geraetename-hint" style="margin-top:4px;">Frei wählbarer Anzeige-Name — erscheint im Raum + auf deinen Zetteln (nur ein Hinweis, kein Vertrauens-Beweis; die Kennung bleibt daneben).</div>
     <div class="row" id="relays" style="margin-top: 10px;"></div>
     <div class="row" style="margin-top: 8px; gap: 8px; align-items:center; flex-wrap:wrap;">
+      <label for="heim-relay" style="opacity:.85;">🏠 Heim-Relais:</label>
+      <select id="heim-relay" title="Dorthin werden deine Zettel geschrieben" style="flex:1; min-width:180px;"></select>
+      <label style="opacity:.85;"><input type="checkbox" id="heim-nur" checked> nur dorthin senden</label>
+    </div>
+    <div class="status" id="heim-status" style="margin-top:4px;"></div>
+    <div class="row" style="margin-top: 8px; gap: 8px; align-items:center; flex-wrap:wrap;">
       <label style="opacity:.85;"><input type="checkbox" id="rot-on"> 🔄 Relais automatisch wechseln</label>
       <input id="rot-secret" type="password" placeholder="Kreis-Geheimnis (bei allen gleich)" autocomplete="off" style="flex:1; min-width:170px;">
       <select id="rot-period" title="Wie oft gewechselt wird">
@@ -526,6 +532,37 @@ const RELAY_POOL = [
   'wss://relay.primal.net', 'wss://relay.snort.social', 'wss://nostr.mom',
   'wss://offchain.pub', 'wss://relay.mostr.pub',
 ];
+// ── Heim-Relais: schmal senden, breit lesen (Klaus 2026-08-01) ───────────────
+// BEFUND: Bis hierher ging JEDER Zettel an ALLE verbundenen Relais — öffentliche
+// wie verschlüsselte, jede Gruppen-Kopie, sogar die Rückzieh-Bitten. Bei fünf
+// voreingestellten Relais landeten die Daten also bei vier fremden Betreibern,
+// die niemand geprüft hat und bei denen sich nichts mehr durchsetzen lässt
+// (dort gilt nur die Bitte, siehe Zurückziehen). Wer diese App weitergibt,
+// verteilt damit die Daten SEINER Nutzer an Fremde. Einer der Standard-Relais
+// (relay.nostr.band) ist ausdrücklich ein Archiv- und Suchdienst.
+//
+// LÖSUNG: Asymmetrie. GESCHRIEBEN wird nur auf das Heim-Relais — dort ist ein
+// Betreiber, der bekannt ist, der über Zugang entscheidet und der wirklich
+// löschen kann. GELESEN wird weiterhin von allen gewählten Relais, damit
+// niemandem etwas entgeht (auch Zettel von Leuten, die woanders senden).
+//
+// EHRLICH: Das schützt nur den eigenen Absende-Weg. Was die GEGENSEITE mit
+// einer anders eingestellten App verschickt, landet trotzdem überall — darum
+// ist das Heim-Relais die VOREINSTELLUNG und nicht bloß ein Häkchen für Kenner.
+// Und es steht in Spannung zur Rotation: Die streut bewusst, damit kein Relais
+// alles sieht; das Heim-Relais bündelt bewusst bei einem, dem man traut. Beides
+// gleichzeitig geht nicht — die Oberfläche sagt das.
+const HOME_RELAY = 'wss://relay.family-projekt.de';
+const LS_HOME = 'sbkim_pinnwand_heim';
+let heim = { url: HOME_RELAY, nurHeim: true };     // Voreinstellung: nur nach Hause senden
+try {
+  const g = JSON.parse(localStorage.getItem(LS_HOME) || 'null');
+  if (g && typeof g === 'object') {
+    if (typeof g.url === 'string' && g.url) heim.url = g.url;
+    if (typeof g.nurHeim === 'boolean') heim.nurHeim = g.nurHeim;
+  }
+} catch { /* fail-soft: Voreinstellung bleibt */ }
+function saveHeim() { try { localStorage.setItem(LS_HOME, JSON.stringify(heim)); } catch { /* */ } }
 const LS_RELAYS = 'sbkim_pinnwand_relays';
 let activeRelays;
 try {
@@ -761,11 +798,12 @@ function parseGroupInvite(s) {
 async function sendeAnGruppe(gid, content, antwortAuf, live, eTag) {
   const peers = groupPeers(gid);
   if (!peers.length) return null;
+  if (!live && !heimBereit()) return null;   // ohne vorgegebene Leitung: erst fragen
   const mid = antwortAuf || toHex(crypto.getRandomValues(new Uint8Array(8)));
   // `grp` (zufällig je Sendung) faltet meine N Kopien in MEINER Ansicht zu einem
   // Eintrag zusammen — das ist etwas anderes als `gm` (der gemeinsame Faden).
   const grp = toHex(crypto.getRandomValues(new Uint8Array(8)));
-  const sockets = live || liveSockets();
+  const sockets = live || sendSockets();
   for (const r of peers) {
     const tags = [['grp', grp, String(peers.length)], ['gm', gid, mid]];
     if (eTag) tags.push(['e', eTag]);
@@ -1449,14 +1487,17 @@ setInterval(raeumePlatzhalter, 60 * 1000);
 // Der eigene Zettel wird zurückgezogen: Meldung an die Relais + lokal weg.
 // `still` = Teil eines Sammel-Laufs: dann meldet der Aufrufer am Ende einmal,
 // statt bei jeder einzelnen Nachricht eine Blase zu zeigen.
-async function zurueckziehenFuerAlle(id, still) {
+async function zurueckziehenFuerAlle(id, still, leitungen) {
   const ev = {
     pubkey: pubHex, created_at: Math.floor(Date.now() / 1000), kind: 5,
     tags: [['t', TAG], ['e', id]], content: 'zurückgezogen',
   };
   ev.id = await sha256Hex(JSON.stringify([0, ev.pubkey, ev.created_at, ev.kind, ev.tags, ev.content]));
   ev.sig = toHex(await schnorr.sign(fromHex(ev.id), priv));
-  const live = liveSockets();
+  // Hier wird NICHT abgebrochen, wenn nichts rausgeht: Die Bitte an die anderen
+  // kann scheitern — das Wegnehmen BEI MIR darf daran nicht scheitern. Ohne
+  // Leitung wird lokal entfernt und ehrlich gesagt, dass die Bitte liegen blieb.
+  const live = leitungen || (heimBereit() ? sendSockets() : []);
   for (const ws of live) ws.send(JSON.stringify(['EVENT', ev]));
   zurueckgezogen.set(id, Date.now()); saveZurueckgezogen();
   // Beim EIGENEN Zettel braucht es keinen Platzhalter: ich weiß ja, was ich
@@ -1617,8 +1658,9 @@ function renderQuestion(ev, relay) {
   btn.addEventListener('click', async () => {
     const a = ta.value.trim();
     if (!a) return;
+    if (!heimBereit()) return;   // Heim-Relais aus? Dann wird gefragt, nicht heimlich gestreut.
     btn.disabled = true;
-    const live = liveSockets();
+    const live = sendSockets();
     if (gruppe) {
       // Dieselbe Faden-Marke wie die Frage → bei allen landet es im selben Strang.
       await sendeAnGruppe(gruppe, a, ev._gmid, live, ev.id);
@@ -2420,11 +2462,67 @@ function activeRelais_verbunden(url) {
   return !!ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING);
 }
 const liveSockets = () => Object.values(conns).filter((w) => w.readyState === WebSocket.OPEN);
+// Die Leitungen zum SENDEN — hier trennt sich schmal senden von breit lesen.
+// `liveSockets()` bleibt für alles andere zuständig (verbunden? wie viele?).
+let heimAusnahme = false;   // „diesmal doch über fremde" — gilt nur bis zum Neuladen
+function heimSocket() {
+  const ws = conns[heim.url];
+  return (ws && ws.readyState === WebSocket.OPEN) ? ws : null;
+}
+function sendSockets() {
+  if (!heim.nurHeim || heimAusnahme) return liveSockets();
+  const h = heimSocket();
+  return h ? [h] : [];
+}
+// Fällt das Heim-Relais aus, wird NICHT heimlich auf fremde umgeschaltet — das
+// wäre genau das, was die Einstellung verhindern soll. Stattdessen wird gefragt.
+function heimBereit() {
+  if (!heim.nurHeim || heimAusnahme) return liveSockets().length > 0;
+  if (heimSocket()) return true;
+  const andere = liveSockets().length;
+  // Ist gar nichts verbunden, gibt es nichts zu entscheiden — aber es muss
+  // GESAGT werden. Vorher galt eine Antwort ohne Verbindung als gesendet und
+  // verschwand still; das war eine Lüge gegenüber dem Nutzer.
+  if (!andere) { toast('Kein Relais verbunden — es kann gerade nichts rausgehen.'); return false; }
+  const ok = confirm('Dein Heim-Relais ist gerade nicht erreichbar.\n\n' + kurzRelay(heim.url) + '\n\n'
+    + (andere
+      ? 'Soll dieser Zettel ausnahmsweise über die ' + andere + ' fremden Relais gehen?\n\n'
+        + 'Dann liegt er bei Betreibern, die du nicht kontrollierst — dort kannst du ihn '
+        + 'später nur noch BITTEN zu löschen, nicht wirklich entfernen.\n\n'
+        + 'Abbrechen: nichts wird gesendet, du versuchst es später noch einmal.'
+      : 'Es ist gerade gar kein Relais verbunden — gesendet werden kann nichts.'));
+  if (!ok) { toast('Nicht gesendet — dein Heim-Relais war nicht erreichbar.'); return false; }
+  heimAusnahme = true;                 // nur für diese Sitzung, nicht gespeichert
+  toast('⚠️ Diese Sitzung geht über fremde Relais.');
+  heimStatus();
+  return true;
+}
+function kurzRelay(u) { return String(u || '').replace('wss://', '').replace('ws://', ''); }
+function heimStatus() {
+  const s = $('heim-status'); if (!s) return;
+  if (!heim.nurHeim) {
+    s.textContent = '⚠️ Deine Zettel gehen an ALLE verbundenen Relais — auch an fremde Betreiber. '
+      + 'Dort kannst du sie später nur bitten zu löschen, nicht wirklich entfernen.';
+  } else if (heimAusnahme) {
+    s.textContent = '⚠️ Ausnahme aktiv: Diese Sitzung sendet über fremde Relais, weil dein '
+      + 'Heim-Relais nicht erreichbar war. Nach dem Neuladen gilt wieder nur ' + kurzRelay(heim.url) + '.';
+  } else {
+    s.textContent = '🏠 Geschrieben wird NUR auf ' + kurzRelay(heim.url)
+      + ' — gelesen weiterhin von allen oben gewählten Relais, damit dir nichts entgeht. '
+      + 'Ehrlich: Das gilt für DEINEN Absende-Weg. Was dein Gegenüber mit anderer Einstellung '
+      + 'verschickt, landet trotzdem auch anderswo.';
+  }
+}
 function updateSendState() {
   const n = liveSockets().length;
   $('ask').disabled = n === 0;
+  // Der Hinweis sagt jetzt auch, WOHIN geschrieben wird — die Zahl allein war
+  // irreführend: sie zählt die Leitungen zum LESEN, nicht die zum Senden.
+  const senden = (heim.nurHeim && !heimAusnahme)
+    ? (heimSocket() ? ' · schreibt nur auf ' + kurzRelay(heim.url) : ' · ⚠️ Heim-Relais nicht erreichbar')
+    : ' · ⚠️ schreibt an alle';
   $('sendhint').textContent = n > 0
-    ? `${n} Relay${n > 1 ? 's' : ''} verbunden`
+    ? `${n} Relay${n > 1 ? 's' : ''} verbunden` + senden
     : 'kein Relay verbunden…';
 }
 
@@ -2435,6 +2533,8 @@ function resubscribe() {
   threads.innerHTML = '';
   const e = document.createElement('li'); e.className = 'empty';
   e.textContent = 'lade…'; threads.appendChild(e);
+  // ABONNIEREN ist LESEN — hier gilt „breit": alle verbundenen Relais, nicht
+  // nur das Heim-Relais. Sonst entginge einem alles, was anderswo gesendet wird.
   for (const ws of liveSockets()) {
     try { ws.send(JSON.stringify(['REQ', SUB_ID, { kinds: [1, 5], '#t': [TAG], limit: 200 }])); } catch { /* */ }
   }
@@ -2534,8 +2634,9 @@ function openRecipientChooser() {
 $('ask').addEventListener('click', async () => {
   const content = $('qmsg').value.trim();
   if (!content) return;
+  if (!heimBereit()) return;   // Heim-Relais aus? Dann wird gefragt, nicht heimlich gestreut.
   $('ask').disabled = true;
-  const live = liveSockets();
+  const live = sendSockets();
   const rcpts = dmGroup ? groupPeers(dmGroup) : dmRecipients.slice();
   if (dmGroup) {
     if (!rcpts.length) { toast('In dieser Gruppe ist außer dir niemand.'); $('ask').disabled = false; return; }
@@ -2596,7 +2697,8 @@ async function sendPrivateMedia(kind, mime, b64) {
   if (!rcpts.length) { toast('🎙️/🖼️ nur für private Kontakte — oben „Privat an" wählen.'); return; }
   if (!b64 || b64.length > DM_MEDIA_MAX) { toast('Zu groß für die öffentlichen Relais — bitte kürzer/kleiner.'); return; }
   const content = makeMediaEnvelope(kind, mime, b64, '');
-  const live = liveSockets();
+  if (!heimBereit()) return;   // Heim-Relais aus? Dann wird gefragt, nicht heimlich gestreut.
+  const live = sendSockets();
   if (rcpts.length >= 2) {
     const grp = toHex(crypto.getRandomValues(new Uint8Array(8)));
     for (const r of rcpts) { const ev = await buildEvent(content, [['grp', grp, String(rcpts.length)]], r); for (const ws of live) ws.send(JSON.stringify(['EVENT', ev])); dispatch(ev, live[0] ? live[0].url : 'lokal'); }
@@ -2790,7 +2892,8 @@ function openKontaktSenden() {
     b.addEventListener('click', async () => {
       document.body.removeChild(bg);
       const text = makeContactCard(contactName(pub), pub);
-      const live = liveSockets();
+      if (!heimBereit()) return;   // Heim-Relais aus? Dann wird gefragt, nicht heimlich gestreut.
+      const live = sendSockets();
       for (const r of empfaenger) {
         const ev = await buildEvent(text, [], r);
         for (const ws of live) ws.send(JSON.stringify(['EVENT', ev]));
@@ -2933,7 +3036,8 @@ async function ladeEin(gid) {
   if (!peers.length) { toast('In dieser Gruppe ist außer dir niemand.'); return; }
   const g = dmGroups[gid];
   const text = makeGroupInvite(gid, g.name, g.members || []);
-  const live = liveSockets();
+  if (!heimBereit()) return;   // Heim-Relais aus? Dann wird gefragt, nicht heimlich gestreut.
+  const live = sendSockets();
   for (const r of peers) {
     const ev = await buildEvent(text, [], r);
     for (const ws of live) ws.send(JSON.stringify(['EVENT', ev]));
@@ -3077,6 +3181,9 @@ function rotStatusText(info) {
     ' · nächster Wechsel in ~' + mins + ' Min · voriges Fenster wird mitgehört, damit nichts verloren geht.';
 }
 function applyRelaySet(next) {
+  // Das Heim-Relais bleibt IMMER dabei, solange dorthin gesendet wird — sonst
+  // würde die Rotation es wegschalten und der Sendeweg wäre plötzlich tot.
+  if (heim.nurHeim && !next.includes(heim.url) && RELAY_POOL.includes(heim.url)) next = [heim.url].concat(next);
   // Verbindungen an die neue Menge angleichen (schließen/öffnen), ohne Datenverlust.
   for (const url of Object.keys(conns)) {
     if (!next.includes(url)) { const ws = conns[url]; try { ws && ws.close(); } catch { /* */ } delete conns[url]; }
@@ -3103,6 +3210,36 @@ function stopRotation(restoreManual) {
     applyRelaySet(rot.manual.filter((u) => RELAY_POOL.includes(u)));
   }
   const st = $('rot-status'); if (st) st.textContent = rotStatusText(null);
+}
+function initHeimUi() {
+  const sel = $('heim-relay'), nur = $('heim-nur');
+  if (!sel || !nur) return;
+  sel.innerHTML = '';
+  for (const url of RELAY_POOL) {
+    const o = document.createElement('option');
+    o.value = url;
+    o.textContent = kurzRelay(url) + (url === HOME_RELAY ? ' (eigenes)' : '');
+    sel.appendChild(o);
+  }
+  if (!RELAY_POOL.includes(heim.url)) heim.url = HOME_RELAY;
+  sel.value = heim.url; nur.checked = !!heim.nurHeim;
+  sel.addEventListener('change', () => {
+    heim.url = sel.value; heimAusnahme = false; saveHeim();
+    // Wird dorthin gesendet, muss die Leitung auch stehen.
+    if (heim.nurHeim && !activeRelays.includes(heim.url)) applyRelaySet(activeRelays.concat([heim.url]));
+    heimStatus(); updateSendState();
+    toast('🏠 Heim-Relais: ' + kurzRelay(heim.url));
+  });
+  nur.addEventListener('change', () => {
+    heim.nurHeim = nur.checked; heimAusnahme = false; saveHeim();
+    if (heim.nurHeim && !activeRelays.includes(heim.url)) applyRelaySet(activeRelays.concat([heim.url]));
+    heimStatus(); updateSendState();
+    if (!heim.nurHeim && !confirm('Deine Zettel gehen dann an ALLE verbundenen Relais — auch an fremde '
+      + 'Betreiber, bei denen du nichts mehr durchsetzen kannst.\n\nWirklich umstellen?')) {
+      nur.checked = true; heim.nurHeim = true; saveHeim(); heimStatus(); updateSendState();
+    }
+  });
+  heimStatus();
 }
 function initRotationUi() {
   const cb = $('rot-on'), sec = $('rot-secret'), per = $('rot-period'), cnt = $('rot-count');
@@ -3146,7 +3283,8 @@ async function announceSwitch() {
   if (!rot.on || !rot.secret) { toast('Erst die Automatik einschalten (mit Kreis-Geheimnis).'); return; }
   const info = await rotCurrentRelays(rot.secret, RELAY_POOL, { count: rot.count, periodMs: rot.periodMs });
   const text = rotMakeAnnouncement(info.windowIdx, info.current, Date.now());
-  const live = liveSockets();
+  if (!heimBereit()) return;   // Heim-Relais aus? Dann wird gefragt, nicht heimlich gestreut.
+  const live = sendSockets();
   for (const r of targets) {
     const ev = await buildEvent(text, [], r);
     for (const ws of live) ws.send(JSON.stringify(['EVENT', ev]));
@@ -3186,7 +3324,9 @@ $('meine-zurueckziehen').addEventListener('click', async () => {
     'gelesen, kopiert oder abfotografiert hat, hat sie weiterhin. Fremde Nachrichten ' +
     'bleiben unberührt.')) return;
   let n = 0;
-  for (const id of meine) { await zurueckziehenFuerAlle(id, true); n++; }
+  // EINMAL fragen, nicht bei jeder Nachricht erneut.
+  const leitungen = heimBereit() ? sendSockets() : [];
+  for (const id of meine) { await zurueckziehenFuerAlle(id, true, leitungen); n++; }
   toast('🗑 ' + n + ' eigene Nachricht(en) zurückgezogen.');
 });
 
@@ -3341,6 +3481,13 @@ $('tb-reload').addEventListener('click', async () => {
 relayPills();
 activeRelays.forEach(connect);
 updateSendState();
+initHeimUi();       // Heim-Relais (Voreinstellung: nur dorthin senden)
+// Wird nur nach Hause gesendet, MUSS die Leitung dorthin stehen — auch wenn der
+// Nutzer sie in der Leiste einmal abgewählt hatte.
+if (heim.nurHeim && RELAY_POOL.includes(heim.url) && !activeRelays.includes(heim.url)) {
+  activeRelays = [heim.url].concat(activeRelays);
+  relayPills(); connect(heim.url);
+}
 initRotationUi();   // Relais-Automatik (Default aus; startet nur mit Häkchen + Geheimnis)
 
 // Schmaler Prüf-Zugang für die headless-Tests (Muster wie in Küchenzettel).
@@ -3356,6 +3503,7 @@ window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubH
   ausgeblendete: () => [...hidden], merkGrenze: () => MERK_GRENZE, toastRueckgaengig,
   gruppen: () => dmGroups, makeGroupInvite, parseGroupInvite, sendeAnGruppe,
   holeAelteres, holeAelteresMit, nachholRelais, nachholLaeuft: () => nachholLaeuft,
+  heim: () => heim, sendZiele: () => sendSockets().map((w) => w.url), heimBereit,
   setGruppe: (gid) => { dmGroup = gid; dmRecipients = []; refreshRecipientSelect(); },
   makeContactCard, parseContactCard, setPrivatAn: (pubs) => { dmRecipients = pubs.slice(); refreshRecipientSelect(); } };
 </script>
