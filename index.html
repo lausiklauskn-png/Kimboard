@@ -1825,34 +1825,63 @@ function anhangItem(icon, text, sub, onClick) {
   b.addEventListener('click', () => { closeAnhang(); onClick(); });
   return b;
 }
-function closeAnhang() { const m = $('anhang-menu'); if (m) m.hidden = true; }
+// WICHTIG (Klaus' Befund 2026-08-01): Das Attribut `hidden` allein reicht NICHT.
+// Es wirkt nur über das Standard-Stylesheet des Browsers — der Inline-Stil
+// `display:flex` aus ANHANG_STYLE schlägt es. Das Menü blieb dadurch offen
+// kleben, obwohl der Code es für geschlossen hielt. Deshalb wird die Anzeige
+// immer über `style.display` gesteuert (und `hidden` nur konsistent mitgeführt).
+function anhangOffen() {
+  const m = $('anhang-menu');
+  return !!m && m.offsetParent !== null;      // die DARSTELLUNG entscheidet
+}
+function closeAnhang() {
+  const m = $('anhang-menu');
+  if (!m) return;
+  m.style.display = 'none';
+  m.hidden = true;
+}
 function buildAnhangMenu() {
   const m = $('anhang-menu'); if (!m) return;
   m.style.cssText = ANHANG_STYLE;
   m.innerHTML = '';
-  const privat = dmRecipients.length > 0;
-  const hint = privat ? '' : 'erst oben „Privat an" wählen';
-  // Die echten Knöpfe bleiben im DOM (Handler unverändert) — wir lösen sie nur aus.
-  m.appendChild(anhangItem('🎙️', 'Sprachnotiz', privat ? 'aufnehmen und verschlüsselt senden' : hint,
-    () => $('dmvoice').click()));
-  m.appendChild(anhangItem('🖼️', 'Bild', privat ? 'wird verkleinert und verschlüsselt gesendet' : hint,
-    () => $('dmimg').click()));
-  m.appendChild(anhangItem('👤', 'Kontakt senden', privat ? 'einen deiner Kontakte weitergeben' : hint,
-    () => openKontaktSenden()));
+  if (!dmRecipients.length) {
+    // Ohne Empfänger wäre jeder Eintrag gesperrt. Statt drei toter Zeilen mit
+    // dreifachem Hinweis (das Menü wurde dadurch so hoch, dass es die Auswahl
+    // darüber verdeckte) genau EIN Weg — der zum Ziel führt. WhatsApp-Logik:
+    // erst der Empfänger, dann der Anhang.
+    m.appendChild(anhangItem('🔒', 'Erst Empfänger wählen',
+      'Mitschicken geht nur privat — hier zur Auswahl „Privat an"', () => {
+        const sel = $('dm-to');
+        if (!sel) return;
+        sel.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        try { sel.focus(); } catch (_e) { /* fail-soft */ }
+        toast('Wähle hier, an wen es privat gehen soll.');
+      }));
+  } else {
+    // Die echten Knöpfe bleiben im DOM (Handler unverändert) — wir lösen sie nur aus.
+    m.appendChild(anhangItem('🎙️', 'Sprachnotiz', 'aufnehmen und verschlüsselt senden',
+      () => $('dmvoice').click()));
+    m.appendChild(anhangItem('🖼️', 'Bild', 'wird verkleinert und verschlüsselt gesendet',
+      () => $('dmimg').click()));
+    m.appendChild(anhangItem('👤', 'Kontakt senden', 'einen deiner Kontakte weitergeben',
+      () => openKontaktSenden()));
+  }
   m.hidden = false;
+  m.style.display = 'flex';
 }
 (function setupAnhang() {
   const btn = $('anhang'); if (!btn) return;
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
-    const m = $('anhang-menu');
-    if (m && !m.hidden) { closeAnhang(); return; }
+    if (anhangOffen()) { closeAnhang(); return; }   // Zustand an der Darstellung ablesen
     buildAnhangMenu();
   });
   document.addEventListener('click', (e) => {
     const m = $('anhang-menu');
-    if (m && !m.hidden && !m.contains(e.target) && e.target !== btn) closeAnhang();
+    if (anhangOffen() && !m.contains(e.target) && e.target !== btn) closeAnhang();
   });
+  // Dritter Weg hinaus (DeX/Tastatur): Escape.
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && anhangOffen()) closeAnhang(); });
   // Die Einzel-Knöpfe bleiben erreichbar, treten aber optisch zurück: der
   // gebündelte Weg ist ab jetzt der normale.
   ['dmvoice', 'dmimg'].forEach((id) => { const b = $(id); if (b) b.hidden = true; });
