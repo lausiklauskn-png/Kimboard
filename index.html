@@ -1011,11 +1011,22 @@ function renderQuestion(ev, relay) {
   amic.className = 'tbtn'; amic.textContent = '🎤'; amic.title = 'Antwort einsprechen';
   const btn = document.createElement('button');
   btn.className = 'ghost'; btn.textContent = 'Antworten';
+  // WICHTIG: Auf eine PRIVATE Nachricht muss die Antwort ebenfalls privat gehen.
+  // Vorher baute der Antwort-Knopf sie immer öffentlich (buildEvent ohne
+  // Empfänger) — wer auf eine verschlüsselte Nachricht antwortete, schrieb seine
+  // Antwort im Klartext aufs offene Brett, ohne es zu merken.
+  // `ev._dm` ist die Gegenseite: bei fremder Nachricht der Absender, bei
+  // eigener der Empfänger.
+  const antwortAn = ev._dm || null;
+  if (antwortAn) {
+    ta.placeholder = '🔒 Private Antwort an ' + contactName(antwortAn) + '…';
+    form.classList.add('kb-reply-private');
+  }
   btn.addEventListener('click', async () => {
     const a = ta.value.trim();
     if (!a) return;
     btn.disabled = true;
-    const aev = await buildEvent(a, [['e', ev.id]]);
+    const aev = await buildEvent(a, [['e', ev.id]], antwortAn);
     const live = liveSockets();
     for (const ws of live) ws.send(JSON.stringify(['EVENT', aev]));
     ta.value = '';
