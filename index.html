@@ -101,9 +101,18 @@
   #selftest.ok { color: var(--accent); }
   #selftest.fail { color: var(--bad); }
   #threads { list-style: none; margin: 0; padding: 0; }
+  /* Die beiden ✕ (am Zettel und an jeder Antwort) müssen in EINER Spalte
+     stehen. Sie messen aber von verschiedenen Kanten: das Zettel-✕ von der
+     Kartenkante, das Antwort-✕ von der Innenkante — also um die Innenabstände
+     versetzt. Genau das sah Klaus (2026-08-01: „die X sind immer noch nicht in
+     einer Reihe"). Darum die Maße als Variablen und das Antwort-✕ um den
+     Innenabstand zurückgerechnet; ändert sich das Polster, bleibt es bündig. */
   .q-card {
+    --zettel-pad: 14px;
+    --x-rand: 10px;      /* Abstand des ✕ von der Kartenkante */
+    --x-groesse: 24px;   /* beide ✕ gleich groß, sonst wirkt die Spalte ausgefranst */
     border: 1px solid var(--line); border-radius: 10px;
-    padding: 12px 14px; margin-bottom: 12px; background: var(--panel2);
+    padding: 12px var(--zettel-pad); margin-bottom: 12px; background: var(--panel2);
   }
   /* Rechts oben schwebt das ✕ (.q-del, 24px). Ohne reservierten Platz lief die
      Knopfreihe darunter durch und verdeckte es — am Handy war das ✕ dadurch
@@ -120,10 +129,19 @@
     border-left: 2px solid var(--line); }
   /* Platz rechts für das eigene ✕ der Antwort reservieren — sonst läuft der
      Text darunter durch (dieselbe Falle wie am Zettel-Kopf, 2026-08-01). */
-  .answers li { padding: 7px 0; position: relative; padding-right: 30px; }
-  /* Kleiner als das ✕ am Zettel: eine Antwort ist der leisere Eintrag. */
-  .a-del { right: 0; top: 4px; width: 20px; height: 20px; font-size: .72rem; opacity: .55; }
-  .a-del:hover { opacity: 1; }
+  .answers li { padding: 7px 0; position: relative; padding-right: calc(var(--x-groesse) + 8px); }
+  /* Gleiche Spalte wie das Zettel-✕: Der Innenabstand der Karte wird
+     herausgerechnet, weil die Antwort-Zeile an der INNENkante beginnt.
+     Gleiche Größe, nur leiser (die Antwort ist der ruhigere Eintrag). */
+  /* Höhere Spezifität als `.q-del` (das Element trägt beide Klassen). Sonst
+     gewinnt die weiter unten stehende `.q-del`-Regel und das ✕ säße wieder in
+     der falschen Spalte — genau daran scheiterte der erste Versuch. */
+  .answers li .a-del {
+    right: calc(var(--x-rand) - var(--zettel-pad)); top: 4px;
+    width: var(--x-groesse); height: var(--x-groesse);
+    font-size: .78rem; opacity: .5;
+  }
+  .answers li .a-del:hover { opacity: 1; }
   .a-head { font-size: 0.74rem; color: var(--dim); margin-bottom: 2px; }
   .a-head .who { color: var(--mine); }
   .answers li.mine .a-head .who::after { content: " (ich)"; color: var(--accent); }
@@ -258,7 +276,12 @@
   }
   .q-del {
     z-index: 2;   /* das ✕ liegt IMMER über der Kopfzeile */
-    position: absolute; right: 10px; top: 10px; width: 24px; height: 24px;
+    position: absolute; right: var(--x-rand); top: 10px;
+    width: var(--x-groesse); height: var(--x-groesse);
+    /* padding: 0 ist nötig — die Grundregel für Knöpfe setzt 9px/15px, und die
+       drückte beide ✕ auf 32 px, egal was hier als Größe stand. Die Gleichheit
+       war also Zufall, nicht Absicht (beim Nachmessen 2026-08-01 aufgefallen). */
+    padding: 0;
     border-radius: 8px; border: 1px solid var(--line); background: var(--panel2);
     color: var(--dim); font-size: 0.85rem; line-height: 1; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
