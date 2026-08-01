@@ -70,6 +70,12 @@
     margin-bottom: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.18);
   }
   .row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  /* Knopf-Gruppe: bleibt beieinander und rückt geschlossen nach rechts, statt
+     dass `space-between` die Knöpfe über die ganze Breite verteilt. Wird es
+     eng, wandert die GANZE Gruppe in die nächste Zeile — nicht ein einzelner
+     Knopf. Gleiche Höhe für alle, damit die Reihe eine Linie bildet. */
+  .btnbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; margin-left: auto; }
+  .btnbar .tbtn { display: inline-flex; align-items: center; }
   .label { color: var(--dim); font-size: 0.8rem; }
   code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
   .pill {
@@ -355,9 +361,15 @@
   <div class="card">
     <div class="row" style="justify-content: space-between; margin-bottom: 8px;">
       <span class="label">Fragen &amp; Antworten (Tag <code>#sbkim-frage-antwort-test</code>)</span>
-      <button id="meine-zurueckziehen" class="tbtn" title="Alle EIGENEN Nachrichten zurückziehen — bittet die Relais, sie zu entfernen">🗑 Meine zurückziehen</button>
-      <button id="board-clear" class="tbtn" title="Angezeigte Suchen ausblenden (lokal, bleibt nach Neuladen weg)">🧹 leeren</button>
-      <button id="ausgeblendet" class="tbtn" title="Was du ausgeblendet oder stumm geschaltet hast — und wie du es zurückholst">👁 Ausgeblendet</button>
+      <!-- Die drei Knöpfe gehören ZUSAMMEN in eine Gruppe. Vorher lagen sie
+           einzeln in der .row mit `justify-content: space-between` — das zog
+           sie über die volle Breite auseinander und schob den dritten in die
+           nächste Zeile, versetzt. (Klaus' Sichttest 2026-08-01 mit Bildern.) -->
+      <span class="btnbar">
+        <button id="meine-zurueckziehen" class="tbtn" title="Alle EIGENEN Nachrichten zurückziehen — bittet die Relais, sie zu entfernen">🗑 Meine zurückziehen</button>
+        <button id="board-clear" class="tbtn" title="Angezeigte Suchen ausblenden (lokal, bleibt nach Neuladen weg)">🧹 Leeren</button>
+        <button id="ausgeblendet" class="tbtn" title="Was du ausgeblendet oder stumm geschaltet hast — und wie du es zurückholst">👁 Ausgeblendet</button>
+      </span>
     </div>
     <div class="sort-ctl">
       <button id="semantic" class="ghost">🧠 Antworten nach Bedeutung sortieren</button>
