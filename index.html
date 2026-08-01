@@ -333,6 +333,7 @@
       <select id="dm-to" style="flex:1; min-width:180px;"><option value="">— öffentlich / Brett —</option></select>
       <button id="dm-multi" class="tbtn" title="Mehrere Empfänger wählen (Alle / keine / einzelne)">👥 Mehrere</button>
       <button id="dm-contacts" class="tbtn" title="Kontakte verwalten + Sicherheitsnummern">👤 Kontakte</button>
+      <button id="dm-groups" class="tbtn" title="Gruppen anlegen, einladen, an die Gruppe schreiben">👥 Gruppen</button>
     </div>
     <div class="status" id="dm-status" style="margin-top:4px;">Tipp: Klick auf einen Absender-Namen merkt ihn als Kontakt (Freigabe). „Privat an" verschlüsselt den nächsten Zettel nur für diese Person.</div>
   </div>
@@ -638,10 +639,16 @@ let dmContacts = {}; // pubHex -> { name, pinnedAt }
 try { dmContacts = JSON.parse(localStorage.getItem(LS_DM_CONTACTS) || '{}') || {}; } catch { dmContacts = {}; }
 function saveContacts() { try { localStorage.setItem(LS_DM_CONTACTS, JSON.stringify(dmContacts)); } catch { /* */ } }
 let dmRecipients = []; // pubHex[] der Empfänger für den nächsten Zettel ([] = Brett/öffentlich).
+let dmGroup = null;    // gid, wenn der nächste Zettel an eine GRUPPE geht (sonst null).
 // Mehrfachauswahl (Klaus 2026-07-18): 0 = öffentlich, 1 = privat an einen, N = privat an
 // mehrere (ein verschlüsselter Zettel pro Empfänger). „Alle / keine / einzelne" per Chooser.
 function dmStatusText() {
   const n = dmRecipients.length;
+  if (dmGroup) {
+    const k = groupPeers(dmGroup).length;
+    return '👥 Der nächste Zettel geht an die Gruppe „' + groupName(dmGroup) + '" — ' + k
+      + ' Mitglied(er) bekommen je eine eigene, nur für sie verschlüsselte Kopie. Antworten sehen alle in der Gruppe.';
+  }
   if (n === 0) return 'Tipp: Klick auf einen Absender-Namen merkt ihn als Kontakt (Freigabe). „Privat an" verschlüsselt den nächsten Zettel nur für diese Person(en).';
   if (n === 1) return '🔒 Der nächste Zettel geht PRIVAT an ' + contactName(dmRecipients[0]) + ' (nur ihr beide könnt ihn lesen).';
   return '🔒 Der nächste Zettel geht PRIVAT an ' + n + ' Kontakte — jeder bekommt eine eigene, nur für ihn verschlüsselte Kopie.';
@@ -678,16 +685,110 @@ function entferneKontakt(pub) {
   toast('Kontakt entfernt.');
   return true;
 }
+// ── Gruppen (Stufe 4) ────────────────────────────────────────────────────────
+// Eine Gruppe ist hier eine BENANNTE MITGLIEDERLISTE — kein Gruppen-Server,
+// kein gemeinsamer Gruppenschlüssel. Eine Nachricht an die Gruppe geht als
+// eigene, nur für ihn verschlüsselte Kopie an JEDES Mitglied (wie „privat an
+// mehrere"). Antworten gehen ebenfalls an alle, dadurch sehen alle denselben
+// Verlauf.
+//
+// KLAUS' KERNIDEE: Wer eine Einladung ANNIMMT, übernimmt damit die Gruppe UND
+// alle Mitglieder als Kontakte — der Schlüsseltausch erledigt sich von selbst.
+//
+// EHRLICH: Bei N Mitgliedern gehen N Kopien raus — für kleine, private Runden
+// gedacht, nicht für große Gruppen. Wer eine Gruppe verlässt, verschwindet
+// nicht rückwirkend aus den Kopien, die die anderen schon haben.
+const LS_GROUPS = 'sbkim_pinnwand_groups';
+let dmGroups = {};        // gid -> { name, members: [pubHex...], seit }
+try { dmGroups = JSON.parse(localStorage.getItem(LS_GROUPS) || '{}') || {}; } catch { /* */ }
+function saveGroups() { try { localStorage.setItem(LS_GROUPS, JSON.stringify(dmGroups)); } catch { /* */ } }
+function groupName(gid) { return (dmGroups[gid] && dmGroups[gid].name) || 'Gruppe'; }
+// Die anderen — an sie geht jede Kopie. Ich selbst bin nie mein eigener Empfänger.
+function groupPeers(gid) {
+  const g = dmGroups[gid];
+  return g ? (g.members || []).filter((p) => p !== pubHex && /^[0-9a-f]{64}$/.test(p)) : [];
+}
+function neueGid() { return toHex(crypto.getRandomValues(new Uint8Array(8))); }
+
+// Der GEMEINSAME FADEN. Ohne ihn wäre die Gruppe kaputt: Jedes Mitglied
+// bekommt eine eigene Kopie mit eigener Kennung — eine Antwort, die sich auf
+// „meine" Kopie beruft, findet bei den anderen nichts. Darum trägt jede
+// Gruppen-Nachricht zusätzlich eine gemeinsame Faden-Marke `gm` (Gruppe +
+// Nachricht), die bei allen Kopien gleich ist. Danach sortieren alle gleich.
+const gmIndex = new Map();               // "gid:mid" -> lokale Frage-Kennung
+function gmOf(ev) {
+  const t = (ev.tags || []).find((x) => x[0] === 'gm' && x[1] && x[2]);
+  return t ? (t[1] + ':' + t[2]) : null;
+}
+// Zu welchem Faden gehört diese Antwort? Gruppen-Marke schlägt die e-Kennung,
+// weil die e-Kennung nur beim Absender selbst existiert.
+function threadOf(ev) {
+  const gm = gmOf(ev);
+  if (gm && gmIndex.has(gm)) return gmIndex.get(gm);
+  return refOf(ev);
+}
+
+// Einladungs-Umschlag — reist IM vorhandenen ECDH-Chiffrat, wie die
+// Visitenkarte (kbct). Kein neuer Kanal, kein neuer Schlüssel.
+function makeGroupInvite(gid, name, members) {
+  return JSON.stringify({
+    kbgi: 1, g: gid, n: String(name || '').slice(0, 60),
+    m: members.slice(0, 50).map((p) => [String(contactName(p)).slice(0, 60), p]),
+  });
+}
+function parseGroupInvite(s) {
+  if (typeof s !== 'string' || s.charCodeAt(0) !== 123 || s.indexOf('"kbgi"') < 0) return null;
+  try {
+    const o = JSON.parse(s);
+    if (!o || o.kbgi !== 1 || typeof o.g !== 'string' || !/^[0-9a-f]{8,32}$/.test(o.g)) return null;
+    if (!Array.isArray(o.m)) return null;
+    const mitglieder = o.m
+      .filter((x) => Array.isArray(x) && typeof x[1] === 'string' && /^[0-9a-f]{64}$/.test(x[1]))
+      .slice(0, 50)
+      .map((x) => ({ name: String(x[0] || '').slice(0, 60), pub: x[1] }));
+    if (!mitglieder.length) return null;
+    return { gid: o.g, name: String(o.n || '').slice(0, 60) || 'Gruppe', members: mitglieder };
+  } catch (_e) { /* fail-soft */ }
+  return null;
+}
+
+// Eine Nachricht an die Gruppe: je Mitglied eine eigene, nur für es
+// verschlüsselte Kopie — alle mit derselben Faden-Marke `gm`, damit sie bei
+// allen im selben Strang landen. `antwortAuf` = Faden-Marke der Frage (dann ist
+// es eine Antwort), sonst wird eine neue Marke erzeugt.
+async function sendeAnGruppe(gid, content, antwortAuf, live, eTag) {
+  const peers = groupPeers(gid);
+  if (!peers.length) return null;
+  const mid = antwortAuf || toHex(crypto.getRandomValues(new Uint8Array(8)));
+  // `grp` (zufällig je Sendung) faltet meine N Kopien in MEINER Ansicht zu einem
+  // Eintrag zusammen — das ist etwas anderes als `gm` (der gemeinsame Faden).
+  const grp = toHex(crypto.getRandomValues(new Uint8Array(8)));
+  const sockets = live || liveSockets();
+  for (const r of peers) {
+    const tags = [['grp', grp, String(peers.length)], ['gm', gid, mid]];
+    if (eTag) tags.push(['e', eTag]);
+    const ev = await buildEvent(content, tags, r);
+    for (const ws of sockets) ws.send(JSON.stringify(['EVENT', ev]));
+    dispatch(ev, sockets[0] ? sockets[0].url : 'lokal');
+  }
+  return mid;
+}
 function refreshRecipientSelect() {
   const sel = $('dm-to'); if (!sel) return;
   // Nur gültige (noch bekannte) Empfänger behalten.
   dmRecipients = dmRecipients.filter((p) => dmContacts[p]);
   sel.innerHTML = '';
   const o0 = document.createElement('option'); o0.value = ''; o0.textContent = '— öffentlich / Brett —'; sel.appendChild(o0);
+  for (const gid of Object.keys(dmGroups)) {
+    const o = document.createElement('option'); o.value = 'g:' + gid;
+    o.textContent = '👥 ' + groupName(gid) + ' (' + groupPeers(gid).length + ')';
+    sel.appendChild(o);
+  }
   for (const pub of Object.keys(dmContacts)) {
     const o = document.createElement('option'); o.value = pub; o.textContent = '🔒 privat an ' + contactName(pub); sel.appendChild(o);
   }
-  if (dmRecipients.length >= 2) {
+  if (dmGroup && dmGroups[dmGroup]) { sel.value = 'g:' + dmGroup; }
+  else if (dmRecipients.length >= 2) {
     // Mehrfachauswahl aktiv → eigener Sammel-Eintrag oben.
     const om = document.createElement('option'); om.value = '__multi__'; om.textContent = '🔒 privat an ' + dmRecipients.length + ' Kontakte (Mehrfach)'; sel.insertBefore(om, o0.nextSibling);
     sel.value = '__multi__';
@@ -1463,14 +1564,24 @@ function renderQuestion(ev, relay) {
   makeWhoClickable(who, ev.pubkey);
   head.appendChild(who);
   attachContactAction(head, ev.pubkey);
-  if (ev._dm) { const lk = document.createElement('span'); lk.className = 'who'; lk.style.color = 'var(--acc2,#8fd)'; lk.textContent = ' 🔒 privat · ' + (ev._dmGroupN > 1 ? ev._dmGroupN + ' Kontakte' : contactName(ev._dm)); head.appendChild(lk); }
+  if (ev._dm) {
+    const lk = document.createElement('span'); lk.className = 'who'; lk.style.color = 'var(--acc2,#8fd)';
+    // In einer Gruppe zählt der Gruppenname, nicht „privat an X" — sonst stünde
+    // bei jedem Mitglied ein anderer Text unter derselben Nachricht.
+    lk.textContent = ev._gid
+      ? ' 👥 ' + groupName(ev._gid)
+      : ' 🔒 privat · ' + (ev._dmGroupN > 1 ? ev._dmGroupN + ' Kontakte' : contactName(ev._dm));
+    head.appendChild(lk);
+  }
   head.append(` · ${timeStr(ev.created_at)} · via ${relay.replace('wss://', '')}`);
   const text = document.createElement('div');
   text.className = 'q-text';
   const _media = ev._dm ? parseDmMedia(ev.content) : null;
   const _card = (!_media && ev._dm) ? parseContactCard(ev.content) : null;
+  const _inv = (!_media && !_card && ev._dm) ? parseGroupInvite(ev.content) : null;
   if (_media) renderDmMedia(text, _media);
   else if (_card) renderContactCard(text, _card, ev.pubkey);
+  else if (_inv) renderGroupInvite(text, _inv, ev.pubkey);
   else text.textContent = ev.content;
   const answersUl = document.createElement('ul');
   answersUl.className = 'answers';
@@ -1491,7 +1602,13 @@ function renderQuestion(ev, relay) {
   // `ev._dm` ist die Gegenseite: bei fremder Nachricht der Absender, bei
   // eigener der Empfänger.
   const antwortAn = ev._dm || null;
-  if (antwortAn) {
+  // In einer Gruppe geht die Antwort an ALLE Mitglieder — sonst sähen die
+  // anderen den Verlauf nicht, und aus der Gruppe würde ein Zwiegespräch.
+  const gruppe = (ev._gid && dmGroups[ev._gid]) ? ev._gid : null;
+  if (gruppe) {
+    ta.placeholder = '👥 Antwort an alle in „' + groupName(gruppe) + '"…';
+    form.classList.add('kb-reply-private', 'kb-reply-group');
+  } else if (antwortAn) {
     ta.placeholder = '🔒 Private Antwort an ' + contactName(antwortAn) + '…';
     form.classList.add('kb-reply-private');
   }
@@ -1499,11 +1616,16 @@ function renderQuestion(ev, relay) {
     const a = ta.value.trim();
     if (!a) return;
     btn.disabled = true;
-    const aev = await buildEvent(a, [['e', ev.id]], antwortAn);
     const live = liveSockets();
-    for (const ws of live) ws.send(JSON.stringify(['EVENT', aev]));
+    if (gruppe) {
+      // Dieselbe Faden-Marke wie die Frage → bei allen landet es im selben Strang.
+      await sendeAnGruppe(gruppe, a, ev._gmid, live, ev.id);
+    } else {
+      const aev = await buildEvent(a, [['e', ev.id]], antwortAn);
+      for (const ws of live) ws.send(JSON.stringify(['EVENT', aev]));
+      dispatch(aev, live[0] ? live[0].url : 'lokal'); // sofort lokal zeigen
+    }
     ta.value = '';
-    dispatch(aev, live[0] ? live[0].url : 'lokal'); // sofort lokal zeigen (entschlüsselt bei privatem Brett)
     btn.disabled = false;
   });
   form.appendChild(ta); form.appendChild(amic); form.appendChild(btn);
@@ -1517,20 +1639,29 @@ function renderQuestion(ev, relay) {
 
   const view = { answersUl, answerIds: new Set(), qEv: ev, qVec: null, answers: [] };
   qViews.set(ev.id, view);
-  // gepufferte Antworten nachreichen
-  const pend = pendingAnswers.get(ev.id);
-  if (pend) { for (const a of pend) renderAnswer(a.ev, a.relay); pendingAnswers.delete(ev.id); }
+  // Faden-Marke merken, damit Antworten der anderen Mitglieder hier landen.
+  const gmKey = gmOf(ev);
+  if (gmKey) gmIndex.set(gmKey, ev.id);
+  // gepufferte Antworten nachreichen (unter Kennung UND Faden-Marke)
+  for (const key of [ev.id, gmKey]) {
+    if (!key) continue;
+    const pend = pendingAnswers.get(key);
+    if (pend) { pendingAnswers.delete(key); for (const a of pend) renderAnswer(a.ev, a.relay); }
+  }
   // Bedeutungs-Sortierung: Frage einbetten + sortieren, falls eingeschaltet.
   if (semanticOn) embedQuestion(view).then(() => resort(view));
 }
 
 function renderAnswer(ev, relay) {
   if (hidden.has(ev.id)) return;   // einzeln ausgeblendete Antwort bleibt weg
-  const qid = refOf(ev);
+  const qid = threadOf(ev);
   const view = qViews.get(qid);
   if (!view) { // Frage noch nicht da → puffern
-    if (!pendingAnswers.has(qid)) pendingAnswers.set(qid, []);
-    pendingAnswers.get(qid).push({ ev, relay });
+    // Bei Gruppen unter der FADEN-MARKE puffern, nicht unter der e-Kennung:
+    // Die e-Kennung zeigt auf die Kopie des Absenders, die es hier nie gab.
+    const key = gmOf(ev) || qid;
+    if (!pendingAnswers.has(key)) pendingAnswers.set(key, []);
+    pendingAnswers.get(key).push({ ev, relay });
     return;
   }
   if (view.answerIds.has(ev.id)) return;
@@ -1553,7 +1684,15 @@ function renderAnswer(ev, relay) {
   makeWhoClickable(who, ev.pubkey);
   head.appendChild(who);
   attachContactAction(head, ev.pubkey);
-  if (ev._dm) { const lk = document.createElement('span'); lk.className = 'who'; lk.style.color = 'var(--acc2,#8fd)'; lk.textContent = ' 🔒 privat · ' + (ev._dmGroupN > 1 ? ev._dmGroupN + ' Kontakte' : contactName(ev._dm)); head.appendChild(lk); }
+  if (ev._dm) {
+    const lk = document.createElement('span'); lk.className = 'who'; lk.style.color = 'var(--acc2,#8fd)';
+    // In einer Gruppe zählt der Gruppenname, nicht „privat an X" — sonst stünde
+    // bei jedem Mitglied ein anderer Text unter derselben Nachricht.
+    lk.textContent = ev._gid
+      ? ' 👥 ' + groupName(ev._gid)
+      : ' 🔒 privat · ' + (ev._dmGroupN > 1 ? ev._dmGroupN + ' Kontakte' : contactName(ev._dm));
+    head.appendChild(lk);
+  }
   head.append(` · ${timeStr(ev.created_at)} · via ${relay.replace('wss://', '')}`);
   const badge = document.createElement('span');
   badge.className = 'a-score'; badge.style.display = 'none'; // erst mit Bedeutungs-Sortierung
@@ -1562,7 +1701,10 @@ function renderAnswer(ev, relay) {
   judgeBadge.className = 'a-judge'; judgeBadge.style.display = 'none'; // erst mit KI-Richter
   head.appendChild(judgeBadge);
   const text = document.createElement('div');
-  text.className = 'a-text'; text.textContent = ev.content;
+  text.className = 'a-text';
+  // Auch in Antworten kann eine Einladung stecken (Gruppen-Strang).
+  const _ainv = ev._dm ? parseGroupInvite(ev.content) : null;
+  if (_ainv) renderGroupInvite(text, _ainv, ev.pubkey); else text.textContent = ev.content;
   const grund = document.createElement('div');
   grund.className = 'a-grund'; grund.style.display = 'none'; // Richter-Begründung
   li.appendChild(head); li.appendChild(text); li.appendChild(grund);
@@ -2086,6 +2228,10 @@ async function dispatch(ev, relay, istLive = false) {
     const plain = await dmDecrypt(ev.content, priv, other);
     if (plain == null) return; // nicht für dich → still überspringen (kein Geheimtext-Müll)
     ev.content = plain; ev._dm = other; // intern Klartext + Merker für die 🔒-Anzeige
+    // Gehört der Zettel zu einer Gruppe, die ich kenne? Dann wird er als
+    // Gruppen-Nachricht angezeigt und Antworten gehen an ALLE Mitglieder.
+    const gm = (ev.tags || []).find((t) => t[0] === 'gm' && t[1] && t[2]);
+    if (gm && dmGroups[gm[1]]) { ev._gid = gm[1]; ev._gmid = gm[2]; }
     // Umschalt-Ansage (Schritt 3): wird ausgeführt, nicht als Zettel angezeigt.
     if (rotIsAnnouncement(ev.content)) { handleAnnouncement(ev); return; }
     // Eigene „privat an mehrere"-Sendung: die N Kopien (gleicher grp-Tag) in der EIGENEN
@@ -2240,11 +2386,17 @@ $('boardkey-set').addEventListener('click', async () => {
   const sel = $('dm-to');
   if (sel) sel.addEventListener('change', () => {
     if (sel.value === '__multi__') { openRecipientChooser(); return; } // Sammel-Eintrag → Chooser
+    if (sel.value.startsWith('g:')) {          // Gruppe gewählt
+      dmGroup = sel.value.slice(2); dmRecipients = []; updateDmStatus(); return;
+    }
+    dmGroup = null;
     dmRecipients = sel.value ? [sel.value] : [];
     updateDmStatus();
   });
   const cb = $('dm-contacts');
   if (cb) cb.addEventListener('click', openContacts);
+  const gb = $('dm-groups');
+  if (gb) gb.addEventListener('click', openGruppen);
   const mb = $('dm-multi');
   if (mb) mb.addEventListener('click', openRecipientChooser);
   refreshRecipientSelect();
@@ -2302,8 +2454,11 @@ $('ask').addEventListener('click', async () => {
   if (!content) return;
   $('ask').disabled = true;
   const live = liveSockets();
-  const rcpts = dmRecipients.slice();
-  if (rcpts.length >= 2) {
+  const rcpts = dmGroup ? groupPeers(dmGroup) : dmRecipients.slice();
+  if (dmGroup) {
+    if (!rcpts.length) { toast('In dieser Gruppe ist außer dir niemand.'); $('ask').disabled = false; return; }
+    await sendeAnGruppe(dmGroup, content, null, live);
+  } else if (rcpts.length >= 2) {
     // Privat an mehrere (Klaus 2026-07-18): ein eigener, nur für ihn verschlüsselter
     // Zettel pro Empfänger — kein Empfänger sieht die anderen. Ein gemeinsamer grp-Tag
     // (mit Anzahl) lässt die eigene Ansicht die N Kopien zu EINEM Eintrag zusammenfassen.
@@ -2487,6 +2642,8 @@ function buildAnhangMenu() {
       () => $('dmimg').click()));
     m.appendChild(anhangItem('👤', 'Kontakt senden', 'einen deiner Kontakte weitergeben',
       () => openKontaktSenden()));
+    m.appendChild(anhangItem('👥', 'In Gruppe einladen', 'Gruppe wählen — die Einladung geht verschlüsselt',
+      () => openGruppen()));
   }
   m.hidden = false;
   m.style.display = 'flex';
@@ -2568,6 +2725,199 @@ function openKontaktSenden() {
   bg.appendChild(box);
   bg.addEventListener('click', (e) => { if (e.target === bg) document.body.removeChild(bg); });
   document.body.appendChild(bg);
+}
+// ── Gruppen-Fenster: anlegen, ansehen, einladen ──────────────────────────────
+function openGruppen() {
+  const bg = document.createElement('div');
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(20,18,16,.6);display:flex;align-items:center;justify-content:center;z-index:10040;padding:16px;';
+  const box = document.createElement('div');
+  box.id = 'gruppen-fenster';
+  box.style.cssText = 'background:var(--card,#1c1a17);color:var(--fg,#eee);border:1px solid var(--acc,#c9a961);border-radius:14px;max-width:520px;width:100%;max-height:82vh;overflow:auto;padding:16px 18px;font-size:.92rem;';
+  const zu = () => { try { document.body.removeChild(bg); } catch (_e) { /* */ } };
+  box.innerHTML = '<h3 style="margin:.1em 0 .5em">👥 Gruppen</h3>' +
+    '<p style="opacity:.8;margin:.2em 0 .8em">Eine Gruppe ist eine <b>benannte Runde</b> aus deinen Kontakten. ' +
+    'Was du an die Gruppe schreibst, geht als eigene, <b>verschlüsselte Kopie an jedes Mitglied</b> — ' +
+    'Antworten sehen alle. Es gibt keinen Gruppen-Server: Wer einlädt, verschickt die Mitgliederliste; ' +
+    'wer annimmt, hat damit automatisch alle Schlüssel.</p>';
+
+  const liste = document.createElement('div');
+  const gids = Object.keys(dmGroups);
+  if (!gids.length) {
+    const leer = document.createElement('div');
+    leer.style.cssText = 'opacity:.75;padding:8px 0'; leer.textContent = 'Noch keine Gruppe.';
+    liste.appendChild(leer);
+  }
+  for (const gid of gids) {
+    const z = document.createElement('div');
+    z.className = 'kb-group-row';
+    z.style.cssText = 'border-top:1px solid rgba(255,255,255,.12);padding:9px 0;';
+    const kopf = document.createElement('div');
+    kopf.style.cssText = 'font-weight:600';
+    kopf.textContent = '👥 ' + groupName(gid);          // textContent: Namen können fremd sein
+    const wer = document.createElement('div');
+    wer.style.cssText = 'opacity:.78;font-size:.85rem;margin:.2em 0 .5em';
+    wer.textContent = groupPeers(gid).length + ' Mitglied(er): '
+      + groupPeers(gid).map((p) => contactName(p)).join(', ');
+    const reihe = document.createElement('div');
+    reihe.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;';
+    const schreiben = document.createElement('button');
+    schreiben.className = 'tbtn kb-group-write'; schreiben.textContent = '✍️ An die Gruppe schreiben';
+    schreiben.addEventListener('click', () => {
+      dmGroup = gid; dmRecipients = []; refreshRecipientSelect(); zu();
+      const f = $('qmsg'); if (f) { f.scrollIntoView({ block: 'center' }); try { f.focus(); } catch (_e) { /* */ } }
+    });
+    const einladen = document.createElement('button');
+    einladen.className = 'tbtn kb-group-invite'; einladen.textContent = '✉️ Einladungen verschicken';
+    einladen.title = 'Schickt jedem Mitglied die Mitgliederliste — erst nach seiner Zustimmung wird sie gespeichert';
+    einladen.addEventListener('click', async () => { zu(); await ladeEin(gid); });
+    const raus = document.createElement('button');
+    raus.className = 'tbtn kb-group-leave'; raus.textContent = '🚪 Verlassen';
+    raus.addEventListener('click', () => {
+      if (!confirm('Die Gruppe „' + groupName(gid) + '" verlassen?\n\n'
+        + 'Sie verschwindet nur bei dir. Die anderen behalten ihre Liste — und was sie schon '
+        + 'bekommen haben, bleibt bei ihnen. Deine Kontakte bleiben erhalten.')) return;
+      delete dmGroups[gid]; saveGroups();
+      if (dmGroup === gid) dmGroup = null;
+      refreshRecipientSelect(); zu(); openGruppen(); toast('Gruppe verlassen.');
+    });
+    reihe.appendChild(schreiben); reihe.appendChild(einladen); reihe.appendChild(raus);
+    z.appendChild(kopf); z.appendChild(wer); z.appendChild(reihe);
+    liste.appendChild(z);
+  }
+  box.appendChild(liste);
+
+  // — Neue Gruppe —
+  const neu = document.createElement('div');
+  neu.style.cssText = 'border-top:1px solid rgba(255,255,255,.12);margin-top:10px;padding-top:10px;';
+  neu.innerHTML = '<div style="font-weight:600;margin-bottom:6px">Neue Gruppe</div>';
+  const nameFeld = document.createElement('input');
+  nameFeld.id = 'gruppe-name'; nameFeld.placeholder = 'Name der Gruppe (z. B. Familie)';
+  nameFeld.maxLength = 60; nameFeld.style.cssText = 'width:100%;margin-bottom:8px;';
+  neu.appendChild(nameFeld);
+  const kontakte = Object.keys(dmContacts);
+  if (!kontakte.length) {
+    const h = document.createElement('div');
+    h.style.cssText = 'opacity:.75;font-size:.88rem';
+    h.textContent = 'Du hast noch keine Kontakte — nimm zuerst jemanden über „➕ Kontakt" an einem Zettel auf.';
+    neu.appendChild(h);
+  }
+  for (const pub of kontakte) {
+    const l = document.createElement('label');
+    l.style.cssText = 'display:block;margin:3px 0;font-size:.9rem;';
+    const c = document.createElement('input');
+    c.type = 'checkbox'; c.className = 'kb-group-pick'; c.dataset.pub = pub;
+    const t = document.createElement('span'); t.textContent = ' ' + contactName(pub);
+    l.appendChild(c); l.appendChild(t); neu.appendChild(l);
+  }
+  const anlegen = document.createElement('button');
+  anlegen.className = 'tbtn kb-group-create'; anlegen.textContent = '👥 Gruppe anlegen';
+  anlegen.style.marginTop = '8px';
+  anlegen.disabled = !kontakte.length;
+  anlegen.addEventListener('click', () => {
+    const name = nameFeld.value.trim();
+    if (!name) { toast('Gib der Gruppe zuerst einen Namen.'); return; }
+    const gewaehlt = [...box.querySelectorAll('.kb-group-pick')].filter((c) => c.checked).map((c) => c.dataset.pub);
+    if (!gewaehlt.length) { toast('Wähle mindestens ein Mitglied.'); return; }
+    const gid = neueGid();
+    // Ich selbst gehöre zur Liste — sonst fehlte ich in der Einladung, die die
+    // anderen bekommen, und sie könnten mir nicht antworten.
+    dmGroups[gid] = { name, members: [pubHex].concat(gewaehlt), seit: Date.now() };
+    saveGroups(); refreshRecipientSelect();
+    zu();
+    toast('👥 Gruppe „' + name + '" angelegt — jetzt Einladungen verschicken.');
+    openGruppen();
+  });
+  neu.appendChild(anlegen);
+  box.appendChild(neu);
+
+  const hinweis = document.createElement('div');
+  hinweis.style.cssText = 'opacity:.72;font-size:.83rem;margin-top:10px;line-height:1.5';
+  hinweis.textContent = 'Ehrlich dazu: Bei N Mitgliedern gehen N Kopien raus — das ist für kleine, '
+    + 'private Runden gedacht, nicht für große Gruppen. Und eine Gruppe lebt auf jedem Gerät für sich: '
+    + 'Wer sie verlässt, verschwindet nicht rückwirkend aus dem, was die anderen schon haben.';
+  box.appendChild(hinweis);
+
+  const close = document.createElement('button');
+  close.className = 'ghost kb-group-close'; close.textContent = 'Schließen'; close.style.marginTop = '12px';
+  close.addEventListener('click', zu);
+  box.appendChild(close);
+  bg.appendChild(box);
+  bg.addEventListener('click', (e) => { if (e.target === bg) zu(); });
+  document.body.appendChild(bg);
+}
+// Einladungen verschicken: jedes Mitglied bekommt die Liste verschlüsselt.
+async function ladeEin(gid) {
+  const peers = groupPeers(gid);
+  if (!peers.length) { toast('In dieser Gruppe ist außer dir niemand.'); return; }
+  const g = dmGroups[gid];
+  const text = makeGroupInvite(gid, g.name, g.members || []);
+  const live = liveSockets();
+  for (const r of peers) {
+    const ev = await buildEvent(text, [], r);
+    for (const ws of live) ws.send(JSON.stringify(['EVENT', ev]));
+    dispatch(ev, live[0] ? live[0].url : 'lokal');
+  }
+  toast('✉️ Einladung an ' + peers.length + ' Mitglied(er) verschickt.');
+}
+// Anzeige einer empfangenen EINLADUNG — nie still gespeichert.
+function renderGroupInvite(container, inv, absender) {
+  const box = document.createElement('div');
+  box.className = 'kb-groupinvite';
+  box.style.cssText = 'border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:10px 12px;';
+  const t1 = document.createElement('div');
+  t1.style.cssText = 'font-weight:600;margin-bottom:3px'; t1.textContent = '👥 Einladung in eine Gruppe';
+  const t2 = document.createElement('div');
+  t2.style.cssText = 'opacity:.85;font-size:.88rem';
+  // Fremde Namen NUR über textContent (siehe Visitenkarte).
+  t2.textContent = contactName(absender) + ' lädt dich in „' + inv.name + '" ein — '
+    + inv.members.length + ' Mitglied(er): ' + inv.members.map((m) => m.name || short(m.pub)).join(', ');
+  const t3 = document.createElement('div');
+  t3.style.cssText = 'font-size:.8rem;opacity:.75;margin:6px 0 7px;line-height:1.45';
+  t3.textContent = 'Nimmst du an, werden die Gruppe UND alle Mitglieder als Kontakte gespeichert — '
+    + 'damit ist der Schlüsseltausch erledigt. Das sind die Angaben des Absenders: Sie beweisen nicht, '
+    + 'dass die Schlüssel wirklich diesen Personen gehören. Für Gewissheit später die Sicherheitsnummern vergleichen.';
+  box.appendChild(t1); box.appendChild(t2); box.appendChild(t3);
+  if (dmGroups[inv.gid]) {
+    const p = document.createElement('div');
+    p.style.cssText = 'font-size:.85rem;opacity:.8'; p.textContent = '✓ Du bist bereits in dieser Gruppe.';
+    box.appendChild(p);
+  } else {
+    const reihe = document.createElement('div');
+    reihe.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
+    const ja = document.createElement('button');
+    ja.className = 'tbtn kb-invite-yes'; ja.textContent = '✓ Annehmen';
+    ja.addEventListener('click', () => {
+      const mitglieder = [];
+      for (const m of inv.members) {
+        if (m.pub === pubHex) { mitglieder.push(m.pub); continue; }
+        // Der automatische Schlüsseltausch: jedes Mitglied wird Kontakt.
+        // Vorhandene Namen NICHT überschreiben — meine Benennung gewinnt.
+        if (!dmContacts[m.pub]) dmContacts[m.pub] = { name: m.name || short(m.pub), pinnedAt: Date.now() };
+        mitglieder.push(m.pub);
+      }
+      if (!mitglieder.includes(pubHex)) mitglieder.push(pubHex);
+      dmGroups[inv.gid] = { name: inv.name, members: mitglieder, seit: Date.now() };
+      saveContacts(); saveGroups(); refreshRecipientSelect();
+      for (const m of inv.members) refreshAuthorLabels(m.pub);
+      box.innerHTML = '';
+      const okk = document.createElement('div');
+      okk.style.cssText = 'font-size:.9rem';
+      okk.textContent = '✓ In „' + inv.name + '" — alle Mitglieder sind jetzt deine Kontakte.';
+      box.appendChild(okk);
+      toast('👥 Gruppe „' + inv.name + '" übernommen.');
+    });
+    const nein = document.createElement('button');
+    nein.className = 'tbtn kb-invite-no'; nein.textContent = '✕ Ablehnen';
+    nein.addEventListener('click', () => {
+      box.innerHTML = '';
+      const n = document.createElement('div');
+      n.style.cssText = 'font-size:.9rem;opacity:.8'; n.textContent = '✕ Abgelehnt — nichts gespeichert.';
+      box.appendChild(n);
+    });
+    reihe.appendChild(ja); reihe.appendChild(nein);
+    box.appendChild(reihe);
+  }
+  container.appendChild(box);
 }
 // Anzeige einer empfangenen Visitenkarte — mit ausdrücklicher Zustimmung.
 function renderContactCard(container, card, absender) {
@@ -2915,6 +3265,8 @@ window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubH
   // Nur für die Prüfung: die Platzhalter-Dauer verkürzen, statt eine Stunde zu warten.
   setPlatzhalterDauer: (ms) => { PLATZHALTER_DAUER = ms; }, raeumePlatzhalter,
   ausgeblendete: () => [...hidden], merkGrenze: () => MERK_GRENZE, toastRueckgaengig,
+  gruppen: () => dmGroups, makeGroupInvite, parseGroupInvite, sendeAnGruppe,
+  setGruppe: (gid) => { dmGroup = gid; dmRecipients = []; refreshRecipientSelect(); },
   makeContactCard, parseContactCard, setPrivatAn: (pubs) => { dmRecipients = pubs.slice(); refreshRecipientSelect(); } };
 </script>
 
