@@ -322,14 +322,28 @@
 
   /* ---------------- Start ---------------- */
   function init() {
+    // Den Knopf SUCHEN, und nur anlegen, wenn er fehlt.
+    // Warum die Reihenfolge zählt (Lighthouse 2026-08-02): dieses Skript lädt
+    // zuletzt. Wurde der Knopf erst hier erzeugt, wuchs die Werkzeugleiste
+    // nachträglich in die Breite und schob die Kopfzeile — ein sichtbarer
+    // Sprung, mitten im Blickfeld. Jetzt steht er im HTML; hier wird er nur
+    // noch gefunden. Fehlt er (ältere Seite, anderes Repo, das diese Datei
+    // übernimmt), wird er wie bisher angelegt — die Datei bleibt für sich
+    // allein lauffähig.
     var bar = document.querySelector('.toolbar');
-    if (bar && !document.getElementById('hilfe-btn')) {
-      var btn = document.createElement('button');
+    var btn = document.getElementById('hilfe-btn');
+    if (!btn && bar) {
+      btn = document.createElement('button');
       btn.id = 'hilfe-btn'; btn.className = 'tbtn'; btn.type = 'button';
       btn.title = 'Hilfe, Anleitung und Erklär-Blasen';
       btn.textContent = '❓';
-      btn.addEventListener('click', openHelp);
       bar.appendChild(btn);
+    }
+    // Der Handler kommt IMMER dran — auch am vorgefundenen Knopf. Vorher hing
+    // er nur am selbst erzeugten; ein vorhandener Knopf wäre stumm geblieben.
+    if (btn && !btn.dataset.hilfeVerdrahtet) {
+      btn.dataset.hilfeVerdrahtet = '1';
+      btn.addEventListener('click', openHelp);
     }
     // capture: VOR der App — inkl. der frühen Zeige-Phasen (Tablet: touchstart).
     ['pointerdown', 'mousedown', 'touchstart', 'click'].forEach(function (t) {
