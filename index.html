@@ -28,7 +28,13 @@
 <meta name="description" content="Kimboard — semantische Pinnwand: Frage→Antwort über ein geborgtes dummes Brett (Nostr), nach Bedeutung sortiert. Server-los, ein SBKIM-Endknoten.">
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#0e1620">
-<link rel="icon" href="./icon-192.png">
+<!-- Tab-Symbol und Logo oben benutzen ABSICHTLICH dieselbe Datei (icon-128.png).
+     Gleiche Adresse = ein einziger Download für beides. Vorher hing hier das
+     192er (78 KiB) und oben im Kopf das 512er (475 KiB) — zusammen 553 KiB für
+     ein Bild, das im Tab 16 px und oben 64 px groß ist (Lighthouse 2026-08-02).
+     Die großen Dateien bleiben unberührt: sie gehören ins Manifest, wo das
+     Betriebssystem sie beim Installieren wirklich in voller Größe braucht. -->
+<link rel="icon" href="./icon-128.png">
 <link rel="apple-touch-icon" href="./icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Kimboard">
@@ -78,6 +84,16 @@
   .btnbar .tbtn { display: inline-flex; align-items: center; }
   .label { color: var(--dim); font-size: 0.8rem; }
   code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  /* Platz für die Kennung freihalten, BEVOR sie da ist (Lighthouse 2026-08-02).
+     #me steht beim ersten Aufbau auf „…" und wird gleich darauf durch
+     short(pubHex) ersetzt — genau 13 Zeichen (8 + … + 4). Ohne Reservierung
+     wuchs die Pille um zwölf Zeichen, sprang in die zweite Zeile und schob
+     alles darunter nach unten. 13ch in einer Festbreiten-Schrift ist exakt die
+     Endbreite, also springt nichts mehr; sichtbar ändert sich nichts.
+     #selftest geht den umgekehrten Weg („läuft…" → „OK", also kürzer) — auch
+     das verrückt die Zeile, darum ebenfalls festgehalten. */
+  #me { display: inline-block; min-width: 13ch; }
+  #selftest { display: inline-block; min-width: 6ch; }
   .pill {
     display: inline-flex; align-items: center; gap: 6px;
     background: var(--panel2); border: 1px solid var(--line);
@@ -301,7 +317,7 @@
 <body>
 <div class="wrap">
   <div class="topbar">
-    <img class="logo" src="./icon-512.png" alt="Kimboard" width="512" height="512">
+    <img class="logo" src="./icon-128.png" alt="Kimboard" width="128" height="128">
     <div style="flex:1;">
       <h1>Kimboard</h1>
       <div class="sub" style="margin:0;">Impulse · Verbindungen · Erkenntnisse</div>
@@ -312,6 +328,12 @@
            erschien dort als leerer Kasten (Klaus' Sichttest 2026-07-28). -->
       <button id="tb-full" class="tbtn" title="Vollbild / Vollansicht">🔳</button>
       <button id="tb-reload" class="tbtn" title="Neu laden (Cache leeren)">🔄</button>
+      <!-- Der ❓-Knopf steht hier im HTML, statt von assets/hilfe.js angehängt
+           zu werden. Das Skript lädt zuletzt; erzeugte es den Knopf, wuchs die
+           Werkzeugleiste nachträglich und schob die Kopfzeile (Lighthouse
+           2026-08-02). hilfe.js findet ihn jetzt vor und hängt nur noch das
+           Klick-Verhalten an — fehlt er, legt es ihn weiterhin selbst an. -->
+      <button id="hilfe-btn" class="tbtn" type="button" title="Hilfe, Anleitung und Erklär-Blasen">❓</button>
     </div>
   </div>
   <p class="sub">Eine <b>Frage</b> aufs geborgte, dumme Brett (Nostr) legen und
@@ -319,6 +341,12 @@
     <b>Bedeutung</b> sortiert. ·
     <a class="link" href="./impressum.html">Impressum &amp; Datenschutz</a></p>
 
+  <!-- <main> um den eigentlichen Inhalt (Lighthouse 2026-08-02: „Dokument hat
+       keinen Haupt-Bereich"). Vorlese-Programme und Tastatur-Navigation können
+       damit direkt zum Inhalt springen, statt sich durch Kopfzeile und
+       Werkzeug-Knöpfe zu arbeiten. Kopfzeile und Fußzeile bleiben bewusst
+       AUSSERHALB — sie sind kein Inhalt, sondern Rahmen. -->
+  <main>
   <div class="card">
     <div class="row" style="justify-content: space-between;">
       <span class="pill">Meine Spore: <code id="me">…</code></span>
@@ -326,21 +354,54 @@
     </div>
     <div class="row" style="margin-top: 8px; gap: 8px; align-items:center;">
       <span class="pill" style="flex:1;">🏷️ Gerätename:
-        <input id="geraetename" type="text" maxlength="40" placeholder="z. B. Klaus-Handy (frei wählbar)"
+        <input id="geraetename" aria-label="Gerätename (frei wählbarer Anzeige-Name)" type="text" maxlength="40" placeholder="z. B. Klaus-Handy (frei wählbar)"
                style="border:none;background:transparent;color:inherit;font:inherit;min-width:140px;">
       </span>
     </div>
     <div class="status" id="geraetename-hint" style="margin-top:4px;">Frei wählbarer Anzeige-Name — erscheint im Raum + auf deinen Zetteln (nur ein Hinweis, kein Vertrauens-Beweis; die Kennung bleibt daneben).</div>
-    <div class="row" id="relays" style="margin-top: 10px;"></div>
+    <!-- Die Relais-Leiste steht ABSICHTLICH schon fertig im HTML (Lighthouse
+         2026-08-02). Vorher war sie leer und wurde erst von relayPills()
+         gefüllt — und das passiert erst, wenn die ganze Modul-Kette geladen
+         ist. Auf einem langsamen Gerät waren das mehrere Sekunden, in denen die
+         Karte 171 px zu kurz war; sobald die Pillen kamen, rutschte alles
+         darunter nach unten. Das war der größte Teil des gemessenen Sprungs
+         (Cumulative Layout Shift 0,433).
+         Hier steht der VOREINGESTELLTE Zustand: alle neun Relais aus
+         RELAY_POOL, die ersten fünf an (= RELAY_POOL.slice(0, 5)). Genau das
+         baut relayPills() gleich darauf nochmal — mit Klick-Verhalten und, wenn
+         gespeichert, mit der eigenen Auswahl des Nutzers. Wer eine abweichende
+         Auswahl gespeichert hat, sieht dabei noch eine kleine Korrektur; das
+         sind ein paar Pixel statt der 171.
+         WICHTIG: Diese Liste muss zu RELAY_POOL passen. tests/smoke_relais_
+         vorgezeichnet.mjs vergleicht beides und wird rot, wenn eines von
+         beiden geändert wird und das andere nicht. -->
+    <div class="row" id="relays" style="margin-top: 10px;">
+      <span class="pill" style="cursor:pointer;opacity:1;" title="aktiv — klicken zum Abschalten"><span class="dot try"></span>relay.family-projekt.de</span>
+      <span class="pill" style="cursor:pointer;opacity:1;" title="aktiv — klicken zum Abschalten"><span class="dot try"></span>relay.damus.io</span>
+      <span class="pill" style="cursor:pointer;opacity:1;" title="aktiv — klicken zum Abschalten"><span class="dot try"></span>nos.lol</span>
+      <span class="pill" style="cursor:pointer;opacity:1;" title="aktiv — klicken zum Abschalten"><span class="dot try"></span>relay.nostr.band</span>
+      <span class="pill" style="cursor:pointer;opacity:1;" title="aktiv — klicken zum Abschalten"><span class="dot try"></span>relay.primal.net</span>
+      <span class="pill" style="cursor:pointer;opacity:0.45;" title="aus — klicken zum Zuschalten"><span class="dot"></span>+ relay.snort.social</span>
+      <span class="pill" style="cursor:pointer;opacity:0.45;" title="aus — klicken zum Zuschalten"><span class="dot"></span>+ nostr.mom</span>
+      <span class="pill" style="cursor:pointer;opacity:0.45;" title="aus — klicken zum Zuschalten"><span class="dot"></span>+ offchain.pub</span>
+      <span class="pill" style="cursor:pointer;opacity:0.45;" title="aus — klicken zum Zuschalten"><span class="dot"></span>+ relay.mostr.pub</span>
+    </div>
     <div class="row" style="margin-top: 8px; gap: 8px; align-items:center; flex-wrap:wrap;">
       <label for="heim-relay" style="opacity:.85;">🏠 Heim-Relais:</label>
       <select id="heim-relay" title="Dorthin werden deine Zettel geschrieben" style="flex:1; min-width:180px;"></select>
       <label style="opacity:.85;"><input type="checkbox" id="heim-nur" checked> nur dorthin senden</label>
     </div>
-    <div class="status" id="heim-status" style="margin-top:4px;"></div>
+    <!-- Der Text steht ABSICHTLICH schon hier (Lighthouse 2026-08-02), wie die
+         Relais-Leiste darüber: heimStatus() schreibt ihn sonst erst, wenn die
+         Modul-Kette geladen ist, und bis dahin war die Karte drei Zeilen zu
+         kurz — alles darunter rutschte nach. Es ist WÖRTLICH der Text, den
+         heimStatus() für die Voreinstellung erzeugt (heim.nurHeim = true,
+         HOME_RELAY). Wer etwas anderes gespeichert hat, sieht gleich darauf
+         die Korrektur; das sind wenige Pixel statt drei Zeilen. -->
+    <div class="status" id="heim-status" style="margin-top:4px;">🏠 Geschrieben wird NUR auf relay.family-projekt.de — gelesen weiterhin von allen oben gewählten Relais, damit dir nichts entgeht. Ehrlich: Das gilt für DEINEN Absende-Weg. Was dein Gegenüber mit anderer Einstellung verschickt, landet trotzdem auch anderswo.</div>
     <div class="row" style="margin-top: 8px; gap: 8px; align-items:center; flex-wrap:wrap;">
       <label style="opacity:.85;"><input type="checkbox" id="rot-on"> 🔄 Relais automatisch wechseln</label>
-      <input id="rot-secret" type="password" placeholder="Kreis-Geheimnis (bei allen gleich)" autocomplete="off" style="flex:1; min-width:170px;">
+      <input id="rot-secret" aria-label="Kreis-Geheimnis für den automatischen Relais-Wechsel" type="password" placeholder="Kreis-Geheimnis (bei allen gleich)" autocomplete="off" style="flex:1; min-width:170px;">
       <select id="rot-period" title="Wie oft gewechselt wird">
         <option value="300000">alle 5 Min</option>
         <option value="900000" selected>alle 15 Min</option>
@@ -354,7 +415,7 @@
     </div>
     <div class="status" id="rot-status" style="margin-top:4px;">Aus — du wählst die Relais oben selbst. Automatik: alle im Kreis rechnen aus demselben Geheimnis dieselben Relais aus, ohne Absprache. Zweck: Ausfallsicherheit + Metadaten nicht an einem Relais bündeln — <b>kein</b> Schutz gegen Sperren oder Überwachung.</div>
     <div class="row" style="margin-top: 10px; gap: 8px;">
-      <input id="boardkey" type="password" placeholder="🔒 Privates Brett: Passwort (leer = offen)" autocomplete="off" style="flex:1; min-width:200px;">
+      <input id="boardkey" aria-label="Passwort für ein privates Brett (leer lassen = offenes Brett)" type="password" placeholder="🔒 Privates Brett: Passwort (leer = offen)" autocomplete="off" style="flex:1; min-width:200px;">
       <button id="boardkey-set" class="tbtn">Setzen</button>
     </div>
     <div class="status" id="boardkey-status" style="margin-top:4px;">Offenes Brett — alle Zettel sind öffentlich lesbar.</div>
@@ -370,7 +431,7 @@
 
   <div class="card">
     <div class="label" style="margin-bottom: 6px;">Neue Frage aufs Brett legen</div>
-    <textarea id="qmsg" placeholder="z. B. Was ist ein leichtes Sommeressen?" maxlength="280"></textarea>
+    <textarea id="qmsg" aria-label="Deine Frage für das Brett" placeholder="z. B. Was ist ein leichtes Sommeressen?" maxlength="280"></textarea>
     <div class="row" style="margin-top: 8px; justify-content: space-between;">
       <span class="label" id="sendhint">&nbsp;</span>
       <span style="display:flex; gap:8px; align-items:center;">
@@ -407,14 +468,14 @@
       <span class="status" id="semstatus">aus — sortiert nach Ankunft (Bedeutungs-Rangfolge lädt Modell ~30&nbsp;MB beim Einschalten)</span>
     </div>
     <div class="sort-ctl judge-ctl">
-      <select id="judgeprov">
+      <select id="judgeprov" aria-label="KI-Richter: Anbieter wählen">
         <option value="">⚖️ KI-Richter: aus (gratis bleibt Voreinstellung)</option>
         <option value="claude">Cloud: Claude (Anthropic) — eigener Schlüssel</option>
         <option value="gemini">Cloud: Gemini (Google) — Gratis-Stufe</option>
         <option value="openrouter">Cloud: OpenRouter — viele Modelle, auch gratis</option>
         <option value="webllm">frei: KI im Browser (WebLLM) — kein Cent, lädt Modell</option>
       </select>
-      <input id="judgekey" type="password" placeholder="API-Schlüssel" style="display:none;" autocomplete="off">
+      <input id="judgekey" aria-label="API-Schlüssel für den gewählten KI-Anbieter" type="password" placeholder="API-Schlüssel" style="display:none;" autocomplete="off">
       <a id="judgekeylink" href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" style="display:none; color:#6aa6e0; font-size:0.8rem;">🔑 Schlüssel erstellen ↗</a>
       <label id="judgeremember-l" style="display:none; font-size:0.8rem; color:var(--dim);">
         <input type="checkbox" id="judgeremember" checked> auf diesem Gerät merken
@@ -425,7 +486,7 @@
         <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek V3 (gratis)</option>
       </select>
       <button id="orFree" class="tbtn" style="display:none;" title="Aktuelle Gratis-Modelle von OpenRouter laden">🔄 Gratis-Modelle laden</button>
-      <select id="webllmmodel" style="display:none;">
+      <select id="webllmmodel" aria-label="KI-Modell für den Browser (WebLLM)" style="display:none;">
         <option value="Qwen2.5-0.5B-Instruct-q4f16_1-MLC">Trabant — Qwen2.5 0.5B (winzig, fast überall)</option>
         <option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC" selected>VW Golf — Qwen2.5 1.5B (sichere Mittelklasse)</option>
         <option value="Qwen2.5-3B-Instruct-q4f16_1-MLC">Großer VW — Qwen2.5 3B (am Limit alter Geräte)</option>
@@ -439,6 +500,7 @@
     </div>
     <ul id="threads"><li class="empty">Noch keine Frage empfangen…</li></ul>
   </div>
+  </main>
 
   <footer class="honest-short">
     <span id="fp-mode">&#128275; <b>Offenes Brett</b> &mdash; alle, die <i>dieses</i>
@@ -3565,6 +3627,10 @@ window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubH
 
 <script>
   // Service-Worker registrieren → installierbar + offline-Start (App-Schale).
+  //
+  // Der Vorrat wird beim Installieren angelegt, nicht verzögert: gemessen war
+  // der Unterschied gegen einen Server mit Cache-Kopfzeilen exakt null (siehe
+  // sw.js, Kopf). Eine Verzögerung hätte nur Technik hinzugefügt.
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", function () {
       navigator.serviceWorker.register("./sw.js").catch(function (err) {
