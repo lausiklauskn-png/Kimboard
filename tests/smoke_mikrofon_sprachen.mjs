@@ -44,8 +44,16 @@ const ORT = `http://127.0.0.1:${PORT}/`;
 /* Der Spion: schreibt jedes `lang` mit, mit dem eine Aufnahme gestartet wird. */
 const SPION = `
   window.__gehoert = [];
+  window.__fehlerAls = null;      // Testschalter: diesen Fehler beim Start werfen
   window.SpeechRecognition = function () {
-    this.start = function () { window.__gehoert.push(this.lang); if (this.onstart) this.onstart(); };
+    this.start = function () {
+      window.__gehoert.push(this.lang);
+      if (this.onstart) this.onstart();
+      if (window.__fehlerAls) {
+        if (this.onerror) this.onerror({ error: window.__fehlerAls });
+        if (this.onend) this.onend();     // der Browser beendet nach einem Fehler
+      }
+    };
     this.stop = function () { if (this.onend) this.onend(); };
   };
   window.webkitSpeechRecognition = window.SpeechRecognition;
@@ -115,12 +123,65 @@ try {
    * Deutsch, weil die App auf Deutsch geschrieben ist — ehrliche Vorgabe,
    * kein Raten. */
   for (const [locale, erwartet] of [['ar-EG', 'ar-SA'], ['ru-RU', 'ru-RU'],
-                                    ['en-GB', 'en-US'], ['ja-JP', 'de-DE']]) {
+                                    ['en-GB', 'en-US'], ['ja-JP', 'de-DE'],
+                                    ['ps-AF', 'ps-AF'], ['fa-AF', 'fa-IR']]) {
     const { ctx, page } = await seite(locale);
     await page.click('#mic');
     await page.waitForTimeout(150);
     const g = (await page.evaluate(() => window.__gehoert))[0];
     ok(g === erwartet, `Gerät ${locale} → Mikrofon hört ${g}, erwartet ${erwartet}`);
+    await ctx.close();
+  }
+
+  /* ── Wenn der Browser die Sprache NICHT kann ──────────────────────────────
+   *
+   * Klaus' Nachfrage 2026-08-11 zu Paschtu. Welche Sprachen der Browser
+   * wirklich beherrscht, verrät er NICHT vorher — es gibt keine abfragbare
+   * Liste. Man kann eine Sprache also nur anbieten und dann sauber sagen, wenn
+   * es nicht ging. Genau das wird hier geprüft:
+   *
+   *   1. Es erscheint ein SATZ, kein Fachwort. Vorher stand da
+   *      „Spracheingabe-Fehler: language-not-supported" — ausgerechnet für den
+   *      Menschen, der mit einem englischen Fachbegriff am wenigsten anfangen
+   *      kann. Wer das liest, hält die App für kaputt.
+   *   2. Der Satz BLEIBT STEHEN. Der Aufräumer nach dem Ende löschte den
+   *      Hinweis, wenn darin nicht das Wort „Fehler" vorkam — die lesbaren
+   *      Sätze tragen es nicht mehr. Ohne die Markierung wäre die Meldung
+   *      sofort weg gewesen: schlimmer als der Fachbegriff, weil dann gar
+   *      nichts mehr dasteht.
+   */
+  {
+    const { ctx, page } = await seite('de-DE');
+    await page.selectOption('#tb-miclang', 'ps-AF');
+    await page.evaluate(() => { window.__fehlerAls = 'language-not-supported'; });
+    await page.click('#mic');
+    await page.waitForTimeout(250);
+    const hinweis = await page.evaluate(() => document.getElementById('sendhint').textContent.trim());
+    /* Bewusst NICHT „ist lang genug" — diese Prüfung war beim Schreiben auf dem
+       Satz „kein Relay verbunden…" grün geworden und hätte den eigentlichen
+       Befund verdeckt. Gefragt wird nach dem, was drinstehen MUSS. */
+    ok(/Sprache|tippe/.test(hinweis), 'kein lesbarer Satz bei nicht gekonnter Sprache: "' + hinweis + '"');
+    ok(!/language-not-supported/.test(hinweis), 'der rohe Fehlercode steht noch in der Meldung');
+    ok(/پښتو/.test(hinweis), 'die Meldung nennt die betroffene Sprache nicht: "' + hinweis + '"');
+
+    // Und noch einmal 300 ms später — die Meldung darf nicht verschwinden.
+    await page.waitForTimeout(300);
+    const spaeter = await page.evaluate(() => document.getElementById('sendhint').textContent.trim());
+    ok(spaeter === hinweis, 'die Meldung wurde wieder weggeräumt: "' + spaeter + '"');
+
+    // Ein neuer Versuch, der gelingt, räumt sie dagegen ab.
+    await page.evaluate(() => { window.__fehlerAls = null; });
+    await page.selectOption('#tb-miclang', 'de-DE');
+    await page.click('#mic');
+    await page.waitForTimeout(120);
+    await page.click('#mic');            // stoppen → onend ohne Fehler
+    await page.waitForTimeout(200);
+    // Erwartet wird NICHT „leer": dort steht im Normalfall der Verbindungs-
+    // Status, und der soll zurückkommen. Erwartet wird, dass die Sprach-Meldung
+    // WEG ist — genau das ist der Unterschied zwischen „geräumt" und „stumm".
+    const sauber = await page.evaluate(() => document.getElementById('sendhint').textContent.trim());
+    ok(!/پښتو/.test(sauber), 'nach einem gelungenen Versuch klebt die alte Meldung noch: "' + sauber + '"');
+    ok(sauber.length > 0, 'nach dem Räumen steht gar nichts mehr da — der Verbindungs-Status fehlt');
     await ctx.close();
   }
 } finally {
