@@ -328,6 +328,16 @@
            erschien dort als leerer Kasten (Klaus' Sichttest 2026-07-28). -->
       <button id="tb-full" class="tbtn" title="Vollbild / Vollansicht">🔳</button>
       <button id="tb-reload" class="tbtn" title="Neu laden (Cache leeren)">🔄</button>
+      <!-- Sprache fürs Mikrofon (Klaus 2026-08-11: „wenn ich in Arabisch etwas
+           hineinspreche, muss auch Arabisch als Text herauskommen").
+           Die Browser-Spracherkennung kann die Sprache NICHT selbst erraten —
+           sie muss ihr gesagt werden. Vorher stand hier fest `de-DE`, wer
+           Arabisch sprach bekam deutschen Buchstabensalat.
+           Die Vorauswahl kommt aus der Geräte-Sprache; wer sie ändern will,
+           tut es hier, und die Wahl bleibt gespeichert. Gilt für ALLE
+           Mikrofone der Seite (Frage wie Antwort). -->
+      <select id="tb-miclang" class="tbtn" aria-label="Sprache fürs Mikrofon"
+              title="Sprache fürs Mikrofon — in welcher Sprache du sprichst"></select>
       <!-- Der ❓-Knopf steht hier im HTML, statt von assets/hilfe.js angehängt
            zu werden. Das Skript lädt zuletzt; erzeugte es den Knopf, wuchs die
            Werkzeugleiste nachträglich und schob die Kopfzeile (Lighthouse
@@ -3415,6 +3425,100 @@ $('meine-zurueckziehen').addEventListener('click', async () => {
   toast('🗑 ' + n + ' eigene Nachricht(en) zurückgezogen.');
 });
 
+// ---- Sprache fürs Mikrofon (Klaus 2026-08-11) --------------------------------
+//
+// Vorher stand an beiden Mikrofonen fest `rec.lang = 'de-DE'`. Wer Arabisch,
+// Russisch oder Englisch sprach, bekam den Versuch, das als Deutsch zu hören —
+// also Buchstabensalat. Das war keine Kleinigkeit: für jeden, der kein Deutsch
+// spricht, war das Mikrofon schlicht kaputt.
+//
+// WARUM KEINE AUTOMATISCHE ERKENNUNG. Die Browser-Spracherkennung (Web Speech)
+// hat KEINE Sprach-Erkennung. Sie bekommt eine Sprache gesagt und hört genau
+// diese — sonst nichts. Es gibt in der Schnittstelle kein „finde selbst heraus,
+// was da gesprochen wird". Wer etwas anderes behauptet, verwechselt es mit den
+// Cloud-Diensten (Modul 21 `recognizeEU` kann über `alternativeLanguageCodes`
+// zwischen wenigen Sprachen wählen — aber das braucht einen Schlüssel und ein
+// Konto, und ist damit nichts für den ersten Aufruf eines Fremden).
+//
+// Also zwei Stufen, beide ohne Schlüssel:
+//   1. VORAUSWAHL aus der Geräte-Sprache. Ein arabisch eingerichtetes Handy
+//      spricht ab dem ersten Antippen Arabisch, ohne dass jemand etwas
+//      einstellt. Das deckt den Normalfall.
+//   2. WAHL in der Werkzeugleiste, gespeichert. Für den Fall, dass Gerät und
+//      Sprecher nicht dieselbe Sprache haben (deutsches Handy, arabischer
+//      Gast) — und der ist häufiger, als man denkt.
+//
+// Die Liste ist bewusst kurz und nach Bedarf erweiterbar: eine Zeile je
+// Sprache. Der Name steht in der Sprache selbst, sonst findet ihn genau der
+// nicht, der ihn braucht.
+const MIC_LANGS = [
+  ['de-DE', 'Deutsch'],
+  ['en-US', 'English'],
+  ['ru-RU', 'Русский'],
+  ['ar-SA', 'العربية'],
+  ['tr-TR', 'Türkçe'],
+  ['pl-PL', 'Polski'],
+  ['uk-UA', 'Українська'],
+  ['fr-FR', 'Français'],
+  ['es-ES', 'Español'],
+  ['it-IT', 'Italiano'],
+];
+// Sprachen, die von rechts nach links geschrieben werden (Klaus' zweiter Punkt).
+const RTL_LANGS = ['ar', 'he', 'fa', 'ur'];
+const LS_MICLANG = 'kimboard_miclang';
+
+// Geräte-Sprache auf die Liste abbilden: erst genau ('de-DE'), dann nur der
+// Sprach-Teil ('de' → 'de-DE'). Findet sich nichts, bleibt Deutsch — die App
+// ist auf Deutsch geschrieben, das ist die ehrliche Vorgabe, keine Anmaßung.
+function micLangVorauswahl() {
+  const roh = String((navigator.languages && navigator.languages[0]) || navigator.language || '');
+  if (!roh) return 'de-DE';
+  const genau = MIC_LANGS.find(([c]) => c.toLowerCase() === roh.toLowerCase());
+  if (genau) return genau[0];
+  const kurz = roh.split('-')[0].toLowerCase();
+  const teil = MIC_LANGS.find(([c]) => c.split('-')[0].toLowerCase() === kurz);
+  return teil ? teil[0] : 'de-DE';
+}
+let micLang = (() => {
+  try {
+    const g = localStorage.getItem(LS_MICLANG);
+    if (g && MIC_LANGS.some(([c]) => c === g)) return g;   // nur bekannte Werte
+  } catch { /* */ }
+  return micLangVorauswahl();
+})();
+const istRtl = (code) => RTL_LANGS.includes(String(code).split('-')[0].toLowerCase());
+
+// Ein Textfeld auf die gesprochene Sprache einstellen. `dir` steuert die
+// Leserichtung; bei Arabisch beginnt der Text rechts, sonst stimmt weder die
+// Wortstellung im Bild noch die Position des Schreibbalkens.
+// Bewusst `auto` statt `rtl`: dann entscheidet der Browser am INHALT und
+// mischt sauber, wenn jemand deutsche Wörter einstreut. Die ganze Seite zu
+// spiegeln wäre ein eigener, viel größerer Umbau — hier geht es um das Feld,
+// in das gesprochen wird, und das ist der Teil, der wirklich stört.
+function feldRichtung(feld) {
+  if (!feld) return;
+  try { feld.setAttribute('dir', 'auto'); feld.setAttribute('lang', micLang); } catch { /* */ }
+}
+
+(function setupMicLangWahl() {
+  const sel = $('tb-miclang');
+  if (!sel) return;
+  MIC_LANGS.forEach(([code, name]) => {
+    const o = document.createElement('option');
+    o.value = code; o.textContent = name;
+    sel.appendChild(o);
+  });
+  sel.value = micLang;
+  sel.addEventListener('change', () => {
+    micLang = sel.value;
+    try { localStorage.setItem(LS_MICLANG, micLang); } catch { /* */ }
+    feldRichtung($('qmsg'));
+    // Laufende Aufnahmen behalten ihre Sprache — die neue gilt ab dem
+    // nächsten Antippen. Alles andere wäre mitten im Satz ein Sprachwechsel.
+  });
+  feldRichtung($('qmsg'));
+})();
+
 // Mikrofon: Frage einsprechen (Browser-Spracherkennung, gratis, server-los,
 // kein Schlüssel). Fail-soft, wenn der Browser es nicht kann.
 (function setupMic() {
@@ -3430,9 +3534,10 @@ $('meine-zurueckziehen').addEventListener('click', async () => {
   mic.addEventListener('click', () => {
     if (listening) { try { rec.stop(); } catch { /* */ } return; }
     rec = new SR();
-    rec.lang = 'de-DE';
+    rec.lang = micLang;              // vorher fest 'de-DE' — siehe MIC_LANGS oben
     rec.interimResults = true;
     rec.continuous = false;
+    feldRichtung($('qmsg'));
     base = $('qmsg').value ? $('qmsg').value.replace(/\s*$/, '') + ' ' : '';
     rec.onstart = () => { listening = true; mic.classList.add('mic-on'); mic.textContent = '⏹'; $('sendhint').textContent = 'höre zu… sprich deine Frage'; };
     rec.onresult = (e) => {
@@ -3504,7 +3609,9 @@ function attachMic(mic, target, hint) {
     e.preventDefault();
     if (listening) { try { rec.stop(); } catch { /* */ } return; }
     rec = new SR();
-    rec.lang = 'de-DE'; rec.interimResults = true; rec.continuous = false;
+    rec.lang = micLang;              // vorher fest 'de-DE' — siehe MIC_LANGS oben
+    rec.interimResults = true; rec.continuous = false;
+    feldRichtung(target);            // Antwort-Feld ebenso rechts-nach-links-tauglich
     base = target.value ? target.value.replace(/\s*$/, '') + ' ' : '';
     rec.onstart = () => { listening = true; mic.classList.add('mic-on'); mic.textContent = '⏹'; setHint('höre zu… sprich jetzt'); };
     rec.onresult = (ev2) => {
