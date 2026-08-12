@@ -60,7 +60,18 @@
     padding: max(16px, env(safe-area-inset-top)) 16px 28px;
   }
   .wrap { max-width: 780px; margin: 0 auto; }
-  .topbar { display: flex; align-items: center; gap: 12px; margin: 4px 0 14px; }
+  /* Die Kopfzeile darf UMBRECHEN. Ohne `flex-wrap` bleiben Bild, Titel und die
+     Werkzeug-Knöpfe in einer Reihe, auch wenn sie nicht mehr hineinpasst —
+     gemessen am 2026-08-12: die Leiste endete bei 524 px in einem 360-px-Fenster.
+     `min-width: 0` am Titel-Block gehört dazu, sonst hält sein längstes Wort die
+     Reihe auseinander und der Umbruch nützt nichts. */
+  .topbar { display: flex; align-items: center; gap: 12px; margin: 4px 0 14px;
+    flex-wrap: wrap; }
+  .topbar > .titelblock { flex: 1 1 140px; min-width: 0; }
+  /* Auch die Werkzeug-Leiste selbst darf umbrechen: seit dem Mikrofon-Bau
+     stehen dort ein Auswahlfeld und mehrere Knöpfe nebeneinander. */
+  .toolbar { flex-wrap: wrap; }
+  .toolbar select { max-width: 100%; min-width: 0; }
   .logo {
     width: 64px; height: 64px; border-radius: 16px; flex: 0 0 auto;
     object-fit: cover; display: block;
@@ -179,8 +190,28 @@
   .sort-ctl select, .sort-ctl input {
     background: var(--panel2); color: var(--ink); border: 1px solid var(--line);
     border-radius: 8px; padding: 7px 9px; font: inherit; font-size: 0.85rem;
+    /* SCHRUMPFEN ERLAUBEN — sonst passt die Seite auf kein schmales Fenster.
+     *
+     * Ein Auswahlfeld macht sich so breit wie sein LÄNGSTER Eintrag, und ein
+     * Flex-Kind darf standardmäßig nicht unter seine Inhaltsbreite schrumpfen
+     * (`min-width: auto`). Gemessen am 2026-08-12 im echten Chromium: das Feld
+     * „KI-Richter: aus (gratis bleibt Voreinstellung)" war 407 px breit und
+     * zog die Seite auf 524 px — auf einem 360-px-Fenster ragte sie 164 px
+     * hinaus.
+     *
+     * Das ist auch die Erklärung für „reagiert verzögert": eine Seite, die
+     * breiter ist als das Fenster, bricht beim Schmalerziehen NICHT sauber um.
+     * Der Browser behält die breitere Anordnung und lässt schieben; erst ein
+     * Neuladen rechnet neu. Es sah aus wie ein Zeitproblem und war eine
+     * Platz-Rechnung.
+     *
+     * `min-width: 0` gibt das Schrumpfen frei; den Text im zugeklappten Feld
+     * kürzt der Browser selbst. */
+    min-width: 0; max-width: 100%;
   }
-  .sort-ctl input { min-width: 200px; }
+  /* Textfelder dürfen breit bleiben, solange Platz ist — aber nie breiter als
+     die Zeile. `min()` ist hier genau richtig: 200 px, wenn es sie gibt. */
+  .sort-ctl input { min-width: min(200px, 100%); }
   .sort-ctl .status { font-size: 0.78rem; color: var(--dim); }
   .status { font-size: 0.78rem; color: var(--dim); }
   .status.on { color: var(--accent); }
@@ -318,7 +349,7 @@
 <div class="wrap">
   <div class="topbar">
     <img class="logo" src="./icon-128.png" alt="Kimboard" width="128" height="128">
-    <div style="flex:1;">
+    <div class="titelblock">
       <h1>Kimboard</h1>
       <div class="sub" style="margin:0;">Impulse · Verbindungen · Erkenntnisse</div>
     </div>
