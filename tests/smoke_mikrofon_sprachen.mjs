@@ -216,7 +216,14 @@ try {
     ok(/پښتو/.test(schief) && /lateinischer Schrift/.test(schief),
        'kein Hinweis beim stillen Fehlschlag (Paschtu → lateinischer Text): "' + schief + '"');
 
-    // (b) Arabisch gewaehlt, arabischer Text zurueck → KEIN Hinweis
+    /* (b)+(c) NACHGESCHAERFT 2026-08-12.
+     *
+     * Vorher verlangten diese beiden Proben nur „enthaelt nicht 'lateinischer
+     * Schrift'". Das ist auf fast JEDEM Text wahr — auch auf „kein Relay
+     * verbunden…", also auf einem Lauf, in dem die Erkennung das Feld nie
+     * erreicht hat. Eine Pruefung, die nur eine Abwesenheit verlangt, beweist
+     * nichts. Jetzt wird zusaetzlich verlangt, dass der gesprochene Text
+     * WIRKLICH im Frage-Feld gelandet ist — das ist die Tat, um die es geht. */
     const passt = await page.evaluate(async () => {
       const s = document.getElementById('tb-miclang');
       s.value = 'ar-SA'; s.dispatchEvent(new Event('change'));
@@ -224,10 +231,11 @@ try {
       window.__ergebnis = 'سلام عليكم';
       document.getElementById('mic').click();
       await new Promise((r) => setTimeout(r, 250));
-      return document.getElementById('sendhint').textContent.trim();
+      return { hinweis: document.getElementById('sendhint').textContent.trim(),
+               feld: document.getElementById('qmsg').value };
     });
-    ok(!/lateinischer Schrift/.test(passt),
-       'falscher Alarm, obwohl die Schrift stimmt: "' + passt + '"');
+    ok(passt.feld === 'سلام عليكم' && !/lateinischer Schrift/.test(passt.hinweis),
+       'falscher Alarm, obwohl die Schrift stimmt: Feld "' + passt.feld + '", Hinweis "' + passt.hinweis + '"');
 
     // (c) Deutsch gewaehlt, deutscher Text → KEIN Hinweis (Latein ist richtig)
     const deutsch = await page.evaluate(async () => {
@@ -237,10 +245,11 @@ try {
       window.__ergebnis = 'Guten Tag';
       document.getElementById('mic').click();
       await new Promise((r) => setTimeout(r, 250));
-      return document.getElementById('sendhint').textContent.trim();
+      return { hinweis: document.getElementById('sendhint').textContent.trim(),
+               feld: document.getElementById('qmsg').value };
     });
-    ok(!/lateinischer Schrift/.test(deutsch),
-       'falscher Alarm bei Deutsch: "' + deutsch + '"');
+    ok(deutsch.feld === 'Guten Tag' && !/lateinischer Schrift/.test(deutsch.hinweis),
+       'falscher Alarm bei Deutsch: Feld "' + deutsch.feld + '", Hinweis "' + deutsch.hinweis + '"');
     await ctx.close();
   }
 
