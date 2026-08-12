@@ -45,13 +45,19 @@ const ORT = `http://127.0.0.1:${PORT}/`;
 const SPION = `
   window.__gehoert = [];
   window.__fehlerAls = null;      // Testschalter: diesen Fehler beim Start werfen
+  window.__ergebnis = null;       // Testschalter: dieses Ergebnis liefern
   window.SpeechRecognition = function () {
     this.start = function () {
       window.__gehoert.push(this.lang);
       if (this.onstart) this.onstart();
+      if (window.__ergebnis !== null && this.onresult) {
+        this.onresult({ results: [[{ transcript: window.__ergebnis }]] });
+      }
       if (window.__fehlerAls) {
         if (this.onerror) this.onerror({ error: window.__fehlerAls });
-        if (this.onend) this.onend();     // der Browser beendet nach einem Fehler
+      }
+      if (window.__ergebnis !== null || window.__fehlerAls) {
+        if (this.onend) this.onend();     // der Browser beendet danach
       }
     };
     this.stop = function () { if (this.onend) this.onend(); };
@@ -184,6 +190,60 @@ try {
     ok(sauber.length > 0, 'nach dem Räumen steht gar nichts mehr da — der Verbindungs-Status fehlt');
     await ctx.close();
   }
+  /* ── Der STILLE Fehlschlag (Klaus' Sichttest 2026-08-11) ──────────────────
+   *
+   * Gemessen an Klaus' Geraet: Russisch kam als „Здравствуйте" zurueck,
+   * Arabisch als „سلام عليكم" — beides richtig. Paschtu kam als „Salaam"
+   * zurueck, in LATEINISCHEN Buchstaben, und OHNE Fehler. Chrome hat
+   * stillschweigend etwas anderes gehoert.
+   *
+   * Das ist der schwerste Fall: es scheitert, ohne zu scheitern. Die
+   * Fehlermeldung kann nicht greifen, weil es keinen Fehler gibt. Geprueft wird
+   * darum, dass die Schrift-Kontrolle anschlaegt — und dass sie NICHT anschlaegt,
+   * wenn die Schrift stimmt (sonst waere sie nur laestig). */
+  {
+    const { ctx, page } = await seite('de-DE');
+
+    // (a) Paschtu gewaehlt, lateinischer Text zurueck → Hinweis
+    const schief = await page.evaluate(async () => {
+      const s = document.getElementById('tb-miclang');
+      s.value = 'ps-AF'; s.dispatchEvent(new Event('change'));
+      window.__ergebnis = 'Salaam';
+      document.getElementById('mic').click();
+      await new Promise((r) => setTimeout(r, 250));
+      return document.getElementById('sendhint').textContent.trim();
+    });
+    ok(/پښتو/.test(schief) && /lateinischer Schrift/.test(schief),
+       'kein Hinweis beim stillen Fehlschlag (Paschtu → lateinischer Text): "' + schief + '"');
+
+    // (b) Arabisch gewaehlt, arabischer Text zurueck → KEIN Hinweis
+    const passt = await page.evaluate(async () => {
+      const s = document.getElementById('tb-miclang');
+      s.value = 'ar-SA'; s.dispatchEvent(new Event('change'));
+      document.getElementById('qmsg').value = '';
+      window.__ergebnis = 'سلام عليكم';
+      document.getElementById('mic').click();
+      await new Promise((r) => setTimeout(r, 250));
+      return document.getElementById('sendhint').textContent.trim();
+    });
+    ok(!/lateinischer Schrift/.test(passt),
+       'falscher Alarm, obwohl die Schrift stimmt: "' + passt + '"');
+
+    // (c) Deutsch gewaehlt, deutscher Text → KEIN Hinweis (Latein ist richtig)
+    const deutsch = await page.evaluate(async () => {
+      const s = document.getElementById('tb-miclang');
+      s.value = 'de-DE'; s.dispatchEvent(new Event('change'));
+      document.getElementById('qmsg').value = '';
+      window.__ergebnis = 'Guten Tag';
+      document.getElementById('mic').click();
+      await new Promise((r) => setTimeout(r, 250));
+      return document.getElementById('sendhint').textContent.trim();
+    });
+    ok(!/lateinischer Schrift/.test(deutsch),
+       'falscher Alarm bei Deutsch: "' + deutsch + '"');
+    await ctx.close();
+  }
+
 } finally {
   if (browser) await browser.close();
   srv.kill();
