@@ -556,8 +556,6 @@
 <!-- Identitäts-Isolierung: eigenes DB-Suffix global setzen, BEVOR irgendein
      SBKIM-Modul lädt (Modul 01 liest window.SBKIM_DB_SUFFIX beim Laden). -->
 <script>window.SBKIM_DB_SUFFIX="kimboard";</script>
-<script src="./modules/03_embedding.js"></script>
-<script src="./modules/24_ocr_eingabe.js"></script>
 <script type="module">
 import { schnorr, utils } from './modules/noble-secp256k1.js';
 import { isAuthentic, eventId } from './modules/echtheit.js';
@@ -3848,32 +3846,15 @@ window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubH
      eigene Identität + Spore, Rendezvous („🌐 Mit dem Netz verbinden"), Status-
      Lampen-Leiste + Selbst-Siegel, Empfangsmodus-Lauschen. Modul 03 (Embedding)
      ist oben bereits geladen; hier nicht erneut einbinden (geteilter Global). -->
-<script src="./modules/01_storage.js"></script>
-<script src="modules/20_schluessel_safe.js"></script>
 <!-- Modus A / eigene Schublade: MUSS direkt nach dem Storage-Kern laufen -->
-<script src="./assets/storage-init.js"></script>
-<script src="./modules/04_match.js"></script>
-<script src="./modules/02_spore.js"></script>
-<script src="./modules/05_anastomose.js"></script>
 <!-- Relais-Client (Modul 05b) ist ES-Modul + importiert noble relativ -->
 <script type="module" src="./modules/05b_nostr_relay.js"></script>
-<script src="./modules/21_spracheingabe.js"></script>
-<script src="./modules/23_rendezvous.js"></script>
-<script src="./modules/23_rendezvous_ui.js"></script>
 <!-- Status-Lampen-Leiste (Modul 17) MUSS vor Membran(15)/Siegel(16) inited sein
      (legt die Proxy-Spans #lamp-fremd + #sbkim-siegel-badge an). -->
-<script src="./modules/17_floating_widget.js"></script>
-<script src="./modules/07_apoptose.js"></script>
-<script src="./modules/15_membran.js"></script>
-<script src="./modules/16_siegel.js"></script>
 <!-- Empfangsmodus: lauscht, damit ein Gegenknoten andocken kann -->
-<script src="./assets/nostr-listen-init.js"></script>
 <!-- Modus A fahren + 🌐-Knopf mounten -->
-<script src="./assets/rendezvous-init.js"></script>
 <!-- Voller Knoten: Widget → Membran → Siegel (+ Apoptose) in dieser Reihenfolge -->
-<script src="./assets/schutz-init.js"></script>
 <!-- Andock-Werkzeug IM Siegel-Modal (🔑 Identität & Spore · ✍ Semantik · 🛡 Schutz) -->
-<script src="./assets/siegel-inhalt.js"></script>
 
 <script>
   // Service-Worker registrieren → installierbar + offline-Start (App-Schale).
@@ -3892,7 +3873,68 @@ window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubH
 
 <!-- Hilfe: ❓-Knopf mit Anleitung + ein-/ausschaltbare Erklär-Blasen für alle
      Knöpfe, Felder und Bereiche. Zuletzt geladen, damit alle Elemente stehen. -->
-<script src="./assets/hilfe.js"></script>
+<!-- ── Die SBKIM-Kette wird NACH dem Laden geholt (Bauregel Skripte 1) ──────
+     Vorher standen hier zwanzig gewöhnliche <script src>-Zeilen, und zwei davon
+     (03_embedding, 24_ocr_eingabe) lagen bei Zeile 559 — der Rumpf beginnt bei
+     348. Sie hielten damit das Parsen der GANZEN Seite auf, für Module, die zum
+     ersten Eindruck nichts beitragen. PageSpeed hat es am 2026-08-15 gemeldet:
+     kritischer Pfad über 26 Anfragen, 347 KiB, davon 58 KiB nie ausgeführt.
+
+     Dasselbe Muster brachte an Mein-WorkFloh gemessen 85 → 95; PWA Toolpoint
+     steht damit bei 100.
+
+     SICHER, WEIL BEIDE FRÜHEN MODULE FAUL BENUTZT WERDEN — geprüft, nicht
+     angenommen: `SbkimEmbedding` hängt hinter der Getter-Funktion
+     `const EMB = () => window.SbkimEmbedding`, und `SbkimOcr` wird erst im
+     Klick-Handler geholt, mit eigenem Rückfall („OCR-Modul nicht geladen —
+     bitte tippen"). Nichts davon läuft während des Parsens.
+
+     DIE REIHENFOLGE IST DIESELBE wie vorher und wird maschinell gegen den alten
+     Stand geprüft — von Hand abgetippt verdreht man früher oder später zwei
+     Zeilen, und dann fehlt einem Modul seine Voraussetzung. -->
+<script>
+(function () {
+  "use strict";
+  var KANON = [
+    "./modules/03_embedding.js",
+    "./modules/24_ocr_eingabe.js",
+    "./modules/01_storage.js",
+    "modules/20_schluessel_safe.js",
+    "./assets/storage-init.js",
+    "./modules/04_match.js",
+    "./modules/02_spore.js",
+    "./modules/05_anastomose.js",
+    "./modules/21_spracheingabe.js",
+    "./modules/23_rendezvous.js",
+    "./modules/23_rendezvous_ui.js",
+    "./modules/17_floating_widget.js",
+    "./modules/07_apoptose.js",
+    "./modules/15_membran.js",
+    "./modules/16_siegel.js",
+    "./assets/nostr-listen-init.js",
+    "./assets/rendezvous-init.js",
+    "./assets/schutz-init.js",
+    "./assets/siegel-inhalt.js",
+    "./assets/hilfe.js"
+  ];
+  function pause(f) {
+    /* kleiner Timeout: requestIdleCallback ruft SPÄTESTENS danach auf, damit
+       eine beschäftigte Seite die Kette nicht auf die lange Bank schiebt */
+    if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(f, { timeout: 500 });
+    else setTimeout(f, 16);
+  }
+  function naechste(i) {
+    if (i >= KANON.length) return;
+    var s = document.createElement("script");
+    s.src = KANON[i];
+    /* onerror wie onload: eine fehlende Datei darf den Rest nicht anhalten */
+    s.onload = s.onerror = function () { pause(function () { naechste(i + 1); }); };
+    document.body.appendChild(s);
+  }
+  if (document.readyState === "complete") pause(function () { naechste(0); });
+  else window.addEventListener("load", function () { naechste(0); });
+})();
+</script>
 
 
 <script>
