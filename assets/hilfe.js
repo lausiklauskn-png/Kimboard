@@ -31,6 +31,11 @@
     'tb-full':    ['🔳 Vollbild', 'Blendet die Leisten des Browsers aus, damit die Pinnwand den ganzen Bildschirm nutzt. Nochmal tippen beendet es.'],
     'tb-reload':  ['🔄 Neu laden', 'Lädt die Seite frisch und wirft den Zwischenspeicher weg. Immer dann nützlich, wenn du eine neue Version bekommen hast und noch die alte siehst.'],
     'hilfe-btn':  ['❓ Hilfe', 'Öffnet die Anleitung und den Schalter für diese Erklär-Blasen.'],
+    // Fehlte, seit es den Schalter gibt — die Probe `smoke_hilfe` hat es
+    // gemeldet („jedes sichtbare Bedien-Element hat eine Erklärung"). Der Text
+    // folgt dem Kommentar am Element selbst: die Wahl gilt für ALLE Mikrofone
+    // der Seite und bleibt gespeichert.
+    'tb-miclang': ['🎙️ Sprache fürs Mikrofon', 'In welcher Sprache du sprichst, wenn du einen Zettel diktierst. Die Wahl gilt für alle Mikrofon-Knöpfe der Seite — beim Fragen wie beim Antworten — und bleibt gespeichert. Sie ändert nichts an der Anzeigesprache, nur an dem, was die Spracherkennung erwartet.'],
 
     // — Identität / Gerät —
     'geraetename': ['🏷️ Gerätename', 'Ein frei wählbarer Anzeige-Name (z. B. „Klaus-Handy"), damit man deine Zettel zuordnen kann — praktisch, wenn du mehrere Geräte hast. Nur ein Hinweis, KEIN Echtheits-Beweis: jeder kann jeden Namen wählen. Die kryptische Kennung daneben ist das Verlässliche.'],
