@@ -72,3 +72,11 @@ npm test   # node --test: Drift-Guard (sha256) + App-Schale + Pinnwand-Erhalt + 
 Der **Browser-Sichttest** (echtes IndexedDB, Service-Worker, Live-Relais,
 Modell-Laden, Pinnwand, Handshake) bleibt „ungeprüft, wartet auf Klaus'
 Browser-Lauf".
+
+---
+
+## Rechte
+
+Rechteinhaber ist Klaus Nitzsche. Welche Lizenz gilt und welche Rolle die
+KI-Werkzeuge hatten, steht in [`RECHTE.md`](RECHTE.md); der Lizenztext in
+[`LICENSE`](LICENSE).
