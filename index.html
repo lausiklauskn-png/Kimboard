@@ -28,6 +28,15 @@
 <meta name="description" content="Kimboard — semantische Pinnwand: Frage→Antwort über ein geborgtes dummes Brett (Nostr), nach Bedeutung sortiert. Server-los, ein SBKIM-Endknoten.">
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#0e1620">
+<!-- Moderation: Melde-Weg + Sperr-Liste. Beide MÜSSEN dastehen, bevor der
+     erste Zettel gezeichnet wird — käme die Sperr-Liste später, wäre ein
+     gesperrter Zettel für einen Augenblick zu sehen, und das ist genau das,
+     was sie verhindern soll. `defer` erledigt das ohne Render-Blockade: die
+     Dateien laufen in Dokument-Reihenfolge, also vor dem <script type="module">
+     weiter unten (Modul-Skripte stehen in derselben Warteschlange).
+     Gemessen, nicht angenommen — tests/smoke_sperrliste.mjs prüft die Reihenfolge. -->
+<script defer src="./assets/config/moderation.js"></script>
+<script defer src="./assets/config/sperrliste.js"></script>
 <!-- Tab-Symbol und Logo oben benutzen ABSICHTLICH dieselbe Datei (icon-128.png).
      Gleiche Adresse = ein einziger Download für beides. Vorher hing hier das
      192er (78 KiB) und oben im Kopf das 512er (475 KiB) — zusammen 553 KiB für
@@ -141,10 +150,13 @@
     border: 1px solid var(--line); border-radius: 10px;
     padding: 12px var(--zettel-pad); margin-bottom: 12px; background: var(--panel2);
   }
-  /* Rechts oben schwebt das ✕ (.q-del, 24px). Ohne reservierten Platz lief die
-     Knopfreihe darunter durch und verdeckte es — am Handy war das ✕ dadurch
-     nicht mehr treffbar (Klaus' Befund 2026-08-01). */
-  .q-head { font-size: 0.78rem; color: var(--dim); margin-bottom: 3px; padding-right: 38px; }
+  /* Rechts oben schweben ZWEI Knöpfe: ⚑ Melden und ✕ (je 24px). Ohne
+     reservierten Platz lief die Knopfreihe darunter durch und verdeckte sie —
+     am Handy war das ✕ dadurch nicht mehr treffbar (Klaus' Befund 2026-08-01).
+     Die Reserve wird GERECHNET, nicht geraten: zwei Knöpfe + Abstand + Rand.
+     Stand seit dem Melde-Knopf (2026-08-17) bei 24+4+24+10 = 62, plus Luft. */
+  .q-head { font-size: 0.78rem; color: var(--dim); margin-bottom: 3px;
+    padding-right: calc(2 * var(--x-groesse) + var(--x-rand) + 8px); }
   .q-head .who { color: var(--q); }
   .q-card.mine .q-head .who::after { content: " (ich)"; color: var(--accent); }
   .q-text { white-space: pre-wrap; word-break: break-word; font-weight: 600; }
@@ -154,21 +166,29 @@
   .kb-tombstone { font-style: italic; opacity: .55; font-size: .9rem; padding: 2px 0; }
   .answers { list-style: none; margin: 10px 0 0; padding: 0 0 0 12px;
     border-left: 2px solid var(--line); }
-  /* Platz rechts für das eigene ✕ der Antwort reservieren — sonst läuft der
-     Text darunter durch (dieselbe Falle wie am Zettel-Kopf, 2026-08-01). */
-  .answers li { padding: 7px 0; position: relative; padding-right: calc(var(--x-groesse) + 8px); }
+  /* Platz rechts für ⚑ und ✕ der Antwort reservieren — sonst läuft der
+     Text darunter durch (dieselbe Falle wie am Zettel-Kopf, 2026-08-01).
+     Seit dem Melde-Knopf sind es zwei Knöpfe statt einem. */
+  .answers li { padding: 7px 0; position: relative;
+    padding-right: calc(2 * var(--x-groesse) + 12px); }
   /* Gleiche Spalte wie das Zettel-✕: Der Innenabstand der Karte wird
      herausgerechnet, weil die Antwort-Zeile an der INNENkante beginnt.
      Gleiche Größe, nur leiser (die Antwort ist der ruhigere Eintrag). */
   /* Höhere Spezifität als `.q-del` (das Element trägt beide Klassen). Sonst
      gewinnt die weiter unten stehende `.q-del`-Regel und das ✕ säße wieder in
      der falschen Spalte — genau daran scheiterte der erste Versuch. */
-  .answers li .a-del {
+  .answers li .a-del, .answers li .a-melden {
     right: calc(var(--x-rand) - var(--zettel-pad)); top: 4px;
     width: var(--x-groesse); height: var(--x-groesse);
     font-size: .78rem; opacity: .5;
   }
-  .answers li .a-del:hover { opacity: 1; }
+  .answers li .a-del:hover, .answers li .a-melden:hover { opacity: 1; }
+  /* Das ⚑ der Antwort steht eine Knopfbreite weiter links — damit ⚑ und ✕ am
+     Zettel und an der Antwort je eine gerade Spalte bilden. Muss NACH der
+     Regel oben stehen (gleiche Spezifität, die spätere gewinnt). */
+  .answers li .a-melden {
+    right: calc(var(--x-rand) - var(--zettel-pad) + var(--x-groesse) + 4px);
+  }
   .a-head { font-size: 0.74rem; color: var(--dim); margin-bottom: 2px; }
   .a-head .who { color: var(--mine); }
   .answers li.mine .a-head .who::after { content: " (ich)"; color: var(--accent); }
@@ -321,8 +341,13 @@
     .kb-addcontact, .kb-iscontact, .kb-mute { padding: 1px 5px !important; margin-left: 4px !important; }
     .kb-addcontact, .kb-iscontact { font-size: .68rem !important; }
   }
-  .q-del {
-    z-index: 2;   /* das ✕ liegt IMMER über der Kopfzeile */
+  /* ⚑ und ✕ teilen sich die Gestalt, aber NICHT die Klasse: `.q-del` muss
+     eindeutig das ✕ bleiben, weil mehrere Proben mit `querySelector('.q-del')`
+     danach greifen. Trüge der Melde-Knopf dieselbe Klasse, bekämen sie je nach
+     Reihenfolge im DOM den falschen Knopf zu fassen — und würden ihn klaglos
+     vermessen. Also gemeinsame Regel, getrennte Namen. */
+  .q-del, .q-melden {
+    z-index: 2;   /* beide liegen IMMER über der Kopfzeile */
     position: absolute; right: var(--x-rand); top: 10px;
     width: var(--x-groesse); height: var(--x-groesse);
     /* padding: 0 ist nötig — die Grundregel für Knöpfe setzt 9px/15px, und die
@@ -335,6 +360,11 @@
     transition: color .15s ease, border-color .15s ease;
   }
   .q-del:hover { color: var(--bad); border-color: var(--bad); }
+  /* ⚑ Melden — gleiche Größe und Form wie das ✕, eine Knopfbreite weiter
+     links. Es erbt alles aus `.q-del` (das Element trägt beide Klassen) und
+     rückt hier nur die Spalte; so bleiben beide zwangsläufig gleich groß. */
+  .q-melden { right: calc(var(--x-rand) + var(--x-groesse) + 4px); }
+  .q-melden:hover { color: var(--warn, #e8b13a); border-color: var(--warn, #e8b13a); }
   /* Text-Vergrößerung (per data-scale am <html>). */
   html[data-scale="1"] body { font-size: 16px; }
   html[data-scale="2"] body { font-size: 18px; }
@@ -1327,6 +1357,124 @@ function saveHidden() {
   } catch { /* */ }
 }
 
+/* ── NETZWEITE SPERR-LISTE ──────────────────────────────────────────────────
+ * Der Unterschied zum Ausblenden darunter: Ausblenden gilt für DIESES Gerät,
+ * die Sperr-Liste gilt für JEDES Kimboard, das sie liest. Sie ist die Antwort
+ * auf das, was NIP-09 nicht kann — fremde Hassrede vom Brett nehmen.
+ *
+ * ZWEI QUELLEN, mit Absicht:
+ *   1. EINGEBACKEN (assets/config/sperrliste.js, mit `defer` im <head>). Sie
+ *      steht da, bevor der erste Zettel gezeichnet wird. Keine Wartezeit, kein
+ *      Aufblitzen, kein Netz nötig — auch offline.
+ *   2. NACHGELADEN (optional, `quelle` in moderation.js). Erlaubt dem Betreiber
+ *      zu sperren, ohne die App neu auszuliefern, und einem Fork, Klaus' Liste
+ *      mitlaufen zu lassen. Sie MUSS signiert sein und die Signatur MUSS zu
+ *      `pruefschluessel` passen — sonst wird sie verworfen. Eine unsignierte
+ *      Liste anzunehmen hieße, jedem zu glauben, der die Datei austauschen kann.
+ *
+ * NUR IN EINE RICHTUNG. Die Oberfläche kann sperren, nie entsperren. Was in der
+ * Liste steht, bleibt gesperrt, bis jemand die DATEI ändert. Ein Fehlgriff beim
+ * Sperren sperrt zu viel und fällt auf; ein Fehlgriff beim Lösen ist still.
+ * (Dieselbe Asymmetrie wie PWA-Toolpoint, docs/RAUSWURF-REGEL.md.)
+ *
+ * FAIL-SOFT: Fehlt die Datei, fehlt das Netz, ist die Signatur falsch — die App
+ * läuft voll weiter und zeigt eben alles. Kein toter Knopf, keine Fehlermeldung
+ * für einen Nutzer, der nichts dafür kann.
+ *
+ * EHRLICHE GRENZE, sie steht auch in der App: Der Zettel liegt danach weiterhin
+ * auf den Relais. Ein anderer Nostr-Client zeigt ihn. Gesperrt heißt „in
+ * Kimboard unsichtbar", nicht „aus der Welt".
+ */
+const sperrEreignisse = new Map();   // Ereignis-Kennung → { grund, seit, quelle }
+const sperrAbsender = new Map();     // Absender-Schlüssel → { grund, seit, quelle }
+function sperrEintraegeAus(liste, quelle) {
+  if (!liste || typeof liste !== 'object') return 0;
+  let n = 0;
+  for (const [feld, ziel] of [['ereignisse', sperrEreignisse], ['absender', sperrAbsender]]) {
+    const teil = liste[feld];
+    if (!teil || typeof teil !== 'object') continue;
+    for (const kennung of Object.keys(teil)) {
+      // Nur echte Kennungen: 64 Hex-Zeichen. Ein Tippfehler soll nichts sperren,
+      // was zufällig ähnlich heißt — und nichts Fremdes in die Karte tragen.
+      if (!/^[0-9a-f]{64}$/i.test(kennung)) continue;
+      const e = teil[kennung] || {};
+      // Erster Eintrag gewinnt: die eingebackene Liste wird zuerst gelesen, eine
+      // nachgeladene kann sie also ergänzen, aber nicht überschreiben.
+      if (ziel.has(kennung.toLowerCase())) continue;
+      ziel.set(kennung.toLowerCase(), {
+        grund: typeof e.grund === 'string' ? e.grund : '',
+        seit: typeof e.seit === 'string' ? e.seit : '',
+        quelle
+      });
+      n++;
+    }
+  }
+  return n;
+}
+function istNetzGesperrt(ev) {
+  if (!ev) return false;
+  if (ev.id && sperrEreignisse.has(String(ev.id).toLowerCase())) return true;
+  if (ev.pubkey && sperrAbsender.has(String(ev.pubkey).toLowerCase())) return true;
+  return false;
+}
+// Die eingebackene Liste sofort übernehmen — vor dem ersten Zettel.
+sperrEintraegeAus(window.KB_SPERRLISTE, 'eingebacken');
+
+/* Nachträgliche Liste holen. Wird beim Start EINMAL angestoßen, nie wiederholt
+   (kein Dauerabruf — der Knoten bleibt im Empfangsmodus). Alles, was schiefgeht,
+   endet still: ohne Liste ist eben nichts zusätzlich gesperrt. */
+async function ladeSperrQuelle() {
+  const k = (window.KB_MODERATION || {});
+  const url = typeof k.quelle === 'string' ? k.quelle.trim() : '';
+  const schluessel = typeof k.pruefschluessel === 'string' ? k.pruefschluessel.trim().toLowerCase() : '';
+  // Ohne Prüfschlüssel wird GAR NICHT geladen. Lieber keine nachgeladene Liste
+  // als eine, der man nicht ansehen kann, von wem sie stammt.
+  if (!url || !/^[0-9a-f]{64}$/.test(schluessel)) return { geladen: false, grund: 'nicht eingerichtet' };
+  let roh;
+  try {
+    const a = await fetch(url, { cache: 'no-store' });
+    if (!a.ok) return { geladen: false, grund: 'HTTP ' + a.status };
+    roh = await a.json();
+  } catch (e) { return { geladen: false, grund: 'nicht erreichbar' }; }
+  // Die Liste ist ein echtes, signiertes Nostr-Ereignis. Damit prüft sie
+  // dieselbe Funktion, die auch jeden Zettel prüft (modules/echtheit.js) —
+  // kein zweiter Krypto-Pfad, der auseinanderlaufen könnte.
+  if (!roh || typeof roh !== 'object' || typeof roh.content !== 'string') {
+    return { geladen: false, grund: 'kein signiertes Ereignis' };
+  }
+  if (String(roh.pubkey || '').toLowerCase() !== schluessel) {
+    return { geladen: false, grund: 'fremder Absender' };
+  }
+  if (!(await isAuthentic(roh))) return { geladen: false, grund: 'Signatur stimmt nicht' };
+  let liste;
+  try { liste = JSON.parse(roh.content); } catch { return { geladen: false, grund: 'Inhalt unlesbar' }; }
+  const n = sperrEintraegeAus(liste, 'nachgeladen');
+  // Was jetzt neu gesperrt ist, kann längst auf dem Brett stehen — also
+  // nachwischen. Ohne das wirkte die nachgeladene Liste erst nach Neuladen.
+  if (n) wischeGesperrte();
+  return { geladen: true, neu: n };
+}
+/* Nimmt vom Brett, was inzwischen gesperrt ist. Bewusst dieselbe Mechanik wie
+   das Ausblenden — nur ohne „Rückgängig", denn hier ist es keine Wahl. */
+function wischeGesperrte() {
+  let weg = 0;
+  for (const [id, view] of [...qViews]) {
+    if (view.qEv && istNetzGesperrt(view.qEv)) {
+      entferneZettel(id); weg++; continue;
+    }
+    for (const eintrag of [...(view.answers || [])]) {
+      if (!eintrag || !eintrag.ev || !istNetzGesperrt(eintrag.ev)) continue;
+      const i = view.answers.indexOf(eintrag);
+      if (i >= 0) view.answers.splice(i, 1);
+      view.answerIds.delete(eintrag.ev.id);
+      if (eintrag.li && eintrag.li.parentNode) eintrag.li.parentNode.removeChild(eintrag.li);
+      weg++;
+    }
+  }
+  if (weg) bretLeerHinweis();
+  return weg;
+}
+
 // ── ABSENDER-SPERRE (nachträglich) ──────────────────────────────────────────
 // Vorbeugen ist begrenzt — reagieren nicht. Wer sich als Problem zeigt, wird
 // hier lokal stumm geschaltet: seine Zettel erscheinen gar nicht mehr.
@@ -1475,6 +1623,31 @@ function openAusgeblendet() {
     + 'Deshalb kann man sie hier nicht zurückholen: Es war der Wunsch dessen, der sie geschrieben hat.';
   s3.appendChild(e3);
   box.appendChild(s3);
+
+  /* — Netzweit gesperrt —
+     Dass die App etwas herausfiltert, gehört gesagt. Sonst wäre sie in genau
+     dem Punkt still, in dem sie eingreift — und ein Nutzer, der eine Nachricht
+     erwartet, die nie kommt, hätte keine Erklärung dafür.
+     Was NICHT hier steht: welche Zettel es sind und was drinstand. Klaus'
+     Entscheidung 2026-08-17 war „spurlos weg", und eine Liste mit Gründen wäre
+     die Spur. Nur die Zahl und woher die Liste kommt. */
+  const s4 = document.createElement('div');
+  s4.style.cssText = 'border-top:1px solid rgba(255,255,255,.12);padding:10px 0;';
+  const anzahl = sperrEreignisse.size + sperrAbsender.size;
+  const t4 = document.createElement('div');
+  const t4b = document.createElement('b'); t4b.textContent = 'Netzweit gesperrt:';
+  t4.append(t4b, ' ' + sperrEreignisse.size + ' Zettel, ' + sperrAbsender.size + ' Absender');
+  const e4 = document.createElement('div');
+  e4.style.cssText = 'opacity:.78;margin-top:.35em;line-height:1.5';
+  e4.textContent = anzahl
+    ? 'Das ist keine Wahl von dir, sondern die Sperr-Liste des Betreibers — sie gilt in jedem '
+      + 'Kimboard, das sie liest. Zurückholen kannst du das hier nicht; gelöst wird eine Sperre '
+      + 'nur in der Datei selbst. Ehrlich dazu: Der Zettel liegt weiterhin auf den Relais. Ein '
+      + 'anderer Nostr-Client zeigt ihn. Gesperrt heißt „in Kimboard unsichtbar", nicht „aus der Welt".'
+    : 'Nichts gesperrt. Diese Fassung filtert keinen einzigen Zettel heraus. '
+      + 'Passiert das später, steht die Zahl hier — und nicht irgendwo im Kleingedruckten.';
+  s4.appendChild(t4); s4.appendChild(e4);
+  box.appendChild(s4);
 
   const close = document.createElement('button');
   close.className = 'ghost kb-ausg-close'; close.textContent = 'Schließen'; close.style.marginTop = '12px';
@@ -1686,6 +1859,284 @@ function openLoeschDialog(ev, li) {
   bg.addEventListener('click', (e) => { if (e.target === bg) zu(); });
   document.body.appendChild(bg);
 }
+/* ── Melden (Art. 16 DSA) ──────────────────────────────────────────────────
+ * Warum es das gibt: Eine Lösch-Meldung (NIP-09) darf nur der Absender selbst
+ * schicken. Gegen FREMDE Hassrede ist sie deshalb kein Werkzeug — sie ist für
+ * „ich nehme meinen eigenen Zettel zurück" gebaut, nicht für „das gehört hier
+ * nicht hin". Bis 2026-08-17 gab es für den zweiten Fall gar nichts.
+ *
+ * Was das Gesetz verlangt (Art. 16 DSA): einen erreichbaren Weg, den Eingang
+ * bestätigen, zeitnah und begründet entscheiden, das Ergebnis mitteilen und
+ * auf Rechtsbehelfe hinweisen. Die ersten beiden Punkte macht dieses Fenster,
+ * die anderen der Betreiber — deshalb steht hier, wer das ist.
+ *
+ * KEIN AUTOMATISMUS. Eine Meldung sperrt nichts von allein. Sie ist eine
+ * Behauptung, kein Urteil; ein automatischer Rauswurf wäre die einfachste
+ * Angriffsfläche des ganzen Bretts (drei Meldungen, und jeder Zettel ist weg).
+ * Sie landet bei einem Menschen, der entscheidet.
+ *
+ * Ausgeblendet wird trotzdem SOFORT — aber nur lokal, nur bei dem, der meldet.
+ * Wer etwas als Hassrede meldet, will es nicht noch zehn Minuten ansehen.
+ */
+const MELDE_GRUENDE = [
+  ['hass',     'Hassrede oder Volksverhetzung'],
+  ['strafbar', 'Anderes Strafbares (Bedrohung, Beleidigung, verbotene Kennzeichen)'],
+  ['jugend',   'Für Kinder und Jugendliche ungeeignet'],
+  ['spam',     'Spam oder Betrug'],
+  ['sonst',    'Etwas anderes']
+];
+/* Konfiguration fail-soft holen: fehlt die Datei, fehlt ein Feld, ist ein Wert
+   leer — es gibt immer einen benutzbaren Rückfall, nie einen toten Knopf. */
+function modKonfig() {
+  const k = (typeof window !== 'undefined' && window.KB_MODERATION) || {};
+  return {
+    endpunkt: typeof k.meldeEndpunkt === 'string' ? k.meldeEndpunkt.trim() : '',
+    mail: typeof k.meldeMail === 'string' ? k.meldeMail.trim() : '',
+    betreiber: (typeof k.betreiber === 'string' && k.betreiber.trim()) || 'der Betreiber dieser App',
+    beschwerdeWeg: (typeof k.beschwerdeWeg === 'string' && k.beschwerdeWeg.trim()) || 'impressum.html'
+  };
+}
+function meldeKnopf(ev, klasse) {
+  const b = document.createElement('button');
+  b.className = klasse;
+  b.textContent = '⚑';
+  b.title = 'Melden — rechtswidrigen Inhalt an den Betreiber melden';
+  b.setAttribute('aria-label', 'Diese Nachricht melden');
+  b.addEventListener('click', () => { openMeldeDialog(ev); });
+  return b;
+}
+/* Schickt die Meldung. Zwei Wege, in dieser Reihenfolge:
+ *   1. der Formular-Dienst aus der Konfiguration (`zweck: "meldung"`) — genau
+ *      der, den der family-projekt.de-Marktplatz für seinen Melde-Knopf nutzt;
+ *   2. ohne Dienst ein Mail-Vordruck.
+ * Gibt zurück, was WIRKLICH passiert ist — nicht, was gedacht war. Der
+ * Melde-Dialog sagt dem Melder danach genau das. */
+async function sendeMeldung(ev, grundKey, freitext, offenSeit) {
+  const k = modKonfig();
+  const bez = MELDE_GRUENDE.find((g) => g[0] === grundKey);
+  const grundText = bez ? bez[1] : grundKey;
+  if (!k.endpunkt && !k.mail) return { weg: 'keiner' };
+  if (k.endpunkt) {
+    /* Der Dienst wirft alles weg, was schneller als 1,5 s ausgefüllt wurde
+       (Bot-Schutz) — und antwortet dabei freundlich mit „ok". Wer das nicht
+       weiß, meldet Erfolg, während nichts ankam. Also lieber kurz warten, als
+       eine Bestätigung zu zeigen, die nicht stimmt. */
+    const offen = Date.now() - offenSeit;
+    if (offen < 1700) await new Promise((r) => setTimeout(r, 1700 - offen));
+    try {
+      const antwort = await fetch(k.endpunkt, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          zweck: 'meldung',
+          eintrag: 'Kimboard — Zettel auf dem Brett',
+          eintrag_id: ev.id,
+          grund: grundKey,
+          grund_text: grundText,
+          // Der beanstandete TEXT wird NICHT mitgeschickt. Der Betreiber holt
+          // ihn sich über die Kennung von seinem eigenen Relais; ihn hier
+          // mitzusenden hieße, ihn ein weiteres Mal zu verbreiten.
+          nachricht: 'Absender-Kennung: ' + (ev.pubkey || 'unbekannt') + '\n\n'
+            + (freitext || '(kein Freitext)'),
+          fp_hp_url: '',
+          /* Die ECHTE Ausfüllzeit, nicht eine behauptete. Hier stand zuerst
+             `Math.max(1700, …)` — das hätte dem Dienst 1700 ms gemeldet, auch
+             wenn nur 200 vergangen waren, und damit seinen Bot-Riegel von
+             unserer Seite ausgehebelt. Gefunden hat das die Gegenprobe: die
+             Prüfung „der Riegel wird abgewartet" blieb grün, obwohl die
+             Wartezeit ausgebaut war — weil die Zahl ohnehin gelogen war. */
+          fp_elapsed: Date.now() - offenSeit
+        })
+      });
+      const j = await antwort.json().catch(() => null);
+      if (antwort.ok && j && j.ok) return { weg: 'dienst' };
+      return { weg: 'fehler', grund: (j && j.error) || ('HTTP ' + antwort.status) };
+    } catch (e) {
+      return { weg: 'fehler', grund: String(e && e.message ? e.message : e) };
+    }
+  }
+  return { weg: 'mail', mailto: 'mailto:' + k.mail
+    + '?subject=' + encodeURIComponent('Kimboard-Meldung: ' + grundText)
+    + '&body=' + encodeURIComponent('Gemeldeter Zettel: ' + ev.id
+      + '\nAbsender-Kennung: ' + (ev.pubkey || 'unbekannt')
+      + '\nGrund: ' + grundText + '\n\n' + (freitext || '')) };
+}
+function openMeldeDialog(ev) {
+  const k = modKonfig();
+  const offenSeit = Date.now();
+  const bg = document.createElement('div');
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(20,18,16,.6);display:flex;align-items:center;justify-content:center;z-index:10040;padding:16px;';
+  const box = document.createElement('div');
+  // Kennung am INNEREN Kasten: Ein `position:fixed`-Element hat immer
+  // `offsetParent === null`, an ihm ist Sichtbarkeit nicht messbar (Lehre 2026-08-01).
+  box.id = 'melde-dialog';
+  box.style.cssText = 'background:var(--card,#1c1a17);color:var(--fg,#eee);border:1px solid var(--acc,#c9a961);'
+    + 'border-radius:14px;max-width:460px;width:100%;max-height:86vh;overflow:auto;padding:16px 18px;font-size:.92rem;';
+  const zu = () => { if (bg.parentNode) document.body.removeChild(bg); };
+
+  const h = document.createElement('h3');
+  h.style.cssText = 'margin:.1em 0 .5em'; h.textContent = '⚑ Nachricht melden';
+  box.appendChild(h);
+
+  const intro = document.createElement('div');
+  intro.style.cssText = 'font-size:.84rem;opacity:.8;margin:0 0 12px;line-height:1.5';
+  intro.textContent = 'Die Meldung geht an ' + k.betreiber + '. Ein Mensch sieht sie an und '
+    + 'entscheidet — es wird nichts automatisch entfernt. Du musst deinen Namen nicht angeben.';
+  box.appendChild(intro);
+
+  const wahl = document.createElement('div');
+  wahl.style.cssText = 'margin:0 0 12px';
+  for (const [key, text] of MELDE_GRUENDE) {
+    const lab = document.createElement('label');
+    lab.style.cssText = 'display:flex;gap:8px;align-items:flex-start;padding:5px 0;cursor:pointer;line-height:1.4';
+    const r = document.createElement('input');
+    r.type = 'radio'; r.name = 'kb-melde-grund'; r.value = key;
+    r.className = 'kb-melde-grund';
+    if (key === MELDE_GRUENDE[0][0]) r.checked = true;
+    const s = document.createElement('span'); s.textContent = text;
+    lab.appendChild(r); lab.appendChild(s); wahl.appendChild(lab);
+  }
+  box.appendChild(wahl);
+
+  const ta = document.createElement('textarea');
+  ta.className = 'kb-melde-text';
+  ta.rows = 3; ta.maxLength = 600;
+  ta.placeholder = 'Was genau ist das Problem? (freiwillig)';
+  ta.style.cssText = 'width:100%;box-sizing:border-box;margin:0 0 6px';
+  box.appendChild(ta);
+
+  const hinweis = document.createElement('div');
+  hinweis.style.cssText = 'font-size:.78rem;opacity:.7;margin:0 0 12px;line-height:1.45';
+  hinweis.textContent = 'Mitgeschickt werden nur die Kennung des Zettels, die Kennung des Absenders '
+    + 'und dein Text — nicht der beanstandete Inhalt selbst. Den holt sich der Betreiber über die '
+    + 'Kennung; ihn hier mitzusenden hieße, ihn noch einmal zu verbreiten.';
+  box.appendChild(hinweis);
+
+  const ausblenden = document.createElement('label');
+  ausblenden.style.cssText = 'display:flex;gap:8px;align-items:flex-start;margin:0 0 14px;cursor:pointer;font-size:.86rem;line-height:1.4';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox'; cb.className = 'kb-melde-weg'; cb.checked = true;
+  const cbs = document.createElement('span');
+  cbs.textContent = 'Bei mir gleich ausblenden (nur auf diesem Gerät)';
+  ausblenden.appendChild(cb); ausblenden.appendChild(cbs);
+  box.appendChild(ausblenden);
+
+  const out = document.createElement('div');
+  out.className = 'kb-melde-out';
+  out.style.cssText = 'display:none;margin:0 0 12px;font-size:.86rem;line-height:1.5';
+  box.appendChild(out);
+
+  /* Für den, der diese App BETREIBT. Zugeklappt, damit es niemanden stört, der
+     nur melden will — und trotzdem da, weil hier die einzige Stelle ist, an der
+     die Kennungen greifbar sind. Ohne das müsste Klaus sie aus der Entwickler-
+     Konsole abschreiben, und „keine Terminal-Kommandos" gilt auch dafür.
+     Bewusst ein <details>: der Browser bringt Tastatur, Vorlese-Ansage und
+     Enter mit, und es funktioniert ohne JavaScript. */
+  const admin = document.createElement('details');
+  admin.className = 'kb-melde-admin';
+  admin.style.cssText = 'margin:0 0 12px;border-top:1px solid rgba(255,255,255,.12);padding-top:10px';
+  const sum = document.createElement('summary');
+  sum.style.cssText = 'cursor:pointer;opacity:.7;font-size:.82rem';
+  sum.textContent = 'Für Betreiber dieser App';
+  admin.appendChild(sum);
+  const adminTxt = document.createElement('div');
+  adminTxt.style.cssText = 'font-size:.8rem;opacity:.78;margin:.6em 0;line-height:1.5';
+  adminTxt.textContent = 'Netzweit sperren geht nicht von hier aus — dafür kommt die Zeile in '
+    + 'assets/config/sperrliste.js. Das ist Absicht: Aus der Oberfläche geht es nur in eine '
+    + 'Richtung. Ein Fehlgriff beim Sperren fällt auf, ein Fehlgriff beim Lösen wäre still.';
+  admin.appendChild(adminTxt);
+  for (const [was, kennung, feld] of [['Zettel', ev.id, 'ereignisse'], ['Absender', ev.pubkey, 'absender']]) {
+    if (!kennung) continue;
+    const b = document.createElement('button');
+    b.className = 'tbtn kb-sperrzeile kb-sperrzeile-' + feld;
+    b.style.cssText = 'display:block;width:100%;text-align:left;margin:0 0 6px;padding:8px 10px;font-size:.82rem';
+    b.textContent = '📋 Zeile für „' + feld + '" kopieren (' + was + ')';
+    b.dataset.zeile = "  '" + kennung + "': { grund: '', seit: '"
+      + new Date().toISOString().slice(0, 10) + "' },";
+    b.addEventListener('click', async () => {
+      const zeile = b.dataset.zeile;
+      let ging = false;
+      try { await navigator.clipboard.writeText(zeile); ging = true; } catch (_e) { /* fail-soft */ }
+      // Ohne Zwischenablage (unsicherer Kontext, altes Android) nicht einfach
+      // scheitern: dann steht die Zeile zum Markieren da. Ein Knopf, der
+      // nichts tut und nichts sagt, wäre schlimmer als gar keiner.
+      if (!ging) {
+        const pre = document.createElement('textarea');
+        pre.readOnly = true; pre.rows = 2; pre.value = zeile;
+        pre.className = 'kb-sperrzeile-text';
+        pre.style.cssText = 'width:100%;box-sizing:border-box;margin:0 0 8px;font-family:monospace;font-size:.76rem';
+        b.after(pre); pre.select();
+      } else { toast('📋 Zeile kopiert — sie gehört in assets/config/sperrliste.js.'); }
+    });
+    admin.appendChild(b);
+  }
+  box.appendChild(admin);
+
+  const senden = document.createElement('button');
+  senden.className = 'tbtn kb-melde-send';
+  senden.textContent = '⚑ Melden';
+  senden.style.cssText = 'margin-right:8px';
+  const close = document.createElement('button');
+  close.className = 'ghost kb-melde-close'; close.textContent = 'Abbrechen';
+  close.addEventListener('click', zu);
+
+  senden.addEventListener('click', async () => {
+    const sel = box.querySelector('.kb-melde-grund:checked');
+    const grundKey = sel ? sel.value : 'sonst';
+    senden.disabled = true; senden.textContent = '⚑ wird gesendet …';
+    out.style.display = 'block';
+    out.textContent = 'Wird gesendet …';
+    const erg = await sendeMeldung(ev, grundKey, ta.value.trim(), offenSeit);
+    if (cb.checked) {
+      const li = document.querySelector('[data-qid="' + ev.id + '"]')
+        || document.querySelector('[data-aid="' + ev.id + '"]');
+      hideQuestion(ev.id, li);
+    }
+    senden.disabled = false; senden.textContent = '⚑ Melden';
+    /* Art. 16 Abs. 4/5 DSA: Eingang bestätigen, sagen wie es weitergeht, und
+       auf den Beschwerdeweg hinweisen. Und zwar nur, wenn es WIRKLICH raus ist.
+       Gebaut aus DOM-Knoten, nicht aus `innerHTML`: `esc` ist in dieser Datei
+       nur eine Attrappe (`(s) => s`), weil sonst überall `textContent` benutzt
+       wird. Mit `innerHTML` sähe es geschützt aus und wäre es nicht — und
+       `erg.grund` kommt vom Server, also von außen. */
+    out.textContent = '';
+    const stark = (t) => { const b = document.createElement('b'); b.textContent = t; return b; };
+    const link = (ziel, t, klasse) => {
+      const a = document.createElement('a');
+      a.setAttribute('href', ziel); a.textContent = t;
+      if (klasse) a.className = klasse;
+      return a;
+    };
+    if (erg.weg === 'dienst') {
+      out.append(stark('✓ Eingegangen.'),
+        ' Deine Meldung liegt bei ' + k.betreiber + '. Sie wird zeitnah geprüft und '
+        + 'begründet entschieden. Bist du mit der Entscheidung nicht einverstanden, '
+        + 'findest du den Beschwerdeweg im ',
+        link(k.beschwerdeWeg, 'Impressum'),
+        '. Ohne E-Mail-Adresse können wir dir das Ergebnis nicht zuschicken — schreib '
+        + 'sie in den Text, wenn du eine Antwort möchtest.');
+    } else if (erg.weg === 'mail') {
+      out.append('Für diese App ist kein Melde-Dienst eingerichtet. ',
+        link(erg.mailto, 'Meldung als E-Mail öffnen', 'kb-melde-mailto'),
+        ' — erst mit dem Absenden dieser Mail ist sie gemeldet.');
+    } else if (erg.weg === 'keiner') {
+      out.append(stark('Nicht gesendet.'),
+        ' Diese Kimboard-Fassung hat weder einen Melde-Dienst noch eine Adresse '
+        + 'hinterlegt (assets/config/moderation.js). Bei mir ausgeblendet ist die '
+        + 'Nachricht trotzdem.');
+    } else {
+      out.append(stark('Nicht durchgekommen.'),
+        ' (' + (erg.grund || 'unbekannt') + ') Bei mir ausgeblendet ist die Nachricht '
+        + 'trotzdem.' + (k.mail ? ' Du kannst sie auch direkt an ' + k.mail + ' melden.' : ''));
+    }
+  });
+
+  box.appendChild(senden); box.appendChild(close);
+  bg.appendChild(box);
+  bg.addEventListener('click', (e) => { if (e.target === bg) zu(); });
+  document.body.appendChild(bg);
+}
+
 function clearBoard() {
   // Auch hier ein Rückgängig: „🧹 leeren" nimmt auf einen Schlag alles weg,
   // das ist der Griff, den man am ehesten bereut.
@@ -1724,6 +2175,7 @@ function renderQuestion(ev, relay) {
     : 'Bei dir ausblenden';
   del.addEventListener('click', () => { openLoeschDialog(ev, li); });
   card.appendChild(del);
+  card.appendChild(meldeKnopf(ev, 'q-melden'));
   const head = document.createElement('div');
   head.className = 'q-head';
   const who = document.createElement('span');
@@ -1845,6 +2297,7 @@ function renderAnswer(ev, relay) {
   adel.title = ev.pubkey === pubHex ? 'Löschen — nur bei dir oder bei allen' : 'Bei dir ausblenden';
   adel.addEventListener('click', () => { openLoeschDialog(ev, li); });
   li.appendChild(adel);
+  li.appendChild(meldeKnopf(ev, 'q-melden a-melden'));
   const head = document.createElement('div');
   head.className = 'a-head';
   const who = document.createElement('span');
@@ -2371,6 +2824,11 @@ async function dispatch(ev, relay, istLive = false) {
   // nie für eigene Zettel oder gespeicherte Kontakte (Bekannte werden nicht
   // gedrosselt; Stufe 3 baut den Vorrang aus). Gesperrte fliegen ganz raus.
   if (istGesperrt(ev.pubkey)) return;
+  // Netzweite Sperr-Liste: was hier steht, wird gar nicht erst gezeichnet —
+  // spurlos, kein Platzhalter, kein Grund am Brett (Klaus 2026-08-17). Bei
+  // Hassrede ist die stehengelassene Lücke samt Begründung schon die halbe
+  // Verbreitung: sie lädt zum Nachfragen ein, was da wohl stand.
+  if (istNetzGesperrt(ev)) return;
   // Schon zurückgezogen? Dann gar nicht erst zeigen — auch nach dem Neuladen,
   // wenn ein Relais den Zettel weiterhin ausliefert.
   if (ev.kind !== 5 && zurueckgezogen.has(ev.id)) return;
@@ -3822,6 +4280,12 @@ if (heim.nurHeim && RELAY_POOL.includes(heim.url) && !activeRelays.includes(heim
   relayPills(); connect(heim.url);
 }
 initRotationUi();   // Relais-Automatik (Default aus; startet nur mit Häkchen + Geheimnis)
+/* Nachgeladene Sperr-Liste — EINMAL, nicht wiederholt (kein Dauerabruf, der
+   Knoten bleibt im Empfangsmodus). Die eingebackene Liste wirkt längst; das
+   hier ist der Nachtrag zwischen zwei Auslieferungen. Ohne Prüfschlüssel
+   passiert gar nichts, und jeder Fehlschlag endet still. */
+let sperrQuelleStand = null;
+ladeSperrQuelle().then((r) => { sperrQuelleStand = r; }).catch(() => { /* fail-soft */ });
 
 // Schmaler Prüf-Zugang für die headless-Tests (Muster wie in Küchenzettel).
 // NUR Funktionen und die Kontakt-Liste — der private Schlüssel bleibt draußen.
@@ -3838,7 +4302,19 @@ window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubH
   holeAelteres, holeAelteresMit, nachholRelais, nachholLaeuft: () => nachholLaeuft,
   heim: () => heim, sendZiele: () => sendSockets().map((w) => w.url), heimBereit,
   setGruppe: (gid) => { dmGroup = gid; dmRecipients = []; refreshRecipientSelect(); },
-  makeContactCard, parseContactCard, setPrivatAn: (pubs) => { dmRecipients = pubs.slice(); refreshRecipientSelect(); } };
+  makeContactCard, parseContactCard, setPrivatAn: (pubs) => { dmRecipients = pubs.slice(); refreshRecipientSelect(); },
+  // Moderation: Melde-Weg + Sperr-Liste. Die Sperr-Karten werden als KOPIE
+  // herausgegeben — eine Prüfung soll messen können, was gesperrt ist, aber
+  // nichts entsperren können. Das ist dieselbe Einbahnstraße, die auch für die
+  // Oberfläche gilt; ein Test-Haken, der sie umgeht, wäre ein Loch in genau
+  // der Regel, die er bewachen soll.
+  sendeMeldung, openMeldeDialog, meldeGruende: () => MELDE_GRUENDE.map((g) => g.slice()),
+  istNetzGesperrt, wischeGesperrte, ladeSperrQuelle,
+  sperrliste: () => ({
+    ereignisse: [...sperrEreignisse.keys()],
+    absender: [...sperrAbsender.keys()],
+    stand: sperrQuelleStand
+  }) };
 </script>
 
 <!-- ── SBKIM-Endknoten-Stack (byte-1:1-Kopien, Drift-Guard im Smoke-Test) ──
