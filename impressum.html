@@ -55,7 +55,6 @@
     <p>
       Die Pinnwand ist eine <strong>server-lose</strong> Anwendung: kein eigener
       Anwendungs-Server, kein Nutzerkonto, keine Analyse- oder Tracking-Software.
-      Es werden keine personenbezogenen Daten an den Betreiber übertragen.
     </p>
 
     <h3>Hosting</h3>
@@ -64,6 +63,89 @@
       ausgeliefert. Beim Aufruf werden technisch notwendige Zugriffsdaten
       (z. B. IP-Adresse, Browser-Angaben) an GitHub übertragen; es gelten deren
       Datenschutzbestimmungen.
+    </p>
+
+    <h3>Das Heim-Relais gehört dem Betreiber (wichtig)</h3>
+    <p>
+      Hier stand bis zum 17.08.2026 „Es werden keine personenbezogenen Daten an
+      den Betreiber übertragen." Das <strong>stimmt so nicht mehr</strong>, seit
+      die Pinnwand voreingestellt nur noch auf ein eigenes Relais schreibt, und
+      es wird hier richtiggestellt statt stehengelassen.
+    </p>
+    <p>
+      Voreingestellt gehen deine Zettel an
+      <strong><code>wss://relay.family-projekt.de</code></strong>. Dieses Relais
+      betreibt der oben genannte Verantwortliche auf einem eigenen Server
+      (Hetzner Online GmbH, Deutschland). Damit gilt:
+    </p>
+    <ul>
+      <li>
+        <strong>Was dort ankommt:</strong> deine signierten Zettel samt Inhalt,
+        Zeitpunkt und öffentlichem Schlüssel — bei verschlüsselten Nachrichten
+        nur der Geheimtext. Technisch bedingt außerdem die Verbindungsdaten
+        deines Geräts (IP-Adresse) für die Dauer der Verbindung.
+      </li>
+      <li>
+        <strong>Warum trotzdem so:</strong> Ein Relais speichert immer, was
+        durch es hindurchgeht. Bei einem fremden Betreiber kann man später nur
+        <em>bitten</em> zu löschen. Beim eigenen gibt es jemanden, der wirklich
+        löschen kann und dafür auch geradesteht. Das ist der Grund für die
+        Voreinstellung — nicht ein Wunsch, Daten zu sammeln.
+      </li>
+      <li>
+        <strong>Du kannst es abstellen.</strong> In der Pinnwand unter „🏠
+        Heim-Relais" das Häkchen „Nur dorthin senden" entfernen; dann gehen die
+        Zettel an alle angehakten Relais. Ein anderes Relais eintragen geht
+        ebenso.
+      </li>
+      <li>
+        <strong>Rechtsgrundlage:</strong> Art. 6 Abs. 1 lit. f DSGVO
+        (berechtigtes Interesse am Betrieb eines missbrauchsfähig
+        moderierbaren Dienstes). <strong>Speicherdauer:</strong> Zettel bleiben,
+        bis sie zurückgezogen, gesperrt oder vom Relais verdrängt werden.
+      </li>
+      <li>
+        <strong>Deine Rechte:</strong> Auskunft, Berichtigung, Löschung,
+        Einschränkung, Widerspruch (Art. 15–21 DSGVO) —
+        <a href="mailto:info@family-projekt.de">info@family-projekt.de</a>.
+        Beschwerderecht bei einer Aufsichtsbehörde, für Hamburg der oder die
+        Hamburgische Beauftragte für Datenschutz und Informationsfreiheit.
+      </li>
+    </ul>
+    <p>
+      <strong>Ehrlich zur Grenze:</strong> Auf <em>fremden</em> Relais, die du
+      zusätzlich zum Lesen angehakt hast, hat der Betreiber keinen Zugriff. Was
+      dort liegt, kann er weder einsehen noch löschen — dort lässt sich nur
+      bitten.
+    </p>
+
+    <h3>Rechtswidrige Inhalte melden (Art. 16 DSA)</h3>
+    <p>
+      An jedem Zettel und jeder Antwort steht ein <strong>⚑</strong>. Damit
+      lässt sich ein Inhalt melden — Hassrede, Bedrohung, Betrug und alles
+      andere, was hier nicht hingehört. Eine Meldung ist auch ohne Namen und
+      ohne Adresse möglich; ohne Rückmeldeadresse kann das Ergebnis allerdings
+      nicht zugestellt werden.
+    </p>
+    <p>
+      Alternativ per E-Mail an
+      <a href="mailto:info@family-projekt.de">info@family-projekt.de</a>.
+    </p>
+    <p>
+      Jede Meldung wird von einem Menschen geprüft und begründet entschieden;
+      <strong>nichts wird automatisch entfernt</strong>. Wer mit der
+      Entscheidung nicht einverstanden ist, kann ihr unter derselben Adresse
+      widersprechen; unberührt bleiben der Rechtsweg und die Möglichkeit einer
+      außergerichtlichen Streitbeilegung nach Art. 21 DSA.
+    </p>
+    <p>
+      <strong>Was eine Entfernung bewirkt — und was nicht:</strong> Auf dem
+      Heim-Relais kann ein Zettel wirklich entfernt werden. Zusätzlich nimmt
+      eine Sperr-Liste ihn in jedem Kimboard aus der Anzeige. Liegt er
+      daneben auf einem fremden Relais, bleibt er dort physisch bestehen und
+      ist mit anderer Software weiterhin abrufbar. Das ist keine Nachlässigkeit,
+      sondern die Eigenschaft eines offenen Netzes — nachzulesen in
+      <a href="https://github.com/lausiklauskn-png/Kimboard/blob/main/docs/MODERATION_UND_RECHT.md">docs/MODERATION_UND_RECHT.md</a>.
     </p>
 
     <h3>Was lokal im Browser bleibt</h3>
@@ -93,7 +175,9 @@
     <h3>Verbindungen zu Dritten (nur auf deine Aktion)</h3>
     <ul>
       <li><strong>Nostr-Relays:</strong> das geborgte „dumme Brett" als Medium —
-        trägt deine signierten Zettel weiter.</li>
+        trägt deine signierten Zettel weiter. <strong>Eines davon ist keins von
+        Dritten:</strong> das voreingestellte Heim-Relais gehört dem Betreiber
+        (siehe oben).</li>
       <li><strong>Embedding-Modell:</strong> beim Einschalten der Bedeutungs-Sortierung
         wird ein KI-Modell einmalig von einem öffentlichen CDN geladen.</li>
       <li><strong>KI-Richter:</strong> entweder lokal im Browser (WebLLM, gratis, lädt
@@ -102,8 +186,11 @@
     </ul>
 
     <p>
-      Es findet <strong>keine eigenständige Datensammlung</strong> statt. Jede
-      Außenverbindung ist benannt, sichtbar und durch dich ausgelöst.
+      Es findet <strong>keine eigenständige Datensammlung</strong> statt: keine
+      Analyse, kein Tracking, kein Profil. Jede Außenverbindung ist benannt,
+      sichtbar und durch dich ausgelöst. Was auf dem Heim-Relais ankommt, weil
+      du einen Zettel abschickst, steht oben unter „Das Heim-Relais gehört dem
+      Betreiber".
     </p>
   </div>
 
