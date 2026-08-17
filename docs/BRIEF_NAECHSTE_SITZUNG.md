@@ -2,6 +2,14 @@
 
 **Stand: 2026-08-01, Ende der Bau-Sitzung. `main` = `CACHE_VERSION` v50.**
 
+> ⚠️ **Es gibt einen neueren Brief:** [`BRIEF_MODERATION_UND_RECHT.md`](BRIEF_MODERATION_UND_RECHT.md)
+> (2026-08-17) — Hassrede vom Brett nehmen, Melde-Weg, Sperr-Liste,
+> Betreiber-Pflichten fürs eigene Relais. **Lies den zuerst.**
+> Dieser Brief hier bleibt gültig für das, was darin noch offen steht: der
+> Zwei-Geräte-Lauf mit einer Gruppe und die Punkte 4–6 unter „Was als Nächstes
+> anstehen könnte". Punkt 3 (Betreiber-Pflichten) ist in den neuen Brief
+> übergegangen.
+
 Lies diesen Brief zuerst, dann `README.md`. Danach nur den Code-Bereich, an dem
 du arbeitest — `index.html` ist groß, lies gezielt mit Grep.
 
