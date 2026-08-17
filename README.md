@@ -22,6 +22,10 @@ Live: <https://lausiklauskn-png.github.io/Kimboard/>
 - **Eigener SBKIM-Knoten.** Eigene, im Browser signierte Identität + Spore
   (Ed25519), Status-Lampen-Leiste + Selbst-Siegel (Bronze/Gold), „🌐 Mit dem Netz
   verbinden" (Modul 23 Rendezvous), server-loser Handshake mit anderen Knoten.
+- **Melden und sperren.** ⚑ an jedem Zettel (Art. 16 DSA, anonym möglich, kein
+  Automatismus) und eine netzweite Sperr-Liste. Was dabei wirklich geht und was
+  nicht — insbesondere: auf fremden Relais lässt sich nur *bitten* — steht
+  nüchtern in [`docs/MODERATION_UND_RECHT.md`](docs/MODERATION_UND_RECHT.md).
 
 ## Saubere Netz-Anmeldung (der Browser als schwarzes Loch)
 
@@ -66,8 +70,15 @@ Kanonische Quelle der `modules/*.js`: `Sage-Protokol/src/modules/*` (bzw.
 ## Test
 
 ```bash
-npm test   # node --test: Drift-Guard (sha256) + App-Schale + Pinnwand-Erhalt + Modul 23
+npm install --no-save playwright-core   # einmalig je Container
+node tests/alle.mjs                     # ALLES — 27 Prüfungen
+bash tests/gegenprobe_moderation.sh     # 17 eingebaute Fehler, jeder muss fangen
 ```
+
+> ⚠️ **`npm test` ist nicht „die Prüfung".** Es läuft `node --test` (Drift-Guard
+> + App-Schale, Millisekunden) und fasst die Proben unter `tests/` **nicht** an.
+> Nimm `node tests/alle.mjs`. Und `| tail` ist zum Lesen da, nicht zum Urteilen
+> — über grün entscheidet nur der eigene Rückgabewert.
 
 Der **Browser-Sichttest** (echtes IndexedDB, Service-Worker, Live-Relais,
 Modell-Laden, Pinnwand, Handshake) bleibt „ungeprüft, wartet auf Klaus'

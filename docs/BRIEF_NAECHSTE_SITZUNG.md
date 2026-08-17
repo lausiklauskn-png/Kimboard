@@ -1,183 +1,231 @@
 # Brief an die nächste Sitzung — Kimboard
 
-**Stand: 2026-08-01, Ende der Bau-Sitzung. `main` = `CACHE_VERSION` v50.**
+**Stand: 2026-08-17, Ende der Sitzung „Recht & Moderation".**
+`main` war beim Start `1072f59`. Gebaut wurde auf
+`claude/kimboard-recht-moderation-tbbacm`.
 
-> ⚠️ **Es gibt einen neueren Brief:** [`BRIEF_MODERATION_UND_RECHT.md`](BRIEF_MODERATION_UND_RECHT.md)
-> (2026-08-17) — Hassrede vom Brett nehmen, Melde-Weg, Sperr-Liste,
-> Betreiber-Pflichten fürs eigene Relais. **Lies den zuerst.**
-> Dieser Brief hier bleibt gültig für das, was darin noch offen steht: der
-> Zwei-Geräte-Lauf mit einer Gruppe und die Punkte 4–6 unter „Was als Nächstes
-> anstehen könnte". Punkt 3 (Betreiber-Pflichten) ist in den neuen Brief
-> übergegangen.
+Lies zuerst diesen Brief, dann `CLAUDE.md`, dann
+[`docs/MODERATION_UND_RECHT.md`](MODERATION_UND_RECHT.md). Danach nur den
+Code-Bereich, an dem du arbeitest — `index.html` ist groß, lies gezielt mit Grep.
 
-Lies diesen Brief zuerst, dann `README.md`. Danach nur den Code-Bereich, an dem
-du arbeitest — `index.html` ist groß, lies gezielt mit Grep.
+> Der ältere `BRIEF_MODERATION_UND_RECHT.md` ist damit **abgearbeitet bis auf
+> Strang A**. Was daraus offen blieb, steht unten unter „Was als Nächstes".
 
 ---
 
-## Wo wir stehen
+## Was gebaut ist
 
-Der Plan „Pinnwand: Kontakte wie bei WhatsApp" ist **vollständig abgearbeitet**.
-Dazu kamen an einem Tag mehrere Befunde aus Klaus' Sichttests am Tablet und ein
-Datenschutz-Einwand, der die Architektur verändert hat.
-
-Gebaut und gemergt (PR #72 – #81):
-
-| Was | Kern |
+| Strang | Stand |
 |---|---|
-| Kontakte | „➕ Kontakt" am Zettel, „➖ Kontakt" zum Entfernen, Profil beim Tippen auf den Namen, Kontakt senden |
-| Löschen | „nur bei mir" / „bei allen" (NIP-09), Sammelweg „🗑 Meine zurückziehen" |
-| Zurückgezogen | vergänglicher Hinweis „🚫 Diese Nachricht wurde zurückgezogen" (1 Stunde, danach spurlos) |
-| Ausblenden | „↩ Rückgängig" (8 s), Fenster „👁 Ausgeblendet", ✕ an jeder einzelnen Antwort |
-| Gruppen | benannte Mitgliederliste, Einladung mit **automatischem Schlüsseltausch** beim Annehmen |
-| Nachholen | „🕓 Älteres nachholen" — liest den Vorrat der zuletzt benutzten Relais |
-| **Heim-Relais** | **schmal senden, breit lesen** — geschrieben wird nur auf `relay.family-projekt.de` |
+| **C — Melde-Weg** (Art. 16 DSA) | ✅ fertig |
+| **B — Sperr-Liste** (App-Seite) | ✅ fertig |
+| **Die Papiere** | ✅ fertig |
+| **A — Server-Wächter** | ⏸ **wartet auf Schritt 0** (siehe unten) |
 
-**Klaus' Sichttest am Tablet ist grün** („Sieht perfekt aus"). Offen ist nur der
-**Zwei-Geräte-Lauf mit einer Gruppe** — siehe unten.
+**Strang C.** ⚑ an jedem Zettel und jeder Antwort, neben dem ✕. Melde-Fenster mit
+Gründen (Hassrede zuerst), Freitext, anonym möglich. Der Weg ist derselbe
+erprobte Dienst, den der family-projekt.de-Marktplatz benutzt
+(`zweck: "meldung"`) — Kimboards Herkunft `lausiklauskn-png.github.io` stand
+dort **bereits** in `allowed_origins`, es war **keine** Server-Änderung nötig.
+Fail-soft auf `mailto:`, und ohne jede Adresse eine ehrliche Ansage statt eines
+Knopfes, der ins Nichts sendet. Der beanstandete **Inhalt reist nicht mit** —
+nur die Kennungen. Kein Automatismus.
 
----
+**Strang B.** `assets/config/sperrliste.js`, mit `defer` im `<head>`, damit sie
+vor dem ersten Zettel dasteht. Zettel **und** Absender sperrbar (Klaus'
+Entscheidung). Gesperrtes verschwindet **spurlos** — kein Platzhalter, kein
+Grund am Brett (auch Klaus' Entscheidung: bei Hassrede ist die stehengelassene
+Lücke samt Begründung schon die halbe Verbreitung). Dass die App filtert, steht
+trotzdem offen im Fenster „👁 Ausgeblendet", mit Zahl. Optional eine
+nachgeladene Liste, aber nur mit gültiger Signatur des konfigurierten
+Schlüssels — geprüft mit derselben Funktion wie jeder Zettel.
 
-## Die Architektur-Entscheidung, die du kennen musst
-
-**Heim-Relais (2026-08-01).** Vorher ging *jeder* Zettel an *alle* verbundenen
-Relais — auch verschlüsselte, jede Gruppen-Kopie, sogar die Rückzieh-Bitten. Bei
-fünf voreingestellten Relais landeten die Daten bei vier fremden Betreibern.
-
-Jetzt gilt die Asymmetrie:
-
-- **`sendSockets()`** liefert die Leitungen zum **Senden** (nur Heim-Relais).
-- **`liveSockets()`** bleibt für alles andere: Verbindungszahl, **Abonnieren**,
-  Lesen.
-
-> ⚠️ **Beim Weiterbauen:** Jede neue Sendestelle nimmt `sendSockets()` und stellt
-> vorher `if (!heimBereit()) return;` davor. Jede neue *Lese*-Stelle nimmt
-> `liveSockets()`. Wer das vertauscht, verengt entweder das Lesen (dann fehlen
-> Zettel) oder streut wieder an fremde Betreiber. Beides fangen
-> `smoke_heim_relais.mjs` und `smoke_nachholen.mjs`.
-
-**Ausnahme:** `zurueckziehenFuerAlle` bricht bewusst **nicht** ab, wenn nichts
-rausgeht — die Bitte an die anderen kann scheitern, das Wegnehmen bei mir nicht.
+**Die Papiere.** `docs/MODERATION_UND_RECHT.md` neu. Im Impressum standen zwei
+Sätze, die nicht mehr stimmten — beide berichtigt, siehe unten.
 
 ---
 
-## Prüfen — und die Falle dabei
+## Die zwei echten Fehler, die die Gegenprobe gefunden hat
 
-```bash
-node tests/alle.mjs           # ALLES: npm test + alle 22 Browser-Suiten (~5 Min)
-node tests/alle.mjs kontakt   # nur Suiten mit „kontakt" im Namen
-npm test                      # nur Drift-Guard + App-Schale (Millisekunden)
+Das ist der Teil, den du kennen musst, weil er sich wiederholen wird.
+
+**1. Eine behauptete Zahl statt einer gemessenen.** Der Melde-Weg schickte
+`fp_elapsed: Math.max(1700, …)`. Der Dienst wirft alles weg, was schneller als
+1,5 s ausgefüllt wurde — mit `Math.max` hätte der Client ihm 1700 ms gemeldet,
+auch wenn 200 vergangen waren, und damit seinen Bot-Riegel von unserer Seite
+ausgehebelt. Aufgefallen ist es nur, weil die Gegenprobe die Wartezeit ausbaute
+und die Prüfung **trotzdem grün blieb**: die Zahl war ohnehin gelogen, also
+konnte kein Wächter etwas merken.
+
+**2. Der Service-Worker fror die Sperr-Liste ein.** `sw.js` ist cache-first für
+alles Gleich-Ursprüngliche. Die nachgeladene Liste wäre **einmal** geholt und
+dann bis zur nächsten Auslieferung aus dem Vorrat bedient worden. Klaus sperrt
+etwas, und die installierten Kimboards sähen es nie. Eine Moderations-Liste, die
+veraltet ausgeliefert wird, ist schlimmer als keine — sie sieht aus, als wirke
+sie. Jetzt netz-zuerst, Cache nur offline.
+
+Gefunden hat das **keine** Überlegung, sondern eine Probe, die sprunghaft rot
+wurde und deren Fehler wanderten. Das sah zuerst wie Zufall aus. Es war keiner.
+
+> **Die Regel daraus:** Eine Prüfung wird nicht sprunghaft, sie hat eine
+> Ursache. Und: was du dem Gegenüber über dich selbst meldest, muss gemessen
+> sein, nicht behauptet — sonst prüft niemand mehr etwas, auch du nicht.
+
+---
+
+## Schritt 0 — offen, und Strang A hängt daran
+
+Aus der Sitzungs-Umgebung ist der Server **nicht** erreichbar (belegt erneut am
+2026-08-17: `CONNECT tunnel failed, response 403`). Beide Namen lösen auf
+denselben Rechner auf:
+
+```
+167.233.204.72   relay.family-projekt.de
+167.233.204.72   relay.pwa-toolpoint.de
 ```
 
-Voraussetzung einmalig: `npm install --no-save playwright-core`.
+Klaus hat **einen** kopierfertigen Befehl bekommen (er gehört auf den
+**Hetzner-Server**, nicht aufs Tablet). Die Antwort lag bei Sitzungsende noch
+nicht vor. Falls du sie hast, steht sie oben in Klaus' Nachricht; falls nicht,
+frag danach, **bevor** du Strang A anfässt:
 
-> ⚠️ **Die Falle, in die ich getappt bin:** Es gibt **zwei** Sorten Prüfungen.
-> Ich habe einen Tag lang nur die Browser-Suiten laufen lassen und dabei nicht
-> gemerkt, dass `npm test` (Drift-Guard) rot war. Darum gibt es jetzt
-> `tests/alle.mjs` — **nimm den**, nicht die Einzelläufe.
+```
+ssh root@167.233.204.72 'echo "== 1 CONTAINER =="; docker ps -a --format "{{.Names}} | {{.Image}} | {{.Status}} | {{.Ports}}"; echo; echo "== 2 SPEICHER =="; for c in $(docker ps -q); do docker inspect -f "{{.Name}}{{range .Mounts}} [{{.Source}} -> {{.Destination}}]{{end}}" $c; done; echo; echo "== 3 DATEIEN =="; ls -la /opt/relay/; find /opt/relay -maxdepth 4 \( -name "*.db" -o -name "*.toml" \) -printf "%p  %s B  %TY-%Tm-%Td\n" 2>/dev/null; echo; echo "== 4 STECKBRIEF family =="; curl -s -m 8 -H "Accept: application/nostr+json" https://relay.family-projekt.de/; echo; echo; echo "== 5 STECKBRIEF toolpoint =="; curl -s -m 8 -H "Accept: application/nostr+json" https://relay.pwa-toolpoint.de/; echo; echo; echo "== 6 CADDY =="; grep -nE "relay|reverse_proxy" /opt/relay/Caddyfile'
+```
 
-### Zwei Regeln fürs Prüfen, teuer bezahlt
+Abschnitt 4 und 5 sind der Kern: die Relais-Software beantwortet dort selbst,
+wie sie heißt, welche Fassung sie hat und **welche NIPs sie kann**. Steht `9` in
+der Liste, befolgt sie Lösch-Meldungen. Sind beide Antworten gleich, ist es
+**ein** Relais mit zwei Namen.
 
-1. **An der Darstellung messen, nie am Attribut.** Ein Element mit
-   Inline-`display:flex` bleibt sichtbar, auch wenn `hidden` gesetzt ist. Also
-   `offsetParent`, `checkVisibility()` oder `getComputedStyle`. — Und: bei
-   `position: fixed` ist `offsetParent` **immer** `null`; dort die Kennung an den
-   inneren Kasten hängen (Muster: `#loesch-dialog`, `#ausgeblendet-fenster`).
-2. **Immer eine Gegenprobe.** Alten, kaputten Zustand wieder einsetzen und
-   nachsehen, ob die Prüfung wirklich umfällt. Dreimal hat das an einem Tag eine
-   wirkungslose Prüfung entlarvt — zuletzt eine Größen-Prüfung, die gar nichts
-   messen konnte, weil `button { padding }` die deklarierte Größe überschrieb.
-
-### Werkzeug
-
-`tests/_werkzeug.mjs` bietet `starteRelais(port)` (echtes Mini-Relais mit Vorrat,
-protokolliert was ankommt) und `testSeite(root, relais)` (dieselbe `index.html`
-mit Test-Adressen statt der echten). Damit lässt sich **messen, wo Daten wirklich
-landen** — statt eine Absicht im Code zu behaupten. Benutz das, statt einen
-vierten WebSocket-Server zu schreiben.
-
-**Zum Drift-Guard:** In `modules/` liegen zweierlei Dateien — byte-1:1-**Kopien**
-aus Sage (die sich **nicht** ändern dürfen) und **Kimboard-eigene** Module
-(`echtheit.js`, `relay_rotation.js` — die gibt es in Sage gar nicht). Für die
-eigenen ist der Fingerabdruck kein Verbot, sondern ein Merkposten: Wer sie
-ändert, trägt den neuen Wert in `test/smoke.test.js` bewusst nach.
+**Ein Eingriff in den Relais-Speicher ist schwer umkehrbar.** Ergibt Schritt 0
+etwas anderes als erwartet (`nostr-rs-relay`, SQLite, log-frei), **frag Klaus**,
+bevor du baust. Das ist echtes Zweifeln im Sinne des Freibriefs.
 
 ---
 
-## Was als Nächstes anstehen könnte
+## Was als Nächstes ansteht
 
-Nichts davon ist beauftragt — es ist die ehrliche Liste dessen, was offen oder
-absehbar ist. **Frag Klaus, bevor du eines davon baust.**
+1. **Strang A — der Server-Wächter.** Ein kleiner Dienst auf dem Hetzner-Server,
+   der in festem Takt `sbkim/sperrliste.json` aus dem Repo liest und die
+   genannten Ereignisse aus dem Relais-Speicher entfernt. Muster: der
+   2-Minuten-Cron aus dem Skill `auto-deploy-einrichten` — der Server zieht sich,
+   was im Repo steht; nur die Nutzlast ist neu. Kein zweites Bedienfeld, kein
+   zweiter Ort der Wahrheit. **Setzt Schritt 0 voraus.**
+2. **Das Werkzeug zum Signieren der nachgeladenen Liste.** Solange es fehlt,
+   steht `pruefschluessel` in `assets/config/moderation.js` auf `null` und es
+   wird **nichts** nachgeladen — sichtbar abgeschaltet statt still wirkungslos.
+   Offene Frage an Klaus, die ich bewusst nicht geraten habe: **welcher
+   Schlüssel signiert?** Seine Kimboard-Identität, oder ein eigener nur dafür?
+   Eine Identität, die sowohl Zettel schreibt als auch Sperren unterschreibt,
+   vermischt zwei Rollen.
+3. **Prüf-Auftrag an `family-project/impressum.html`, Punkt 5.** Dort steht
+   „Netz-Inhalte sind Ende-zu-Ende verschlüsselt." Das trifft auf
+   Direktnachrichten (`modules/dm_crypto.js`) und Gruppen zu; das **offene
+   Brett** läuft im Klartext über dasselbe Relais. Die Aussage ist damit
+   möglicherweise zu weit gefasst. **Erst belegen, dann formulieren** — eigene
+   Entscheidung, eigener PR, anderes Repo.
+4. **Aus dem alten Brief noch offen:** der Zwei-Geräte-Lauf mit einer Gruppe
+   (nur Klaus), die Platzhalter-Stunde und die acht Sekunden für „Rückgängig"
+   (beide geraten, nicht gemessen), und die Frage, ob `relay.nostr.band` — ein
+   Archiv- und **Suchdienst** — in den Voreinstellungs-Fünf stehen sollte.
 
-### 1. Zwei-Geräte-Lauf mit einer Gruppe (offen, nur Klaus)
+---
 
-Gruppe anlegen → einladen → der andere nimmt an → beide schreiben und antworten.
-Der gemeinsame Faden (`gm`-Marke) ist headless bewiesen, aber der echte Lauf über
-zwei Geräte und ein echtes Relais steht aus. **Wenn dabei etwas hakt, ist das der
-wahrscheinlichste Ort:** Antworten anderer Mitglieder, die im falschen Strang
-landen.
+## Prüfen
 
-### 2. Heim-Relais: die Gegenseite
+```bash
+npm install --no-save playwright-core     # einmalig je Container
+node tests/alle.mjs                       # ALLES — 27 Prüfungen (~8 Min)
+node tests/alle.mjs sperr                 # nur die Sperr-Liste
+bash tests/gegenprobe_moderation.sh       # 17 eingebaute Fehler, jeder MUSS fangen
+```
 
-Die Einstellung schützt **den eigenen Absende-Weg**. Schreibt ein Kontakt aus
-einer anders eingestellten App, landet die Unterhaltung trotzdem überall. Denkbar:
-ein sichtbarer Hinweis am Kontakt („schreibt an fremde Relais"), sobald man das
-erkennen kann. Ungelöst — und ehrlicherweise vielleicht nicht lösbar.
+Zuletzt gemessen: **alle 27 grün**, Gegenprobe **17 von 17 gefangen**.
 
-### 3. Betreiber-Pflichten für das eigene Relais
+**`npm test` ist nicht „die Prüfung"** — es fasst die Proben unter `tests/`
+nicht an. Und **`| tail` ist zum Lesen da, nicht zum Urteilen**: über grün
+entscheidet nur der eigene Rückgabewert.
 
-Liegen die Daten auf Klaus' Server, ist er die verantwortliche Stelle:
-Datenschutzerklärung, Löschverlangen, Zugangsregeln. `impressum.html` und
-`sicherheit.html` existieren — ob sie den neuen Zustand (Heim-Relais als
-Voreinstellung) korrekt beschreiben, ist **ungeprüft**.
+**Warte auf die Bedingung, nie auf die Uhr.** Die neuen Proben tun das
+durchgehend (`waitForFunction` statt `waitForTimeout`). Zwei Stellen, an denen
+das hier konkret zählte: die Nachlade-Kette (`window.__kb`) und der
+Service-Worker (`navigator.serviceWorker.controller`) — ohne die zweite hätte
+der SW-Abschnitt gar nicht den Fall geprüft, den er meint, und wäre **stumm**
+statt falsch gewesen.
 
-### 4. Die Platzhalter-Stunde
+### Zwei Dinge, die dir sonst Zeit kosten
 
-Der „zurückgezogen"-Hinweis steht eine Stunde. Das ist **geraten, nicht gemessen**
-(`PLATZHALTER_DAUER` in `index.html`). Wenn Klaus im Alltag sagt „zu kurz" oder
-„zu lang" — eine Zeile.
+- **`page.route` fängt keine Abrufe ab, die aus einem Service-Worker kommen.**
+  Deshalb laufen die geleiteten Fälle in `smoke_sperrliste.mjs` mit
+  `serviceWorkers: 'block'`; sein Verhalten prüft ein eigener Abschnitt mit
+  wachem SW und einer echten Datei, die sich zwischen zwei Abrufen ändert.
+- **`assets/hilfe.js` erzwingt einen Eintrag nur für Elemente mit `id`.** Knöpfe
+  mit reiner Klasse (`.q-melden`) fängt die Vollständigkeits-Prüfung nicht —
+  dort braucht es einen eigenen Wächter, und den gibt es jetzt.
 
-### 5. Die acht Sekunden für „Rückgängig"
+---
 
-Ebenfalls geraten. Klaus hat es am Tablet gesehen und nicht beanstandet; falls
-doch, steht der Wert in `toastRueckgaengig`.
+## Was nur Klaus prüfen kann
 
-### 6. Relais-Pool
+Alles Folgende ist **headless grün, am Tablet ungeprüft**:
 
-`RELAY_POOL` enthält neun Adressen, darunter `relay.nostr.band` — ein Archiv- und
-**Suchdienst**. Zum *Lesen* ist er nützlich, aber es lohnt die Frage, ob er in den
-Voreinstellungs-Fünf stehen sollte.
+- Ob ⚑ und ✕ am Handy nebeneinander gut treffbar sind. Gemessen ist es (frei
+  treffbar, gleich groß, in einer Spalte, Kopftext läuft nicht darunter durch) —
+  ob es sich gut *anfühlt*, ist etwas anderes.
+- Ob eine echte Meldung wirklich in `info@family-projekt.de` ankommt. Headless
+  ist nur bewiesen, dass der richtige Aufruf mit dem richtigen Inhalt rausgeht.
+- Wie sich das Melde-Fenster auf einem schmalen Schirm liest.
+
+Nach dem Merge: **Hard-Reload** (Strg+Shift+R bzw. der ⟳-Knopf), sonst liefert
+der Service-Worker die alte Fassung. `CACHE_VERSION` steht auf `kimboard-v58`.
 
 ---
 
 ## Arbeitsweise (Klaus)
 
 - **Antworten auf Deutsch**, ruhig und präzise. Klaus ist kein Programmierer,
-  lernt aber gern. **Einzelschritte** mit klarem Erfolgsmerkmal, keine
-  Terminal-Befehle für ihn — Bedienung über benannte Knöpfe in der Seite.
+  lernt aber gern. **Einzelschritte** mit klarem Erfolgsmerkmal. Keine
+  Terminal-Befehle für ihn — die einzige Ausnahme ist der `ssh`-Einzeiler oben,
+  und der ist genau einer.
 - **Selbst-Merge-Freibrief gilt** (netzweit, Klaus 2026-06-28): eigene PRs
   selbstständig mergen, sobald getestet, abgegrenzt und nicht architektonisch
-  zweifelhaft. Draft-PR → ready → squash. Bei echtem Zweifel erst fragen.
-- **`CACHE_VERSION` in `sw.js` bei jeder Schalen-Änderung erhöhen**, sonst sieht
-  Klaus am Tablet die alte Version. Er lädt danach hart neu.
-- **Ehrlichkeit vor Fertig-Meldung.** Was headless grün ist, ist nicht am Tablet
-  grün. Sitzungen schließen mit „Sichttest am Tablet steht aus", solange Klaus
-  nicht geschaut hat. Und was die App nicht halten kann (Löschen auf fremden
-  Relais, Vollständigkeit beim Nachholen), wird **im Text der App** benannt —
-  nicht im Kleingedruckten.
+  zweifelhaft. Bei echtem Zweifel erst fragen.
+- **Branch frisch von `origin/main`**, Push mit ausdrücklicher Refspec, danach
+  `git diff --stat origin/main origin/<branch>` — ein leerer PR lässt sich
+  mergen und meldet Erfolg.
+- **`CACHE_VERSION` erhöhen**, sobald eine Schalen-Datei sich ändert.
+- **Ehrlichkeit vor Fertig-Meldung.** Bei diesem Thema doppelt: ein Versprechen
+  „endgültig gelöscht", das nur für ein Relais gilt, wäre schlimmer als gar
+  keins.
 
 ---
 
 ## Kurz-Karte: wo was liegt
 
-| Thema | Fundstelle in `index.html` |
+| Thema | Fundstelle |
 |---|---|
-| Heim-Relais | `HOME_RELAY`, `heim`, `sendSockets`, `heimBereit`, `heimStatus` |
-| Senden/Lesen-Trennung | `sendSockets()` vs. `liveSockets()` |
-| Gruppen | `dmGroups`, `sendeAnGruppe`, `gmOf`/`threadOf`/`gmIndex`, `openGruppen` |
-| Zurückziehen | `zurueckziehenFuerAlle`, `handleDeletion`, `machPlatzhalter`, `raeumePlatzhalter` |
-| Ausblenden | `hidden`, `hideQuestion`, `merkeAusblendung`/`zeigeWieder`, `openAusgeblendet` |
-| Kontakte | `dmContacts`, `pinContact`, `entferneKontakt`, `makeContactAction` |
-| Nachholen | `holeAelteres`/`holeAelteresMit`, `nachholRelais` |
-| Rotation | `modules/relay_rotation.js` (+ `relaysForRecentWindows`) |
-| Erklär-Blasen | `assets/hilfe.js` — jeder sichtbare Knopf **muss** einen Eintrag haben (`smoke_hilfe` erzwingt es) |
+| Melde-Knopf, Fenster, Absende-Weg | `index.html`: `meldeKnopf`, `openMeldeDialog`, `sendeMeldung` |
+| Melde-/Sperr-Konfiguration (Forker ändern hier) | `assets/config/moderation.js` |
+| Die Sperr-Liste selbst | `assets/config/sperrliste.js` |
+| Anwenden · Nachladen · Nachwischen | `index.html`: `istNetzGesperrt`, `ladeSperrQuelle`, `wischeGesperrte` |
+| Netz-zuerst für die Liste | `sw.js` (sonst friert sie ein) |
+| Heim-Relais · Senden/Lesen-Trennung | `index.html`: `HOME_RELAY`, `sendSockets()` vs. `liveSockets()` |
+| Zurückziehen (NIP-09) | `index.html`: `zurueckziehenFuerAlle`, `handleDeletion` |
+| Ausblenden · Stummschalten | `index.html`: `hideQuestion`, `sperreAbsender`, `openAusgeblendet` |
+| Erklär-Blasen | `assets/hilfe.js` — Klassen-Knöpfe fängt die Prüfung NICHT |
+| Einordnung + Rechtslage | `docs/MODERATION_UND_RECHT.md` |
+| Proben · Gegenprobe | `tests/smoke_melden.mjs`, `tests/smoke_sperrliste.mjs`, `tests/gegenprobe_moderation.sh` |
+
+---
+
+## Abschluss-Befehl für die nächste Sitzung
+
+Diese Kette reißt nie ab. Am Ende der Sitzung:
+
+1. Diesen Brief fortschreiben — Stand, was gebaut, was offen, was als Nächstes.
+2. Den vollständigen Brief **als Codeblock in die Chat-Antwort** ausgeben.
+   Klaus' Tab ist der Einstiegspunkt, nicht der Dateibrowser.
+3. Einen „Nächste Schritte"-Block mit 2–4 priorisierten Punkten, je ein Satz
+   Begründung.
+4. Ehrlich vermerken, was **nur Klaus am Tablet** prüfen kann.
