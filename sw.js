@@ -53,7 +53,7 @@
  */
 "use strict";
 
-var CACHE_VERSION = "kimboard-v55";
+var CACHE_VERSION = "kimboard-v56";
 
 // Die App-Schale. Absichtlich NICHT enthalten: "./" und "./index.html"
 // (dieselbe Datei wie die Navigation, nur unter anderer Adresse) sowie
