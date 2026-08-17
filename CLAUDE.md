@@ -77,7 +77,31 @@ korrekt `exit=1` zurück — hinter einer Pipe bekommst du den Rückgabewert von
   lesen"). Was dort liegt, liegt auf **seinem** Server — samt Melde- und
   Abhilfepflicht. Auf fremden Relais kann man dagegen nur **bitten**, nie
   durchsetzen. Wer daran baut, liest zuerst
-  [`docs/BRIEF_MODERATION_UND_RECHT.md`](docs/BRIEF_MODERATION_UND_RECHT.md).
+  [`docs/MODERATION_UND_RECHT.md`](docs/MODERATION_UND_RECHT.md).
+
+- **Die Sperr-Liste kennt nur eine Richtung.** `assets/config/sperrliste.js` wird mit
+  `defer` im `<head>` geladen — sie muss dastehen, **bevor** der erste Zettel
+  gezeichnet wird, sonst blitzt Gesperrtes kurz auf. Aus der Oberfläche geht es nur
+  nach **oben** (sperren); gelöst wird eine Sperre **nur in der Datei**. Ein Fehlgriff
+  beim Sperren fällt auf, einer beim Lösen wäre still. Auch der Test-Haken
+  `__kb.sperrliste()` gibt nur **Kopien** heraus.
+
+- **Die nachgeladene Liste darf der Service-Worker nicht einfrieren.** `sw.js` ist
+  cache-first für alles Gleich-Ursprüngliche; für `*sperrliste*.json` gilt deshalb
+  eine eigene Netz-zuerst-Regel. Ohne sie würde die Liste einmal geholt und bis zur
+  nächsten Auslieferung aus dem Vorrat bedient — eine Moderations-Liste, die veraltet
+  ausgeliefert wird, ist schlimmer als keine, weil sie aussieht, als wirke sie. Wer
+  `quelle` in `assets/config/moderation.js` umbenennt, zieht die Regel mit;
+  `smoke_sperrliste` vergleicht beide Stellen.
+
+- **`assets/hilfe.js` erzwingt einen Eintrag nur für Elemente mit `id`.** Knöpfe, die
+  über eine **Klasse** angesprochen werden (`.q-del`, `.q-melden`, `.kb-mute`), fängt
+  die Vollständigkeits-Prüfung **nicht** — dort braucht es einen eigenen Wächter.
+
+- **Gegenprobe:** `bash tests/gegenprobe_moderation.sh` baut 17 Fehler ein, jeder muss
+  eine Probe umwerfen. Sie hat schon zwei echte Fehler gefunden, die keine Probe sah:
+  eine **behauptete** statt gemessene Ausfüllzeit im Melde-Weg (hätte den Bot-Riegel
+  des Dienstes ausgehebelt) und die eingefrorene Sperr-Liste oben.
 
 ## Selbst-Merge-Freibrief (Klaus 2026-06-28, netzweit für ALLE Repos)
 

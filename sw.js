@@ -53,7 +53,7 @@
  */
 "use strict";
 
-var CACHE_VERSION = "kimboard-v56";
+var CACHE_VERSION = "kimboard-v58";
 
 // Die App-Schale. Absichtlich NICHT enthalten: "./" und "./index.html"
 // (dieselbe Datei wie die Navigation, nur unter anderer Adresse) sowie
@@ -63,6 +63,8 @@ var APP_SHELL = [
   "./sicherheit.html",
   "./manifest.json",
   "./icon-128.png",
+  "./assets/config/moderation.js",
+  "./assets/config/sperrliste.js",
   "./assets/storage-init.js",
   "./assets/nostr-listen-init.js",
   "./assets/rendezvous-init.js",
@@ -143,6 +145,52 @@ self.addEventListener("fetch", function (event) {
         return caches.match(req)
           .then(function (c) { return c || caches.match("./index.html"); })
           .then(function (c) { return c || caches.match("./"); });
+      })
+    );
+    return;
+  }
+
+  /* Die nachgeladene SPERR-LISTE: NETZ ZUERST, Cache nur als Rückfall.
+   *
+   * Warum sie eine Ausnahme braucht: Unten gilt cache-first. Die Liste würde
+   * damit EINMAL geholt und danach für immer aus dem Vorrat bedient — bis die
+   * CACHE_VERSION wechselt, also bis zur nächsten Auslieferung. Genau das
+   * hebelt ihren Zweck aus: Klaus sperrt etwas, und die installierten
+   * Kimboards bekommen es nie zu sehen. Eine Moderations-Liste, die veraltet
+   * ausgeliefert wird, ist schlimmer als keine, weil sie so aussieht, als
+   * wirke sie.
+   *
+   * Offline gilt weiter der letzte bekannte Stand — besser die Liste von
+   * gestern als gar keine.
+   *
+   * Gefunden nicht durch Nachdenken, sondern durch eine Probe, die sprunghaft
+   * rot wurde: der Service-Worker beantwortete den Abruf, sobald er wach war.
+   * Bewacht von tests/smoke_sperrliste.mjs (echter Lauf mit wachem
+   * Service-Worker und einer Datei, die sich zwischendurch ändert).
+   *
+   * DIE REGEL: eine .json-Datei, in deren Namen „sperrliste" vorkommt. Bewusst
+   * so und nicht auf den vollen Dateinamen genagelt — der erste Versuch prüfte
+   * wörtlich auf „sperrliste.json" und griff schon bei der eigenen Probendatei
+   * nicht mehr. Was an einem Namen hängt, den man leicht anders schreibt, ist
+   * kein Schutz. Die Endung .json grenzt zugleich die eingebackene
+   * assets/config/sperrliste.js aus: die gehört zur App-Schale, hängt an der
+   * CACHE_VERSION und darf cache-first bleiben.
+   *
+   * ACHTUNG für Forker: `quelle` in assets/config/moderation.js muss zu dieser
+   * Regel passen. Heißt eure Datei anders, friert sie still ein — deshalb
+   * vergleicht tests/smoke_sperrliste.mjs beide Stellen miteinander. */
+  if (/sperrliste[^/]*\.json$/i.test(url.pathname)) {
+    event.respondWith(
+      fetch(req).then(function (res) {
+        if (res && res.status === 200 && res.type === "basic") {
+          var frisch = res.clone();
+          caches.open(CACHE_VERSION).then(function (cache) { cache.put(req, frisch); });
+        }
+        return res;
+      }).catch(function () {
+        return caches.match(req).then(function (c) {
+          return c || new Response("", { status: 504, statusText: "Offline" });
+        });
       })
     );
     return;

@@ -1,5 +1,13 @@
 # Brief an die nächste Sitzung — Kimboard: Hassrede vom Brett nehmen
 
+> ✅ **ABGEARBEITET am 2026-08-17 — bis auf Strang A.** Strang C (Melde-Weg),
+> Strang B (Sperr-Liste) und die Papiere stehen. Strang A (Server-Wächter)
+> wartet auf Schritt 0, weil ein Eingriff in den Relais-Speicher schwer
+> umkehrbar ist. **Der aktuelle Brief ist wieder
+> [`BRIEF_NAECHSTE_SITZUNG.md`](BRIEF_NAECHSTE_SITZUNG.md)** — lies den zuerst.
+> Dieser hier bleibt als Begründung liegen: er erklärt, warum die Sachen so
+> gebaut sind, wie sie gebaut sind.
+
 **Stand: 2026-08-17.** `main` = `45b3442`. Dieser Brief ist der **neueste**; der
 ältere `BRIEF_NAECHSTE_SITZUNG.md` gilt weiter für alles, was dort noch offen
 steht (Zwei-Geräte-Lauf mit einer Gruppe).
