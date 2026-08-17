@@ -31,9 +31,33 @@ git diff --stat origin/main origin/<branch>     # leer = der PR wäre leer
 ## Prüfen
 
 ```bash
-npm test    # node --test
+npm install --no-save playwright-core   # einmalig je Container
+node tests/alle.mjs                     # ALLES — npm test + alle Browser-Suiten (~5 Min)
+node tests/alle.mjs loeschen            # nur Suiten mit „loeschen" im Namen
+npm test                                # NUR Drift-Guard + App-Schale (Millisekunden)
 ```
-Zuletzt gemessen: **6 bestanden, 0 fehlgeschlagen**.
+
+> ⚠️ **`npm test` ist nicht „die Prüfung".** Es läuft `node --test` und fasst die
+> **26 Proben unter `tests/`** nicht an — darunter `smoke_loeschen.mjs`.
+> **Nimm `node tests/alle.mjs`**, so steht es auch in der `README.md`.
+>
+> Diese Zeilen standen bis zum 2026-08-17 falsch hier: der Anker nannte nur
+> `npm test` samt einer Zahl und sah dabei aus wie eine vollständige Auskunft.
+> Genau die Falle, vor der Sages Tafel warnt — wer nur die Probe aufruft, die er
+> kennt, merkt nie, dass die anderen nicht laufen. Beim ersten vollen Lauf war
+> prompt eine Probe rot (`hilfe`), und zwar seit unbekannter Zeit.
+
+**Warte auf die Bedingung, nie auf die Uhr.** `assets/hilfe.js` ist der letzte von
+14 Einträgen der Nachlade-Kette in `index.html`, jedes Glied an
+`requestIdleCallback` mit bis zu 500 ms Frist. `smoke_hilfe.mjs` wartete stur
+1800 ms, verlor das Rennen und prüfte dadurch **gar nichts** — rot, aber aus dem
+falschen Grund. Seit dem 2026-08-17 wartet sie auf `window.__hilfe`. Jedes
+`waitForTimeout` mit einer runden Zahl ist ein Rennen, das irgendwann verloren
+geht; verloren heißt hier nicht „falsch", sondern **stumm**.
+
+**Und: `| tail` ist zum Lesen da, nicht zum Urteilen.** Der Läufer gibt bei Rot
+korrekt `exit=1` zurück — hinter einer Pipe bekommst du den Rückgabewert von
+`tail`.
 
 ## Was hier leicht kaputtgeht
 
@@ -48,6 +72,12 @@ Zuletzt gemessen: **6 bestanden, 0 fehlgeschlagen**.
   und **immer mit Kennung**. Ein selbst gewählter Name ist ein Hinweis, kein
   Vertrauens-Beweis.
 - **Cache-Bump:** `CACHE_VERSION` in `sw.js` (`kimboard-vNN`).
+- **Klaus ist selbst Relais-Betreiber.** Gesendet wird standardmäßig nur aufs
+  Heim-Relais (`HOME_RELAY = wss://relay.family-projekt.de`, „schmal senden, breit
+  lesen"). Was dort liegt, liegt auf **seinem** Server — samt Melde- und
+  Abhilfepflicht. Auf fremden Relais kann man dagegen nur **bitten**, nie
+  durchsetzen. Wer daran baut, liest zuerst
+  [`docs/BRIEF_MODERATION_UND_RECHT.md`](docs/BRIEF_MODERATION_UND_RECHT.md).
 
 ## Selbst-Merge-Freibrief (Klaus 2026-06-28, netzweit für ALLE Repos)
 

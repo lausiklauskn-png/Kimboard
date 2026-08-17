@@ -40,7 +40,18 @@ try {
   const errs = [];
   p.on('pageerror', (e) => errs.push(String(e)));
   await p.goto(`http://127.0.0.1:${PORT}/index.html`, { waitUntil: 'domcontentloaded' });
-  await p.waitForTimeout(1800);
+
+  /* Auf die BEDINGUNG warten, nicht auf die Uhr (2026-08-17).
+     `assets/hilfe.js` ist der LETZTE von 14 Einträgen der Nachlade-Kette in
+     `index.html`, und jedes Glied hängt an `requestIdleCallback` mit bis zu
+     500 ms Frist — im schlechtesten Fall ist die Kette erst nach mehreren
+     Sekunden durch. Die frühere feste Wartezeit von 1800 ms hat dieses Rennen
+     verloren: `window.__hilfe` war noch nicht da, die Probe starb an
+     `Cannot read properties of undefined (reading 'texte')` und prüfte
+     seitdem GAR NICHTS — sie war rot, aber aus dem falschen Grund.
+     Eine Uhr misst nicht, ob etwas fertig ist. Die Bedingung tut es. */
+  await p.waitForFunction(() => !!(window.__hilfe && window.__hilfe.texte), null, { timeout: 20000 });
+  await p.waitForTimeout(400);   // der Kette den Rest ihrer Arbeit lassen
 
   const bubbleText = () => p.evaluate(() => {
     const d = [...document.querySelectorAll('div')].find((x) => /verstanden/.test(x.textContent) && x.style.position === 'fixed');
@@ -130,7 +141,10 @@ try {
 
   // 7. Wahl überlebt das Neuladen
   await p.evaluate(() => window.__hilfe.setMode(true));
-  await p.reload({ waitUntil: 'domcontentloaded' }); await p.waitForTimeout(1800);
+  await p.reload({ waitUntil: 'domcontentloaded' });
+  /* Auch hier die Bedingung statt der Uhr — nach dem Neuladen läuft dieselbe
+     14-gliedrige Nachlade-Kette noch einmal von vorn. */
+  await p.waitForFunction(() => !!(window.__hilfe && window.__hilfe.texte), null, { timeout: 20000 });
   ok(await p.evaluate(() => window.__hilfe.isOn()), 'die Wahl überlebt das Neuladen');
   await p.evaluate(() => window.__hilfe.setMode(false));
 
