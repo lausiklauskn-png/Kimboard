@@ -571,6 +571,23 @@ try {
       'studio.js steht NICHT im Offline-Vorrat (es wird nur auf Druck geholt und braucht ohnehin Netz)');
     const idx = readFileSync(join(ROOT, 'index.html'), 'utf8');
     ok(/assets\/studio\.js\?v=/.test(idx), 'der Zugang lädt studio.js mit Fassungs-Nummer');
+
+    /* Der ausgelieferte Betreiber-Schlüssel muss BRAUCHBAR sein, wenn er
+       überhaupt gesetzt ist. `null` ist erlaubt und richtig (ein Forker
+       betreibt dieses Brett nicht) — aber ein Tippfehler wäre still: das
+       Studio ginge nie auf, und nirgends erschiene ein Fehler. Groß
+       geschriebenes Hex fiele genauso durch, weil der Vergleich in oeffnen()
+       auf Kleinschreibung normiert und HEX64 zwar beides annimmt, die App aber
+       gegen `me()` prüft — das ist immer klein. */
+    const mod = readFileSync(join(ROOT, 'assets/config/moderation.js'), 'utf8');
+    const treffer = /betreiberSchluessel:\s*(null|'([^']*)')/.exec(mod);
+    ok(!!treffer, 'moderation.js hat einen Eintrag für den Betreiber');
+    if (treffer && treffer[2] !== undefined) {
+      ok(/^[0-9a-f]{64}$/.test(treffer[2]),
+        'der eingetragene Betreiber-Schlüssel ist 64 Zeichen Hex in Kleinschreibung');
+    } else {
+      ok(true, 'kein Betreiber eingetragen — erlaubt (Fork-Fall), das Studio bleibt dann zu');
+    }
   }
 } catch (e) {
   fail++; console.error(e);
