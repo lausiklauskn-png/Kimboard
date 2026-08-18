@@ -141,6 +141,42 @@ Drei Eigenschaften, die keine Kür sind:
    gar nicht erst geladen: einer unsignierten Liste zu folgen hieße, jedem zu
    glauben, der die Datei austauschen kann.
 
+### Das Studio 🔧 (gebaut 2026-08-18)
+
+**Langer Druck (~1,5 s) auf das © in der Fußzeile.** Das ist der Griff, mit dem
+der Betreiber von seinem eigenen Gerät aus zufassen kann — ohne Server-Konsole.
+Vorher wird `assets/studio.js` gar nicht geholt; ein Besucher lädt es nie.
+
+Drinnen liegen drei Bereiche:
+
+- **📡 Deine Relais.** Jedes verbundene Relais wird nach [NIP-11](https://github.com/nostr-protocol/nips/blob/master/11.md)
+  gefragt und sagt selbst, welche Software es fährt, in welcher Fassung, und ob
+  es Verwaltungs-Aufträge annimmt.
+- **📋 Was auf dem Brett liegt.** Jeder Zettel mit zwei Knöpfen: netzweit
+  sperren, oder endgültig vom eigenen Relais nehmen.
+- **📜 Sperr-Liste.** Der aktuelle Stand und der Knopf, der die Liste als
+  **signierte** Datei ausgibt (`sbkim/sperrliste.json`).
+
+**Worauf der Schutz beruht — und worauf nicht.** Nicht auf dem langen Druck und
+nicht auf dem Schlüssel-Vergleich: `betreiberSchluessel` steht öffentlich in
+`assets/config/moderation.js`, jeder kann die Datei lesen und das Fenster
+aufmachen. Was er dort nicht kann, ist etwas bewirken. Jede Handlung ist ein
+**signiertes Ereignis**, und signieren kann nur, wer den privaten Schlüssel hat
+— der liegt in genau einem Browser und verlässt ihn nie. Die Autorität sitzt
+beim Relais und beim Schlüssel, nicht in der Oberfläche.
+
+**Die Einbahnstraße gilt auch hier.** Das Studio kann sperren, nie lösen. Ein
+Betreiber-Werkzeug, das die Regel umginge, wäre ein Loch in genau der Regel, die
+es durchsetzen soll. Gelöst wird in der Datei.
+
+**Damit ist Schritt 0 beantwortet — von der App, nicht von einer Sitzung.**
+Monatelang stand die Frage offen, welche Software auf Klaus' Server läuft; aus
+einer Bau-Sitzung ist sie nicht zu beantworten, weil der Egress-Proxy beide
+Relais-Namen sperrt (`connect_rejected`, 403 — belegt am 2026-08-17 und erneut
+am 2026-08-18). Aus Klaus' Browser ist die Leitung offen. Also fragt die App.
+Das ist keine Notlösung: die Auskunft ist dort ohnehin aktueller als in jedem
+Protokoll, das eine Sitzung einmal abgeschrieben hätte.
+
 ### Ausblenden (gab es schon)
 
 Das ✕ nimmt eine Nachricht **auf diesem Gerät** weg, der 🔇-Knopf einen ganzen
@@ -176,16 +212,29 @@ nur für ein Relais gilt, wäre schlimmer als gar keins.
 
 ## 6. Was noch fehlt
 
-- **Der Server-Wächter** (Strang A): ein kleiner Dienst auf Klaus' Server, der
-  in festem Takt die Sperr-Liste liest und die genannten Ereignisse aus dem
-  Relais-Speicher entfernt. Erst damit heißt „gesperrt" auf dem Heim-Relais
-  auch **weg** statt nur unsichtbar. Voraussetzung ist zu wissen, welche
-  Relais-Software dort läuft und wo ihr Speicher liegt — das war am 2026-08-17
-  noch offen (der Egress-Proxy der Bau-Sitzungen erreicht beide Relais nicht,
-  belegt: `CONNECT tunnel failed, response 403`).
-- **Das Werkzeug zum Signieren** einer nachgeladenen Liste. Solange es fehlt,
-  steht `pruefschluessel` in `assets/config/moderation.js` auf `null` und es
-  wird nichts nachgeladen — sichtbar abgeschaltet statt still wirkungslos.
+- **Endgültiges Entfernen hängt an der Relais-Software.** Das Studio bringt den
+  Weg mit ([NIP-86](https://github.com/nostr-protocol/nips/blob/master/86.md):
+  signierter Auftrag per HTTPS, ausgewiesen durch den Betreiber-Schlüssel), aber
+  nur ein Relais, das ihn versteht, führt ihn aus. `nostr-rs-relay` — was laut
+  `family-project/docs/PULS.md` dort läuft — kann NIP-86 **nicht**; `strfry`
+  kann es. Was wirklich läuft, sagt jetzt das Studio selbst.
+  **Solange kein Relais mitspielt, sagt der Knopf das ehrlich und schickt
+  nichts** — statt einen Auftrag ins Leere zu senden und Erfolg zu melden.
+  Der Weg dahin ist dann eine Entscheidung, keine Frage mehr: entweder ein
+  Wechsel der Relais-Software, oder der ursprünglich geplante kleine Dienst auf
+  dem Server, der die Sperr-Liste im Takt liest.
+- **Die erzeugte Liste muss von Hand ins Repo.** Das Studio signiert sie und
+  legt sie als Datei hin; einchecken muss Klaus. Ein Weg, der sie direkt
+  veröffentlicht, bräuchte einen Server mit Token (wie im
+  family-projekt.de-Studio) — den hat Kimboard bewusst nicht.
+- ~~**Das Werkzeug zum Signieren** einer nachgeladenen Liste.~~ **Gebaut
+  2026-08-18** (Studio, Bereich „Sperr-Liste"). Die offene Frage „welcher
+  Schlüssel signiert?" hat sich damit von selbst beantwortet: **die
+  Kimboard-Identität des Betreibers** — dieselbe, mit der er auch Zettel
+  schreibt. Ein eigener Schlüssel nur für Sperr-Listen hätte einen zweiten Ort
+  gebraucht, an dem etwas verloren gehen kann, ohne etwas zu gewinnen.
+  `pruefschluessel` steht weiterhin auf `null`, bis Klaus seine Kennung einträgt
+  — sichtbar abgeschaltet statt still wirkungslos.
 - **Ein Prüf-Auftrag an `family-project/impressum.html`, Punkt 5.** Dort steht
   „Netz-Inhalte sind Ende-zu-Ende verschlüsselt." Das trifft auf
   Direktnachrichten und Gruppen zu; das **offene Brett** läuft im Klartext über
@@ -206,5 +255,8 @@ nur für ein Relais gilt, wäre schlimmer als gar keins.
 | Zurückziehen (NIP-09) | `index.html`: `zurueckziehenFuerAlle`, `handleDeletion` |
 | Lokal ausblenden / stummschalten | `index.html`: `hideQuestion`, `sperreAbsender`, `openAusgeblendet` |
 | Heim-Relais | `index.html`: `HOME_RELAY`, `sendSockets()` vs. `liveSockets()` |
-| Proben | `tests/smoke_melden.mjs`, `tests/smoke_sperrliste.mjs` |
-| Gegenprobe | `tests/gegenprobe_moderation.sh` — 17 eingebaute Fehler, jeder muss die Proben umwerfen |
+| Studio (Betreiber-Werkzeug) | `assets/studio.js` |
+| Studio-Zugang (langer Druck aufs ©) | `index.html`, letzter `<script>`-Block vor `</body>` |
+| Brücke aus dem Modul-Scope | `index.html`: `signiere`, `__kb.zettel/relaisListe/sperreJetzt` |
+| Proben | `tests/smoke_melden.mjs`, `tests/smoke_sperrliste.mjs`, `tests/smoke_studio.mjs` |
+| Gegenprobe | `tests/gegenprobe_moderation.sh` — 29 eingebaute Fehler, jeder muss die Proben umwerfen |

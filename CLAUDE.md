@@ -38,7 +38,7 @@ npm test                                # NUR Drift-Guard + App-Schale (Millisek
 ```
 
 > ⚠️ **`npm test` ist nicht „die Prüfung".** Es läuft `node --test` und fasst die
-> **26 Proben unter `tests/`** nicht an — darunter `smoke_loeschen.mjs`.
+> **27 Proben unter `tests/`** nicht an — darunter `smoke_loeschen.mjs`.
 > **Nimm `node tests/alle.mjs`**, so steht es auch in der `README.md`.
 >
 > Diese Zeilen standen bis zum 2026-08-17 falsch hier: der Anker nannte nur
@@ -98,10 +98,27 @@ korrekt `exit=1` zurück — hinter einer Pipe bekommst du den Rückgabewert von
   über eine **Klasse** angesprochen werden (`.q-del`, `.q-melden`, `.kb-mute`), fängt
   die Vollständigkeits-Prüfung **nicht** — dort braucht es einen eigenen Wächter.
 
-- **Gegenprobe:** `bash tests/gegenprobe_moderation.sh` baut 17 Fehler ein, jeder muss
-  eine Probe umwerfen. Sie hat schon zwei echte Fehler gefunden, die keine Probe sah:
-  eine **behauptete** statt gemessene Ausfüllzeit im Melde-Weg (hätte den Bot-Riegel
-  des Dienstes ausgehebelt) und die eingefrorene Sperr-Liste oben.
+- **Das Studio hängt am © in der Fußzeile** (langer Druck ~1,5 s, `assets/studio.js`).
+  Drei Dinge daran sind Absicht und keine Nachlässigkeit: es wird **erst auf Druck
+  geholt** (steht deshalb NICHT im `CORE`-Vorrat von `sw.js`), der Schlüssel-Vergleich
+  gegen `betreiberSchluessel` ist **kein Türschloss** (der Wert steht öffentlich —
+  Autorität hat der private Schlüssel beim Signieren, nicht die Oberfläche), und es
+  kann wie alles andere **nur sperren, nie lösen**.
+  Endgültiges Entfernen läuft über **NIP-86** und nur dort, wo das Relais es kann;
+  das Studio fragt jedes Relais per **NIP-11** selbst und sagt ehrlich, wenn nicht.
+  Damit beantwortet die App eine Frage, die aus einer Sitzung **nicht** zu beantworten
+  ist: der Egress-Proxy sperrt beide Relais-Namen (403, `connect_rejected`).
+
+- **Gegenprobe:** `bash tests/gegenprobe_moderation.sh` baut 29 Fehler ein, jeder muss
+  eine Probe umwerfen. Beim Bau des Studios hat sie **vier** blinde Prüfungen gefunden,
+  alle vier in der Probe statt im Code: eine Fußzeile außerhalb des Sichtfelds (die
+  Maus traf nie etwas), eine gefälschte Antwort ohne Freigabe-Kopf (der Browser verwarf
+  sie, das Studio meldete korrekt „keine Auskunft"), ein Wartewort, das schon in der
+  Erklärzeile darüber stand (also sofort feuerte), und eine Schlüssel-Suche nach der
+  Hex-Zeichenkette, während der Schlüssel als **Byte-Feld** vorliegt.
+  Davor fand sie zwei echte Fehler im Code, die keine Probe sah: eine **behauptete**
+  statt gemessene Ausfüllzeit im Melde-Weg (hätte den Bot-Riegel des Dienstes
+  ausgehebelt) und die eingefrorene Sperr-Liste oben.
 
 ## Selbst-Merge-Freibrief (Klaus 2026-06-28, netzweit für ALLE Repos)
 

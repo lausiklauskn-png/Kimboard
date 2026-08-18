@@ -16,7 +16,7 @@ set -u
 cd "$(dirname "$0")/.."
 
 SICHER="$(mktemp -d)"
-DATEIEN=(index.html sw.js assets/hilfe.js assets/config/moderation.js assets/config/sperrliste.js)
+DATEIEN=(index.html sw.js assets/hilfe.js assets/config/moderation.js assets/config/sperrliste.js assets/studio.js)
 for d in "${DATEIEN[@]}"; do mkdir -p "$SICHER/$(dirname "$d")"; cp "$d" "$SICHER/$d"; done
 zurueck() { for d in "${DATEIEN[@]}"; do cp "$SICHER/$d" "$d"; done; }
 trap 'zurueck; rm -rf "$SICHER"' EXIT INT TERM
@@ -154,6 +154,80 @@ probe "der ⚑ hat eine Erklär-Blase" smoke_melden.mjs \
   ersetze assets/hilfe.js \
   "    '.q-melden': [" \
   "    '.q-melden-AUSGEBAUT': ["
+
+echo
+echo "── Gegenprobe: Betreiber-Studio ──"
+
+# Der Zugang. Wäre das Werkzeug immer geladen, trüge jeder Besucher es mit —
+# und die Prüfung, die das behauptet, muss das auch merken.
+probe "studio.js wird NICHT beim normalen Laden geholt" smoke_studio.mjs \
+  ersetze index.html \
+  "    s.src = './assets/studio.js?v=1';" \
+  "    s.src = './assets/studio.js?v=1';\n  }\n  { var vorab = document.createElement('script'); vorab.src = './assets/studio.js?v=1'; document.head.appendChild(vorab);"
+
+probe "ein Wischen bricht den langen Druck ab" smoke_studio.mjs \
+  ersetze index.html \
+  "    if (uhr && (Math.abs(ev.clientX - sx) > 10 || Math.abs(ev.clientY - sy) > 10)) stop();" \
+  "    /* Abbruch beim Wischen ausgebaut */"
+
+probe "ein kurzer Tipp öffnet nichts (die 1,5 s sind echt)" smoke_studio.mjs \
+  ersetze index.html \
+  "uhr = setTimeout(function () { uhr = null; oeffnen(); }, 1500);" \
+  "uhr = setTimeout(function () { uhr = null; oeffnen(); }, 30);"
+
+# Der Ausweis. Fiele er weg, stünde das Werkzeug jedem offen — wirkungslos zwar,
+# aber es sähe aus, als gehörte das Brett ihm.
+probe "ohne passenden Schlüssel gibt es kein Studio" smoke_studio.mjs \
+  ersetze assets/studio.js \
+  "    if (!erwartet || String(meine).toLowerCase() !== erwartet) {" \
+  "    if (false) {"
+
+probe "ohne Betreiber wird die eigene Kennung zum Eintragen gezeigt" smoke_studio.mjs \
+  ersetze assets/studio.js \
+  "      if (HEX64.test(String(meine || ''))) {" \
+  "      if (false) {"
+
+# Die Einbahnstraße — die Regel, die das Studio durchsetzen soll und an die es
+# sich deshalb selbst halten muss.
+probe "auch das Studio kann eine Netz-Sperre nicht lösen" smoke_studio.mjs \
+  ersetze index.html \
+  "  sperreJetzt: (liste) => { const n = sperrEintraegeAus(liste, 'studio'); if (n) wischeGesperrte(); return n; }" \
+  "  sperreJetzt: (liste) => { const n = sperrEintraegeAus(liste, 'studio'); if (n) wischeGesperrte(); return n; },\n  entsperreNetz: (id) => sperrEreignisse.delete(String(id).toLowerCase())"
+
+# Der Schlüssel. Er darf die Brücke nicht überqueren.
+probe "der private Schlüssel bleibt drinnen" smoke_studio.mjs \
+  ersetze index.html \
+  "  relaisListe: () => activeRelays.slice()," \
+  "  _priv: priv, relaisListe: () => activeRelays.slice(),"
+
+# Der Rundlauf. Eine Datei ohne Signatur sieht genauso aus wie eine mit — bis
+# jemand versucht, sie zu lesen.
+probe "die erzeugte Liste ist wirklich signiert" smoke_studio.mjs \
+  ersetze assets/studio.js \
+  "    var blob = new Blob([JSON.stringify(ereignis, null, 2)], { type: 'application/json' });" \
+  "    ereignis = { pubkey: ereignis.pubkey, content: ereignis.content };\n    var blob = new Blob([JSON.stringify(ereignis, null, 2)], { type: 'application/json' });"
+
+probe "der beanstandete TEXT landet nicht in der Datei" smoke_studio.mjs \
+  ersetze assets/studio.js \
+  "    liste.ereignisse[String(ev.id).toLowerCase()] = { grund: grund, seit: heute() };" \
+  "    liste.ereignisse[String(ev.id).toLowerCase()] = { grund: grund, seit: heute(), text: String(ev.content) };"
+
+# NIP-86. Ein Knopf, der etwas verspricht, was das Relais nicht kann, ist
+# schlimmer als gar keiner.
+probe "ein Relais ohne NIP-86 wird als solches erkannt" smoke_studio.mjs \
+  ersetze assets/studio.js \
+  "        kannVerwaltung: nips.indexOf(86) >= 0" \
+  "        kannVerwaltung: true"
+
+probe "die Software des Relais wird wirklich genannt" smoke_studio.mjs \
+  ersetze assets/studio.js \
+  "            r.software ? ('Software: ' + r.software.replace(/^.*\\//, '')) : 'Software: unbekannt'," \
+  "            'Software: unbekannt',"
+
+probe "studio.js bleibt aus dem Offline-Vorrat heraus" smoke_studio.mjs \
+  ersetze sw.js \
+  '  "./assets/config/sperrliste.js",' \
+  '  "./assets/config/sperrliste.js",\n  "./assets/studio.js",'
 
 echo
 echo "══════════════════════════════════════════"
