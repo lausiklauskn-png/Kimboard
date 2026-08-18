@@ -1,192 +1,162 @@
-# Brief an die nächste Sitzung — Kimboard
+# Brief an die nächste Sitzung — Kimboard / „Löschen"
 
-**Stand: 2026-08-18, Ende der Sitzung „Studio — Strang A".**
-`main` war beim Start `51d68e3`.
+**Stand: 2026-08-18, Ende der Sitzung „Relais-Wache + Pinnwand".**
+`main` = `3dd1e9a` (Kimboard) · `29afbf5` (Sage-Protokol).
 
 Lies zuerst diesen Brief, dann `CLAUDE.md`, dann `docs/MODERATION_UND_RECHT.md`.
 Danach nur den Code-Bereich, an dem du arbeitest — `index.html` ist groß, lies
 gezielt mit Grep.
 
-## Was in dieser Sitzung entstanden ist
+---
 
-Klaus, wörtlich: *„Ich möchte von meinem Gerät KIMboard beim längerem Klick auf
-Copyright © die Funktion eines Studios wie in PWA Toolpoint, dass ich die
-Kontrolle inkl. endgültigem Löschen auf dem Kimboard habe."*
+## Was steht
 
-Das hat die Richtung von Strang A gedreht — **weg** vom stummen Server-Wächter,
-der eine Datei im Takt liest, **hin** zu einem Bedienfeld in Klaus' Hand. Und
-genau diese Drehung hat nebenbei die Blockade gelöst, an der die Sache seit dem
-17. hing (dazu unten mehr).
-
-| Teil | Stand |
+| Stück | Stand |
 |---|---|
-| **Studio** (`assets/studio.js`) mit drei Bereichen | ✅ gebaut |
-| **Zugang**: langer Druck ~1,5 s aufs © | ✅ gebaut |
-| **Sperren** aus dem Studio + signierte Liste erzeugen | ✅ gebaut, Rundlauf bewiesen |
-| **Endgültig entfernen** per NIP-86 | ✅ gebaut — **wirkt aber nur, wenn das Relais es kann** |
-| **Schlüssel sichern / zurückholen** (verschlüsselte Datei) | ✅ gebaut, Rundlauf bewiesen |
-| **Sichtbarer Schlüssel-Knopf** neben „Meine Spore" — für JEDEN Nutzer | ✅ gebaut |
-| Betreiber-Kennung eingetragen, als **Liste** (mehrere Geräte) | ✅ `7dee8dd9…d6a0` |
-| Probe `tests/smoke_studio.mjs` | ✅ 99 Prüfungen |
-| Gegenprobe erweitert | ✅ 40 Fehler, alle gefangen |
+| Melde-Weg ⚑ (Art. 16 DSA) | ✅ |
+| Sperr-Liste, eingebacken **und** signiert nachgeladen | ✅ · `pruefschluessel` gesetzt, **live** |
+| Studio 🔧 (sperren · Liste signieren · Schlüssel sichern) | ✅ |
+| **Erste echte Sperre** im Repo | ✅ `701a5834…` (Testsperrung) |
+| **Nachsehen-Gang** `tools/relais-wache.sh` | ✅ 41 Proben |
+| **Scharfer Gang** `SCHARF=ja` | ✅ 38 Proben · Gegenprobe 23/23 |
+| **Pinnwand** liest dieselbe Liste (Sage-Protokol) | ✅ 30 Proben |
+| Ein Lauf gegen die **echte** Datenbank auf dem Server | ⬜ **das fehlt als Erstes** |
+| Die anderen 20 Apps (Anzeige-Filter) | ⬜ Richtungsentscheid für Klaus |
 
-## Schritt 0 ist beantwortet — von der App, nicht von einer Sitzung
+Der Weg über NIP-86 ist **belegt tot** — weder `nostr-rs-relay` (Klaus' Server)
+noch `strfry` (`relay.damus.io`) meldet die 86. Es bleibt der Server-Gang, und
+der steht jetzt in beiden Gängen.
 
-Monatelang stand die Frage offen, welche Relais-Software auf Klaus' Server
-läuft. Aus einer Bau-Sitzung ist sie **nicht** zu beantworten, und das ist jetzt
-belegt statt vermutet: der Egress-Proxy weist beide Namen als
-Organisations-Sperre aus (`connect_rejected`, „gateway answered 403 to CONNECT",
-Status-Endpunkt am 2026-08-18). Der README dazu sagt ausdrücklich: nicht
-umgehen, sondern melden.
+---
 
-Aus **Klaus' Browser** ist die Leitung offen. Also fragt die App: das Studio
-ruft jedes verbundene Relais per NIP-11 ab und zeigt Software, Fassung und ob
-NIP-86 dabei ist. Das ist keine Notlösung — die Auskunft ist dort ohnehin
-aktueller als in jedem Protokoll, das eine Sitzung einmal abgeschrieben hätte.
+## 1. Der nächste Schritt — drei Befehle, ungefährlich
 
-**Was Klaus dort sehen wird, ist absehbar und wird enttäuschen:**
-`nostr-rs-relay` (laut `family-project/docs/PULS.md` die dort laufende Software)
-kann **kein** NIP-86. Der Knopf „🗑 Endgültig vom Relais" wird also sagen, dass
-es nicht geht — und **nichts schicken**, statt einen Auftrag ins Leere zu senden
-und Erfolg zu melden. Das ist die ehrliche Fassung, aber es ist noch nicht das,
-was Klaus wollte.
-
-## Was als Nächstes ansteht
-
-1. ~~**Klaus' Sichttest abwarten und die Relais-Auskunft ablesen.**~~
-   **✅ ERLEDIGT 2026-08-18:** `nostr-rs-relay` 0.10.0, **kein NIP-86**, EIN
-   Relais unter zwei Namen, Datenbank `/opt/relay/db/nostr.db` (SQLite/WAL,
-   ~26 MB), `restricted_writes: false`. Volle Aufstellung samt Nebenbefunden in
-   `docs/MODERATION_UND_RECHT.md` § 6. Die Weiche unten ist damit
-   **entscheidbar**, und Weg 2 ist konkret baubar.
-   *(ursprünglicher Text)* Erst danach
-   ist die Entscheidung unter 2. eine Entscheidung und keine Vermutung. Was er
-   sieht, gehört in `docs/MODERATION_UND_RECHT.md` § 6.
-2. **Dann die Weiche für „wirklich weg":** entweder das Heim-Relais auf eine
-   Software mit NIP-86 umstellen (`strfry`), oder der ursprünglich geplante
-   kleine Dienst auf dem Server, der die Sperr-Liste im Takt liest (Muster:
-   2-Minuten-Cron aus dem Skill `auto-deploy-einrichten`). **Das ist ein
-   Richtungsentscheid — Klaus fragen, nicht wählen.** Ein Software-Wechsel am
-   laufenden Relais ist schwer umkehrbar.
-3. **Klaus' zweite Kennung nachtragen.** `betreiberSchluessel` ist jetzt eine
-   Liste (Klaus' Entscheid 2026-08-18). Er muss am zweiten Gerät einmal lang aufs
-   © drücken — das Fenster zeigt dort „das ist nicht dein Brett" **und** die
-   Kennung dieses Geräts zum Kopieren. Die kommt dann in die Liste.
-4. **Die „Spore"-Verwechslung auflösen — offene Frage an Klaus.** Gemessen am
-   2026-08-18: was die Seite als „Meine Spore" anzeigt, ist der
-   **Pinnwand-Schlüssel** (`sbkim_nostr_test_priv`, localStorage). Die
-   **SBKIM-Spore** fürs Mycel (Modul 02, IndexedDB-Schublade `kimboard`) ist eine
-   **andere** Identität und entsteht erst beim ersten Netz-Verbinden — in einem
-   frischen Browser gibt es sie gar nicht („Es existiert noch keine Identität für
-   Slot 'main'"). **Die Sicherung deckt sie NICHT ab.** Zwei Wege: die
-   Beschriftung ehrlich machen, oder die Sicherung auf beide Identitäten
-   erweitern. Klaus hat die Frage gestellt, die Entscheidung steht aus.
-5. **Die erste Sperr-Liste erzeugen und `pruefschluessel` setzen.** Solange
-   `sbkim/sperrliste.json` fehlt, steht er auf `null` und es wird nichts
-   nachgeladen (bewusst: sichtbar abgeschaltet statt still wirkungslos).
-6. **Aus dem alten Brief unverändert offen:** Prüf-Auftrag an
-   `family-project/impressum.html` Punkt 5 („Netz-Inhalte sind Ende-zu-Ende
-   verschlüsselt" — trifft auf DMs und Gruppen zu, das **offene Brett** läuft im
-   Klartext; erst belegen, dann formulieren, eigener PR). Dazu der
-   Zwei-Geräte-Lauf mit einer Gruppe, die geratene Platzhalter-Stunde, die acht
-   Sekunden für „Rückgängig", und ob `relay.nostr.band` — ein Archiv- und
-   Suchdienst — in den Voreinstellungs-Fünf stehen sollte.
-
-## Was das Studio bewusst NICHT kann
-
-- **Es veröffentlicht die Sperr-Liste nicht selbst.** Es signiert sie und legt
-  sie als Datei hin; einchecken muss Klaus. Ein direkter Weg bräuchte einen
-  Server mit Token (wie im family-projekt.de-Studio) — den hat Kimboard bewusst
-  nicht.
-- **Es kann nichts lösen.** Sperren geht aus der Oberfläche, gelöst wird nur in
-  der Datei. Ein Betreiber-Werkzeug, das diese Regel umginge, wäre ein Loch in
-  genau der Regel, die es durchsetzen soll.
-- **Der lange Druck ist kein Schutz**, und der Schlüssel-Vergleich auch nicht:
-  `betreiberSchluessel` steht öffentlich in `moderation.js`. Wer das Fenster
-  aufmacht, kann trotzdem nichts bewirken — jede Handlung ist ein signiertes
-  Ereignis, und signieren kann nur, wer den privaten Schlüssel hat.
-
-## Prüfen
+Das Werkzeug ist **nie gegen `/opt/relay/db/nostr.db` gelaufen**. Es misst gegen
+echte SQLite-Datenbanken im richtigen Zuschnitt (BLOB **und** Text), aber die
+echte hat es noch nie gesehen. Der erste Aufruf **liest nur**:
 
 ```bash
-npm install --no-save playwright-core     # einmalig je Container
-node tests/alle.mjs                       # ALLES — 28 Prüfungen
-bash tests/gegenprobe_moderation.sh       # 40 eingebaute Fehler, jeder MUSS fangen
+# alle drei vom Tablet aus, in Termux:
+ssh root@167.233.204.72 'bash -s' < tools/relais-wache.sh
+# erwartet: „Betroffen sind 1 von ~1623"
+
+ssh root@167.233.204.72 'SCHARF=ja bash -s' < tools/relais-wache.sh
+# sichert zuerst, entfernt dann, rechnet nach
+
+ssh root@167.233.204.72 'bash -s' < tools/relais-wache.sh
+# erwartet: „Betroffen sind 0 von ~1622"
 ```
 
-Zuletzt: **alle 28 grün** (Rückgabewert 0, ohne Pipe gemessen), Gegenprobe
-**40 von 40**.
+**Der dritte Aufruf ist der eigentliche Beweis:** was weg ist, findet der
+Nachsehen-Gang nicht mehr. Erst danach ist die Kette von der Oberfläche bis in
+den Speicher belegt statt geglaubt.
 
-### Was die Gegenprobe diesmal gefunden hat — vier blinde Prüfungen
+Meldet der erste Aufruf **0 statt 1**, ist das ein Befund und kein Grund
+weiterzumachen: dann liest das Werkzeug die Liste nicht, die es lesen soll.
 
-Alle vier in der **Probe**, keine im Code. Sie sind es wert, gelesen zu werden,
-weil sie sich alle gleich anfühlen: grün, und trotzdem nichts gemessen.
+---
 
-1. **Die Fußzeile lag außerhalb des Sichtfelds.** Die Maus traf sie nie, und
-   „ein kurzer Tipp öffnet nichts" war deshalb grün, ohne etwas zu berühren.
-   → `scrollIntoViewIfNeeded()`, und eine eigene Prüfung, dass sie wirklich im
-   Bild liegt.
-2. **Eine per `route` gefälschte Antwort ohne Freigabe-Kopf.** Der Browser
-   verwarf sie, das Studio meldete völlig korrekt „keine Auskunft" — gemessen
-   wurde die eigene Nachlässigkeit. Gefälschte Antworten brauchen dieselben
-   CORS-Köpfe wie echte, und der POST auch eine Antwort auf die Vorab-Frage
-   (OPTIONS).
-3. **Gewartet auf ein Wort, das schon dastand.** „Verwaltung" steht in der
-   Erklärzeile über der Liste — die Bedingung feuerte sofort, und gelesen wurde
-   „wird abgefragt …". → Auf etwas warten, das es **nur nach** der Abfrage gibt.
-4. **Nach dem Schlüssel in der falschen Form gesucht.** `priv` ist ein
-   Byte-Feld (`fromHex(privHex)`), kein Hex-Text; `JSON.stringify` macht daraus
-   `{"0":18,…}`. Die Suche ging daran vorbei. → In beiden Formen suchen.
+## 2. Was der scharfe Gang tut — und was er bewusst nicht tut
 
-Dazu eine Prüfung, die sich **gar nicht** mit der Maus messen ließ: zieht man
-über Text, beginnt Chrome eine Textauswahl und schickt von sich aus
-`pointercancel` — der Druck bricht dann auch ohne unseren Handler ab. Auf Klaus'
-Tablet ist aber genau dieser Handler der wirksame Weg (dort scrollt der Finger).
-Deshalb misst `smoke_studio.mjs` ihn mit echten Pointer-Ereignissen, und
-**direkt daneben steht die Gegenprobe dazu**: ohne Wischen muss derselbe Weg
-öffnen — sonst wäre die Prüfung grün, weil die künstlichen Ereignisse überhaupt
-nichts auslösen.
+Vier Riegel, in dieser Reihenfolge:
 
-## Was nur Klaus prüfen kann
+1. **Sicherung per `VACUUM INTO`**, nicht abschaltbar. Trägt der Abzug nicht
+   dieselbe Stückzahl, wird **nichts** entfernt.
+2. **Entfernen in einer Transaktion**, Anhängsel (`tag`) zuerst.
+3. **Nachrechnen:** vorher − betroffen = nachher · keine genannte Kennung
+   geblieben · kein verwaistes Anhängsel. Sonst Rückgabewert 4 samt Befehl zum
+   Zurückspielen.
+4. **Die Sicherung bleibt liegen.** Das Werkzeug räumt sie nicht weg.
 
-Alles headless grün, am Tablet ungeprüft:
+**Das Relais muss nicht anhalten** — gemessen (55 gleichzeitige Einfügungen,
+kein Fehler, `integrity_check` ok). `STOPPEN=ja` bleibt freiwillig.
 
-- Ob der lange Druck aufs © **mit dem Finger** gut trifft, ohne beim Scrollen
-  von allein aufzugehen.
-- Was die Relais-Auskunft **wirklich** sagt (siehe oben — das ist der eigentlich
-  interessante Punkt).
-- Ob das Studio-Fenster auf schmalem Schirm lesbar ist. Es ist ein 640-px-Kasten
-  mit `max-height:86vh` und eigenem Rollbalken; auf dem Handy dürfte die
-  Zettel-Liste eng werden.
-- Ob „📋 Zeile kopieren" auf dem Tablet in die Zwischenablage kommt
-  (`navigator.clipboard` braucht eine sichere Herkunft — auf GitHub Pages
-  gegeben).
+**Nicht gebaut, mit Absicht: ein Takt.** Der Gang läuft auf Zuruf. Ein Dienst,
+der ungefragt löscht, braucht mehr Vertrauen als einer, den man aufruft — und
+weil die Sperr-Liste **nur nach oben** geht, ist der Zuruf-Betrieb kein
+Provisorium.
 
-`CACHE_VERSION` = `kimboard-v62`, nach dem Merge Hard-Reload.
+---
 
-**Und der wichtigste Handgriff für Klaus, der noch aussteht:** einmal
-🔑 **Schlüssel sichern** drücken und die Datei irgendwohin bringen, wo ein
-gelöschter Browser sie nicht mitnimmt. Bis dahin hängt seine Identität an einem
-einzigen `localStorage`-Eintrag.
+## 3. Die drei Fallen dieser Sitzung — sie kommen wieder
 
-## Kurz-Karte
+**Ein „ungültig" braucht denselben Argwohn wie ein „gültig".** Beim Prüfen der
+signierten Liste meldete `schnorr.verify` **false**. Die Signatur war in
+Ordnung — das Krypto-Modul erkennt seine Umgebung über `self`, das es in Node
+nicht gibt, also warf jede Hash-Berechnung, und `verify` macht daraus
+stillschweigend ein `false`. **Ein Urteil, das in Wahrheit „konnte gar nicht
+rechnen" hieß.** Wer in Node prüft, setzt `globalThis.self` **vor** dem Import
+und beweist mit einer Gegenprobe, dass der Prüfweg lebt.
 
-| Thema | Fundstelle |
-|---|---|
-| Studio | `assets/studio.js` |
-| Schlüssel sichern / zurückholen | `index.html`: `sichereSchluessel`, `stelleSchluesselWiederHer` |
-| Zugang (langer Druck aufs ©) | `index.html`, letzter `<script>`-Block vor `</body>` |
-| Brücke aus dem Modul-Scope | `index.html`: `signiere`, `__kb.zettel/relaisListe/sperreJetzt` |
-| Betreiber-Ausweis | `assets/config/moderation.js`: `betreiberSchluessel` |
-| Melden | `index.html`: `meldeKnopf`, `openMeldeDialog`, `sendeMeldung` |
-| Die Sperr-Liste | `assets/config/sperrliste.js` |
-| Anwenden · Nachladen · Nachwischen | `index.html`: `istNetzGesperrt`, `ladeSperrQuelle`, `wischeGesperrte` |
-| Netz-zuerst für die Liste | `sw.js` (sonst friert sie ein) |
-| Einordnung + Rechtslage | `docs/MODERATION_UND_RECHT.md` |
-| Proben · Gegenprobe | `tests/smoke_studio.mjs`, `tests/smoke_melden.mjs`, `tests/smoke_sperrliste.mjs`, `tests/gegenprobe_moderation.sh` |
+**Der Umschlag ist nicht die Liste.** Der erste JSON-Leser der Relais-Wache nahm
+„alles nach dem Wort `absender`" und fing damit die `id` des Ereignisses als
+gesperrten **Absender** mit ein. Bei alphabetisch sortierten Feldern — was die
+meisten JSON-Werkzeuge ausgeben — wäre es **Klaus' eigener Schlüssel** gewesen,
+und ein scharfer Lauf hätte alles entfernt, was er je geschrieben hat. Abhilfe:
+nur Kennungen greifen, hinter denen ein **Doppelpunkt** steht. Das trennt
+Schlüssel von Werten, in beiden Schreibweisen.
+
+**Eine Nachrechnung lässt sich nicht beweisen, solange nichts falsch ist.** Die
+Gegenprobe baute sie aus, und alles blieb grün. Seitdem machen zwei Prüfungen
+das Werkzeug an einer **gepatchten Kopie** absichtlich falsch und bestehen
+darauf, dass es das bemerkt.
+
+Dazu zweimal dieselbe alte Bekannte: **`indexOf` gibt −1 zurück, und −1 ist
+kleiner als alles.** Eine Reihenfolge-Prüfung ohne vorherige Existenz-Prüfung
+gibt recht, ohne etwas gemessen zu haben.
+
+---
+
+## 4. Was offen ist
+
+**a) Die anderen 20 Apps zeigen ungefiltert an.** Gemessen: 21 Apps schreiben
+aufs Relais. Drei Sorten freier Nutzertext landen dort — Gerätename (steht in
+jeder Raum-Liste im ganzen Netz), Mycel-Frage, Antwort.
+
+- **Fürs Löschen ist nichts nachzuziehen.** `relais-wache.sh` greift nach der
+  Kennung und deckt damit alle Apps ab, Mycel-Anfragen (`sbkim-qry`)
+  eingeschlossen. Das ist gemessen, nicht angenommen.
+- **Fürs Anzeigen** wäre der saubere Ort `discover()` in Sages Modul 23, drei
+  Zeilen neben dem vorhandenen Mengenschutz — einmal pflegen, byte-1:1 in 21
+  Apps neu kopieren. **Das ist ein Richtungsentscheid für Klaus**, nicht für
+  eine Sitzung: woher kommt die Liste, was gilt bei Ausfall, was kostet es die
+  Offline-Tauglichkeit, und es ändert den Kanon in 21 Apps.
+- Zur Größe der Lücke gehört die Wahrheit: nichts wird per `innerHTML`
+  eingesetzt (geprüft) — es ist eine **Moderations**lücke, keine
+  Sicherheitslücke.
+
+**b) `family-project/impressum.html`, Punkt 5.** Dort steht „Netz-Inhalte sind
+Ende-zu-Ende verschlüsselt." Das trifft auf Direktnachrichten und Gruppen zu;
+das **offene Brett** und die **Mycel-Fragen** laufen im Klartext über dasselbe
+Relais. Eigener PR, erst belegen, dann formulieren.
+
+**c) Der Server meldet „System restart required"** und 10 Updates (Stand
+2026-08-18). Gehört Klaus gesagt, wenn ohnehin jemand per SSH dort ist.
+
+---
+
+## Wie geprüft wird
+
+```bash
+# Kimboard
+npm install --no-save playwright-core   # einmalig je Container
+node tests/alle.mjs                     # ALLES (~5 Min) — 30 Prüfungen
+bash tests/gegenprobe_wache.sh          # 23 eingebaute Fehler, Sekunden
+bash tests/gegenprobe_moderation.sh     # 40 eingebaute Fehler
+
+# Sage-Protokol
+npm install && node tests/run_alle.mjs  # 78 Proben
+```
+
+**`npm test` allein ist nicht „die Prüfung"** — es fasst die Proben unter
+`tests/` nicht an. Und **`| tail` ist zum Lesen da, nicht zum Urteilen**:
+hinter einer Pipe bekommst du den Rückgabewert von `tail`.
+
+---
 
 ## Abschluss-Befehl
 
-1. Diesen Brief fortschreiben. 2. Vollständig als Codeblock in die Chat-Antwort.
-3. „Nächste Schritte"-Block mit 2–4 Punkten. 4. Ehrlich vermerken, was nur Klaus
-am Tablet prüfen kann.
+Am Ende: `CLAUDE.md` und `docs/MODERATION_UND_RECHT.md` fortschreiben, einen
+neuen Brief nach diesem Muster anlegen und **vollständig als Codeblock im Chat**
+ausgeben — Klaus liest zuerst den Chat, nicht den Dateibrowser. Dazu 2–4
+priorisierte nächste Schritte, jeder mit einem Satz Begründung.
