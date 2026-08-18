@@ -1318,6 +1318,85 @@ async function buildEvent(content, extraTags = [], recipient = null) {
   const sig = toHex(await schnorr.sign(fromHex(id), priv));
   return { id, pubkey: pubHex, created_at, kind, tags, content: outContent, sig };
 }
+/* ── SCHLÜSSEL SICHERN UND ZURÜCKHOLEN ──────────────────────────────────────
+ * Der private Schlüssel liegt als Klartext in `localStorage`. Das ist bei
+ * Nostr-Clients üblich und für sich genommen vertretbar — er verlässt das Gerät
+ * nie, und wer den Browser-Speicher lesen kann, ist ohnehin schon drin.
+ *
+ * WAS DARAN WEH TUT, IST DER VERLUST, NICHT DER DIEBSTAHL. „Browserdaten
+ * löschen" wirft ihn weg, und danach ist man ein anderer: Kontakte erkennen
+ * einen nicht mehr, eigene Zettel lassen sich nicht mehr zurückziehen, und seit
+ * der Betreiber-Schlüssel in `moderation.js` steht, geht auch das Studio nicht
+ * mehr auf — repariert würde das nur durch einen neuen Commit.
+ *
+ * Deshalb dieser Weg: eine mit einem Passwort verschlüsselte Datei, die man aus
+ * dem Gerät heraus in Sicherheit bringt. Verfahren wie netzweit üblich
+ * (PBKDF2-SHA256 mit 600.000 Runden, AES-GCM-256, beides über WebCrypto) —
+ * kein eigener Krypto-Einfall.
+ *
+ * Der Schlüssel selbst verlässt diesen Bereich NICHT. Die Brücke nach draußen
+ * bekommt zwei Funktionen, die mit ihm arbeiten, nie ihn. Wer sie aufruft,
+ * bekommt eine verschlüsselte Datei zurück, nichts Lesbares.
+ * ------------------------------------------------------------------------- */
+const SCHLUESSEL_RUNDEN = 600000;
+const alsB64 = (u8) => btoa(String.fromCharCode.apply(null, u8));
+const ausB64 = (t) => Uint8Array.from(atob(t), (c) => c.charCodeAt(0));
+
+async function passwortSchluessel(passwort, salz) {
+  const roh = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(passwort), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: salz, iterations: SCHLUESSEL_RUNDEN, hash: 'SHA-256' },
+    roh, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+
+/* Gibt die Sicherungs-Datei als Objekt zurück. Die Kennung steht im Klartext
+   darin — sie ist öffentlich, und ohne sie wüsste man beim Zurückholen nicht,
+   welche Identität in der Datei liegt. */
+async function sichereSchluessel(passwort) {
+  if (typeof passwort !== 'string' || passwort.length < 8) {
+    throw new Error('Das Passwort muss mindestens 8 Zeichen haben.');
+  }
+  const salz = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const k = await passwortSchluessel(passwort, salz);
+  const geheim = new Uint8Array(await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv }, k, new TextEncoder().encode(privHex)));
+  return {
+    art: 'kimboard-schluessel', fassung: 1,
+    kdf: 'PBKDF2-SHA256', runden: SCHLUESSEL_RUNDEN,
+    salz: alsB64(salz), iv: alsB64(iv), geheim: alsB64(geheim),
+    kennung: pubHex,
+    erzeugt: new Date().toISOString().slice(0, 10)
+  };
+}
+
+/* Holt einen gesicherten Schlüssel zurück. Prüft NACH dem Entschlüsseln, ob der
+   Schlüssel wirklich zu der Kennung gehört, die in der Datei steht — sonst
+   schriebe ein falsches Passwort im Zweifel Unsinn in den Speicher und die App
+   startete mit einer kaputten Identität.
+   Schreibt nur; das Neuladen macht der Aufrufer, damit er vorher warnen kann. */
+async function stelleSchluesselWiederHer(datei, passwort) {
+  if (!datei || datei.art !== 'kimboard-schluessel') {
+    throw new Error('Das ist keine Kimboard-Schlüsseldatei.');
+  }
+  let klar;
+  try {
+    const k = await passwortSchluessel(passwort, ausB64(datei.salz));
+    const roh = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: ausB64(datei.iv) }, k, ausB64(datei.geheim));
+    klar = new TextDecoder().decode(roh);
+  } catch (e) { throw new Error('Falsches Passwort — oder die Datei ist beschädigt.'); }
+
+  if (!/^[0-9a-f]{64}$/.test(klar)) throw new Error('Die Datei enthält keinen brauchbaren Schlüssel.');
+  const dazu = toHex(schnorr.getPublicKey(fromHex(klar)));
+  if (datei.kennung && dazu !== String(datei.kennung).toLowerCase()) {
+    throw new Error('Schlüssel und Kennung in der Datei passen nicht zusammen.');
+  }
+  localStorage.setItem(LS_KEY, klar);
+  return { kennung: dazu, warVorher: pubHex, gewechselt: dazu !== pubHex };
+}
+
 /* Ein beliebiges Ereignis signieren — allgemein, nicht auf kind 1 festgelegt.
  * `buildEvent` oben ist der Weg für ZETTEL: es hängt Brett-Tag, Gerätename und
  * Verschlüsselung an. Das Studio braucht etwas anderes — eine Sperr-Liste
@@ -4349,7 +4428,7 @@ window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubH
    * entfernt wird. Die Einbahnstraße gilt für das Studio genauso wie für alles
    * andere; ein Betreiber-Werkzeug, das sie umginge, wäre ein Loch in genau der
    * Regel, die es durchsetzen soll. Gelöst wird in der Datei. */
-  signiere,
+  signiere, sichereSchluessel, stelleSchluesselWiederHer,
   relaisListe: () => activeRelays.slice(),
   verbundeneRelais: () => liveSockets().map((w) => w.url),
   zettel: () => [...qViews.values()].map((v) => ({
@@ -4537,7 +4616,7 @@ window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubH
     laeuft = true;
     return new Promise(function (fertig, schief) {
       var s = document.createElement('script');
-      s.src = './assets/studio.js?v=1';
+      s.src = './assets/studio.js?v=2';
       s.onload = fertig;
       s.onerror = function () { laeuft = false; schief(new Error('studio.js')); };
       document.head.appendChild(s);

@@ -481,6 +481,114 @@
       + 'auf allen Geräten — bis dahin nur auf diesem.');
   }
 
+  /* ---------- Bereich: der eigene Schlüssel -------------------------------
+   * Er steht in BEIDEN Fenster-Varianten, und das ist der ganze Witz: nach
+   * einem Verlust ist man am eigenen Brett „fremd" — das Studio erkennt einen
+   * nicht mehr. Läge der Zurückholen-Knopf nur im Betreiber-Fenster, wäre er
+   * genau dann unerreichbar, wenn man ihn braucht.
+   * ---------------------------------------------------------------------- */
+
+  function bereichSchluessel(box) {
+    var s = abschnitt(box, '🔑 Dein Schlüssel');
+    var b = brücke();
+    var meine = '';
+    try { meine = (b && typeof b.me === 'function') ? b.me() : ''; } catch (_e) { meine = ''; }
+
+    var hin = el('div', 'opacity:.78;margin:.2em 0 .7em;line-height:1.5');
+    hin.textContent = 'Er liegt nur in diesem Browser. Wer die Browserdaten löscht, verliert ihn '
+      + '— und ist danach jemand anderes: Kontakte erkennen dich nicht mehr, eigene Zettel '
+      + 'lassen sich nicht mehr zurückziehen, und das Studio geht nicht mehr auf. '
+      + 'Es gibt keinen Weg, ihn wiederzubeschaffen. Nur diese Sicherung.';
+    s.appendChild(hin);
+
+    if (meine) {
+      var wer = el('div', 'font-family:ui-monospace,monospace;font-size:.8rem;opacity:.85;'
+        + 'word-break:break-all;margin-bottom:.6em', 'Kennung: ' + meine);
+      s.appendChild(wer);
+    }
+
+    var bSichern = knopf('💾 Schlüssel sichern');
+    bSichern.title = 'Legt eine mit Passwort verschlüsselte Datei an.';
+    bSichern.addEventListener('click', function () { sichernDialog(s); });
+    s.appendChild(bSichern);
+
+    var bZurueck = knopf('↩ Schlüssel zurückholen');
+    bZurueck.title = 'Aus einer gesicherten Datei — überschreibt den jetzigen Schlüssel.';
+    bZurueck.addEventListener('click', function () { zurueckholenDialog(s); });
+    s.appendChild(bZurueck);
+
+    var fuss = el('div', 'opacity:.72;margin-top:.6em;line-height:1.45;font-size:.85rem');
+    fuss.textContent = 'Die Datei ist ohne das Passwort wertlos (AES-256, 600.000 Runden). '
+      + 'Ohne das Passwort ist sie es aber auch für dich — es gibt keine Hintertür. '
+      + 'Leg beides getrennt ab.';
+    s.appendChild(fuss);
+  }
+
+  function melde(wo, text, gut) {
+    var m = el('div', 'margin-top:.5em;font-size:.86rem;line-height:1.45;color:'
+      + (gut ? 'var(--acc,#c9a961)' : '#e0231b'), text);
+    wo.appendChild(m);
+    return m;
+  }
+
+  function sichernDialog(wo) {
+    var b = brücke();
+    if (!b || typeof b.sichereSchluessel !== 'function') { alert('App nicht bereit.'); return; }
+    var pw = prompt('Passwort für die Sicherung (mindestens 8 Zeichen).\n\n'
+      + 'Merk es dir gut oder schreib es auf: ohne dieses Passwort ist die Datei wertlos, '
+      + 'auch für dich. Es gibt keine Hintertür.');
+    if (pw == null) return;
+    var pw2 = prompt('Zur Sicherheit noch einmal dasselbe Passwort:');
+    if (pw2 == null) return;
+    if (pw !== pw2) { melde(wo, '✖ Die beiden Passwörter waren nicht gleich. Nichts gesichert.', false); return; }
+
+    b.sichereSchluessel(pw).then(function (datei) {
+      var blob = new Blob([JSON.stringify(datei, null, 2)], { type: 'application/json' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'kimboard-schluessel-' + String(datei.kennung).slice(0, 8) + '.json';
+      document.body.appendChild(a); a.click();
+      setTimeout(function () {
+        try { URL.revokeObjectURL(a.href); document.body.removeChild(a); } catch (_e) { /* */ }
+      }, 1000);
+      melde(wo, '✔ Gesichert. Die Datei liegt bei deinen Downloads — bring sie irgendwo hin, '
+        + 'wo sie ein gelöschter Browser nicht mitnimmt.', true);
+    }).catch(function (e) {
+      melde(wo, '✖ ' + (e && e.message ? e.message : 'Sichern fehlgeschlagen.'), false);
+    });
+  }
+
+  function zurueckholenDialog(wo) {
+    var b = brücke();
+    if (!b || typeof b.stelleSchluesselWiederHer !== 'function') { alert('App nicht bereit.'); return; }
+    var eingabe = document.createElement('input');
+    eingabe.type = 'file';
+    eingabe.accept = 'application/json,.json';
+    eingabe.addEventListener('change', function () {
+      var datei = eingabe.files && eingabe.files[0];
+      if (!datei) return;
+      var leser = new FileReader();
+      leser.onload = function () {
+        var inhalt;
+        try { inhalt = JSON.parse(String(leser.result)); }
+        catch (_e) { melde(wo, '✖ Die Datei ist nicht lesbar.', false); return; }
+        if (!confirm('Den jetzigen Schlüssel durch den aus der Datei ersetzen?\n\n'
+          + 'Der jetzige ist danach WEG, falls du ihn nicht auch gesichert hast. '
+          + 'Die Seite lädt anschließend neu.')) return;
+        var pw = prompt('Passwort der Sicherungs-Datei:');
+        if (pw == null) return;
+        b.stelleSchluesselWiederHer(inhalt, pw).then(function (erg) {
+          melde(wo, '✔ Zurückgeholt: ' + String(erg.kennung).slice(0, 16) + '… — die Seite lädt neu.', true);
+          setTimeout(function () { location.reload(); }, 1200);
+        }).catch(function (e) {
+          melde(wo, '✖ ' + (e && e.message ? e.message : 'Zurückholen fehlgeschlagen.'), false);
+        });
+      };
+      leser.readAsText(datei);
+    });
+    eingabe.click();
+  }
+
   /* ---------- Rahmen ------------------------------------------------------- */
 
   function abschnitt(box, titel) {
@@ -532,6 +640,9 @@
     e.textContent = 'Falls du hier Inhalte gefunden hast, die nicht hierher gehören: Jeder Zettel '
       + 'hat einen ⚑-Knopf. Darüber sieht ein Mensch sie sich an.';
     box.appendChild(e);
+    /* Auch hier — GERADE hier. Wer seinen Schlüssel verloren hat, steht an
+       seinem eigenen Brett als Fremder und braucht genau diesen Knopf. */
+    bereichSchluessel(box);
   }
 
   function rahmen(titel) {
@@ -587,6 +698,7 @@
     bereichRelais(box);
     bereichZettel(box);
     bereichListe(box);
+    bereichSchluessel(box);
   }
 
   window.KBStudio = {

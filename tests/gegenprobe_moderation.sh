@@ -224,6 +224,39 @@ probe "die Software des Relais wird wirklich genannt" smoke_studio.mjs \
   "            r.software ? ('Software: ' + r.software.replace(/^.*\\//, '')) : 'Software: unbekannt'," \
   "            'Software: unbekannt',"
 
+# Die Schlüssel-Sicherung. Sie ist der einzige Weg zurück — was hier still
+# kaputtgeht, merkt man erst, wenn der Schlüssel schon weg ist.
+probe "der Schlüssel steht nicht lesbar in der Sicherungs-Datei" smoke_studio.mjs \
+  ersetze index.html \
+  "    salz: alsB64(salz), iv: alsB64(iv), geheim: alsB64(geheim)," \
+  "    salz: alsB64(salz), iv: alsB64(iv), geheim: alsB64(geheim), klartext: privHex,"
+
+probe "ein falsches Passwort lässt den Speicher unberührt" smoke_studio.mjs \
+  ersetze index.html \
+  "  } catch (e) { throw new Error('Falsches Passwort — oder die Datei ist beschädigt.'); }" \
+  "  } catch (e) { localStorage.setItem(LS_KEY, 'x'.repeat(64)); throw new Error('Falsches Passwort — oder die Datei ist beschädigt.'); }"
+
+probe "Schlüssel und Kennung müssen zusammenpassen" smoke_studio.mjs \
+  ersetze index.html \
+  "  if (datei.kennung && dazu !== String(datei.kennung).toLowerCase()) {" \
+  "  if (false) {"
+
+probe "ein zu kurzes Passwort wird abgewiesen" smoke_studio.mjs \
+  ersetze index.html \
+  "  if (typeof passwort !== 'string' || passwort.length < 8) {" \
+  "  if (false) {"
+
+probe "die Sicherung nutzt 600.000 Runden" smoke_studio.mjs \
+  ersetze index.html \
+  "const SCHLUESSEL_RUNDEN = 600000;" \
+  "const SCHLUESSEL_RUNDEN = 1000;"
+
+probe "der Zurückholen-Weg steht auch Fremden offen" smoke_studio.mjs \
+  ersetze assets/studio.js \
+  "    bereichSchluessel(box);
+  }" \
+  "  }"
+
 probe "ein unbrauchbarer Betreiber-Schlüssel fällt auf" smoke_studio.mjs \
   ersetze assets/config/moderation.js \
   "    betreiberSchluessel: '7dee8dd9088022e0a9be3667ad6ed3551a68c263ce557f34907485075d2fd6a0'," \
