@@ -624,6 +624,46 @@ try {
     await ctx.close();
   }
 
+  /* ═══ 7d. Der sichtbare Schlüssel-Knopf — für JEDEN Nutzer ═══
+     Das Studio ist Klaus' Werkzeug und versteckt. Der Schlüssel geht aber jeden
+     an: er entsteht beim ersten Öffnen von selbst, und wer die Browserdaten
+     löscht, verliert Kontakte und die Möglichkeit, eigene Zettel
+     zurückzuziehen. Läge die Sicherung nur hinter dem langen Druck aufs ©,
+     wäre sie für alle außer dem Betreiber unerreichbar — ein Werkzeug, das nur
+     der kennt, der es gebaut hat. */
+  {
+    /* Ausdrücklich MIT fremdem Betreiber: dieser Nutzer ist NICHT Klaus. */
+    const { p, ctx, geholt } = await neueSeite(browser, {
+      mod: { betreiberSchluessel: 'b'.repeat(64) }, nip11: null, zaehleStudio: true
+    });
+    const knopf = p.locator('#schluessel-sichern');
+    ok(await knopf.count() === 1, 'der Schlüssel-Knopf steht in der Seite');
+    ok(await knopf.isVisible(), '…und ist sichtbar (nicht versteckt wie das Studio)');
+    ok(geholt.length === 0, '…studio.js wird dafür trotzdem erst beim Klick geholt');
+
+    await knopf.click();
+    await p.waitForFunction(() => !!document.getElementById('studio-fenster'), null, { timeout: 15000 });
+    ok(geholt.length === 1, 'ein Klick holt studio.js');
+
+    const t = await text(p);
+    ok(/Dein Schlüssel/.test(t), 'das Fenster zeigt den Schlüssel-Bereich');
+    ok(/sichern/i.test(t) && /zurückholen/i.test(t), '…mit beiden Wegen');
+    ok(/ohne Anmeldung/.test(t), '…und erklärt, woher der Schlüssel überhaupt kommt');
+
+    /* Und NICHT die Betreiber-Werkzeuge. Ein fremder Nutzer soll hier seinen
+       Schlüssel sichern, nicht versehentlich vor Sperr-Knöpfen sitzen. */
+    ok(!/Netzweit sperren/.test(t), '…aber KEINE Sperr-Knöpfe (das ist nicht sein Brett)');
+    ok(!/Deine Relais/.test(t), '…keine Relais-Verwaltung');
+    ok(!/Sperr-Liste/.test(t), '…keine Sperr-Liste');
+    /* Auch die Überschrift der Zettel-Übersicht nicht. Sie fehlte hier zuerst,
+       und die Gegenprobe hat es gezeigt: sie hängte `bereichZettel` ins Fenster,
+       und die Prüfung blieb grün — bei leerem Brett entsteht dort gar kein
+       Sperr-Knopf, nur die Überschrift. Auf den Knopf zu prüfen genügt also
+       nicht; es muss der Bereich selbst sein. */
+    ok(!/auf dem Brett liegt/.test(t), '…und nicht einmal die Zettel-Übersicht');
+    await ctx.close();
+  }
+
   /* ═══ 8. Fail-soft ═══ */
   {
     const { p, ctx, errs } = await neueSeite(browser, { mod: {}, nip11: null });

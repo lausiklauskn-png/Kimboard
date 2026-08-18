@@ -38,6 +38,8 @@
     'tb-miclang': ['🎙️ Sprache fürs Mikrofon', 'In welcher Sprache du sprichst, wenn du einen Zettel diktierst. Die Wahl gilt für alle Mikrofon-Knöpfe der Seite — beim Fragen wie beim Antworten — und bleibt gespeichert. Sie ändert nichts an der Anzeigesprache, nur an dem, was die Spracherkennung erwartet.'],
 
     // — Identität / Gerät —
+    'schluessel-sichern': ['🔑 Deinen Schlüssel sichern', 'Kimboard hat dir beim ersten Öffnen einen Schlüssel gegeben — ohne Anmeldung, ohne Konto. Er ist deine Kennung: damit unterschreibst du deine Zettel, und daran erkennen dich deine Kontakte wieder. Er liegt NUR in diesem Browser. Wer die Browserdaten löscht, verliert ihn — und ist danach für alle jemand anderes; auch eigene Zettel lassen sich dann nicht mehr zurückziehen. Hier legst du eine mit Passwort verschlüsselte Sicherungs-Datei an (oder holst dich aus einer zurück). Ehrlich: ohne dieses Passwort ist die Datei auch für dich wertlos — es gibt keine Hintertür. Leg Datei und Passwort getrennt ab.'],
+
     'geraetename': ['🏷️ Gerätename', 'Ein frei wählbarer Anzeige-Name (z. B. „Klaus-Handy"), damit man deine Zettel zuordnen kann — praktisch, wenn du mehrere Geräte hast. Nur ein Hinweis, KEIN Echtheits-Beweis: jeder kann jeden Namen wählen. Die kryptische Kennung daneben ist das Verlässliche.'],
 
     // — Relais —

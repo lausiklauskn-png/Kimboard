@@ -162,8 +162,8 @@ echo "── Gegenprobe: Betreiber-Studio ──"
 # und die Prüfung, die das behauptet, muss das auch merken.
 probe "studio.js wird NICHT beim normalen Laden geholt" smoke_studio.mjs \
   ersetze index.html \
-  "    s.src = './assets/studio.js?v=1';" \
-  "    s.src = './assets/studio.js?v=1';\n  }\n  { var vorab = document.createElement('script'); vorab.src = './assets/studio.js?v=1'; document.head.appendChild(vorab);"
+  "    s.src = './assets/studio.js?v=3';" \
+  "    s.src = './assets/studio.js?v=3';\n  }\n  { var vorab = document.createElement('script'); vorab.src = './assets/studio.js?v=3'; document.head.appendChild(vorab);"
 
 probe "ein Wischen bricht den langen Druck ab" smoke_studio.mjs \
   ersetze index.html \
@@ -256,6 +256,25 @@ probe "der Zurückholen-Weg steht auch Fremden offen" smoke_studio.mjs \
   "    bereichSchluessel(box);
   }" \
   "  }"
+
+probe "der Schlüssel-Knopf steht sichtbar in der Seite" smoke_studio.mjs \
+  ersetze index.html \
+  '                style="margin-left:8px;padding:2px 8px;font-size:.82rem;"' \
+  '                style="margin-left:8px;padding:2px 8px;font-size:.82rem;display:none;"'
+
+probe "das Schlüssel-Fenster zeigt Fremden KEINE Sperr-Knöpfe" smoke_studio.mjs \
+  ersetze assets/studio.js \
+  "    box.appendChild(hin);
+    bereichSchluessel(box);
+  }
+
+  window.KBStudio = {" \
+  "    box.appendChild(hin);
+    bereichSchluessel(box);
+    bereichZettel(box);
+  }
+
+  window.KBStudio = {"
 
 probe "ein unbrauchbarer Betreiber-Schlüssel fällt auf" smoke_studio.mjs \
   ersetze assets/config/moderation.js \
