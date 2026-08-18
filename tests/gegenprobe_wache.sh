@@ -32,12 +32,20 @@ open(datei, 'w', encoding='utf-8').write(s.replace(alt, neu, 1))
 PY
 }
 
+# Beide Proben zusammen — ein eingebauter Fehler darf irgendeine von beiden
+# umwerfen. Wer nur eine aufriefe, hielte die andere für unbewacht.
+proben_gruen() {
+  # KEIN `| tail` — über grün entscheidet nur der eigene Rückgabewert.
+  node tests/smoke_relais_wache.mjs >/dev/null 2>&1 || return 1
+  node tests/smoke_relais_scharf.mjs >/dev/null 2>&1 || return 1
+  return 0
+}
+
 probe() {
   local was="$1"; shift
   "$@" || { echo "  ✗ $was — der Eingriff selbst ist fehlgeschlagen"; rot=$((rot+1)); zurueck; return; }
-  # KEIN `| tail` — über grün entscheidet nur der eigene Rückgabewert.
-  if node tests/smoke_relais_wache.mjs >/dev/null 2>&1; then
-    echo "  ✗ $was — die Probe blieb GRÜN, sie bewacht das nicht"
+  if proben_gruen; then
+    echo "  ✗ $was — die Proben blieben GRÜN, das ist unbewacht"
     rot=$((rot+1))
   else
     echo "  ✓ $was"
@@ -51,9 +59,15 @@ echo "── Gegenprobe: Relais-Wache ──"
 # Das Kernversprechen des Nachsehen-Gangs. Fiele es, wäre alles andere egal.
 probe "der Nachsehen-Gang loescht wirklich nichts" \
   ersetze tools/relais-wache.sh \
-  'sagen "Ein Löschlauf würde $summe von $gesamt Ereignissen entfernen."' \
-  'sqlite3 "$DB" "DELETE FROM event WHERE 1=0;" >/dev/null 2>&1
-sagen "Ein Löschlauf würde $summe von $gesamt Ereignissen entfernen."'
+  'sagen "══ Ergebnis ══"' \
+  'sqlite3 "$DB" "DELETE FROM event WHERE 1=1;" >/dev/null 2>&1
+sagen "══ Ergebnis ══"'
+
+# Die Weiche selbst: wenn SCHARF ausgehebelt wird, löscht der Nachsehen-Gang.
+probe "die Weiche verlangt wirklich SCHARF=ja" \
+  ersetze tools/relais-wache.sh \
+  'if [ "$SCHARF" != "ja" ]; then' \
+  'if [ "$SCHARF" = "niemals-xyz" ]; then'
 
 # Zettel und Absender dürfen nicht in einen Topf: ein versehentlich als
 # Absender gelesener Wert nähme weit mehr weg als erwartet.
@@ -115,6 +129,75 @@ probe "die leere Liste wird als solche benannt" \
   ersetze tools/relais-wache.sh \
   '  sagen "Die Sperr-Liste ist leer — es gäbe nichts zu entfernen."' \
   '  sagen "Nichts gefunden."'
+
+echo
+echo "── und jetzt der scharfe Gang ──"
+
+# Die Überschneidung. Der Fehler, der die erste Fassung hatte und den keine
+# Probe sah: beide Zähler addiert statt einmal gezählt.
+probe "die Ueberschneidung zaehlt nur EINMAL" \
+  ersetze tools/relais-wache.sh \
+  'summe="$(sqlite3 "$DB" "SELECT COUNT(*) FROM event WHERE $wo;" 2>/dev/null || echo 0)"' \
+  'summe=$((treffer_ev + treffer_ab))'
+
+# Er darf NUR die genannten nehmen. Ein zu weit gefasstes WHERE ist der
+# schlimmste denkbare Fehlgriff in diesem Werkzeug.
+probe "er nimmt NUR die genannten (WHERE nicht aufgeweitet)" \
+  ersetze tools/relais-wache.sh \
+  'DELETE FROM event WHERE $wo;' \
+  'DELETE FROM event WHERE 1=1;'
+
+# Ohne GEPRÜFTE Sicherung wird nicht gelöscht — ausnahmslos.
+#
+# Bewusst EIN Eingriff über den ganzen Block, nicht zwei über die einzelnen
+# Riegel. Der Grund ist ehrlich benannt: die beiden Riegel decken einander ab
+# (fällt die Sicherung aus, schlägt auch die Stückzahl-Prüfung an, weil sie
+# eine fehlende Datei nicht zählen kann). Ein Eingriff in nur einen von beiden
+# beweist deshalb gar nichts — die Probe bliebe grün, und zwar zu Recht.
+# Was hier bewacht wird, ist die Zusicherung, nicht die Zeile.
+probe "ohne gepruefte Sicherung wird NICHT geloescht" \
+  ersetze tools/relais-wache.sh \
+  'if ! sqlite3 "$DB" "VACUUM INTO '"'"'$SICHERUNG'"'"';" 2>/dev/null; then
+  fehler "Sicherung fehlgeschlagen. Es wurde NICHTS entfernt."
+  exit 3
+fi
+gesichert="$(sqlite3 "$SICHERUNG" "SELECT COUNT(*) FROM event;" 2>/dev/null || echo -1)"
+if [ "$gesichert" != "$gesamt" ]; then
+  fehler "Die Sicherung trägt $gesichert statt $gesamt Ereignisse. Es wurde NICHTS entfernt."
+  exit 3
+fi' \
+  'sqlite3 "$DB" "VACUUM INTO '"'"'$SICHERUNG'"'"';" >/dev/null 2>&1
+gesichert=egal'
+
+# Die Anhängsel. Sie zeigen sonst auf nichts mehr.
+probe "verwaiste Anhaengsel bleiben nicht zurueck" \
+  ersetze tools/relais-wache.sh \
+  'DELETE FROM tag WHERE event_id IN (SELECT id FROM event WHERE $wo);' \
+  '-- Anhaengsel bleiben liegen'
+
+# Nachrechnen ist der Unterschied zwischen Beweis und Behauptung.
+probe "es rechnet wirklich nach (Gesamtzahl)" \
+  ersetze tools/relais-wache.sh \
+  '[ "$nachher" = "$erwartet" ] || { fehler "Die Rechnung geht NICHT auf: $nachher statt $erwartet."; fehlgriff=1; }' \
+  ': # Nachrechnen ausgebaut'
+
+probe "es prueft, dass keine genannte Kennung liegen blieb" \
+  ersetze tools/relais-wache.sh \
+  '[ "$rest" = 0 ] || { fehler "$rest der genannten Kennungen liegen noch da."; fehlgriff=1; }' \
+  ': # Prüfung ausgebaut'
+
+# Ein misslungenes Anhalten darf nicht in ein Löschen münden.
+probe "misslungenes Anhalten haelt den Lauf auf" \
+  ersetze tools/relais-wache.sh \
+  '    fehler "'"'"'$CONTAINER'"'"' ließ sich nicht anhalten. Es wurde NICHTS entfernt."
+    exit 3' \
+  '    sagen "(weiter ohne Anhalten)"'
+
+# Die Sicherung darf das Werkzeug nicht selbst wegräumen.
+probe "die Sicherung wird nicht weggeraeumt" \
+  ersetze tools/relais-wache.sh \
+  'sagen "Die Sicherung bleibt liegen: $SICHERUNG"' \
+  'rm -f "$SICHERUNG"; sagen "Sicherung entfernt."'
 
 echo
 echo "══════════════════════════════════════════"

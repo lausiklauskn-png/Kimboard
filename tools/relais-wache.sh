@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
-# relais-wache.sh — NACHSEHEN-GANG. Zeigt, was eine Sperre auf dem Relais
-# treffen WÜRDE. Löscht nichts, ändert nichts, schreibt nichts.
+# relais-wache.sh — die Relais-Wache. ZWEI GÄNGE in EINER Datei.
+#
+#   bash relais-wache.sh              → NACHSEHEN. Löscht nichts, ändert nichts.
+#   SCHARF=ja bash relais-wache.sh    → ENTFERNEN. Sichert zuerst, dann löscht es.
+#
+# Der Nachsehen-Gang ist die Vorgabe, und das ist Absicht: ein versehentlicher
+# Aufruf tut nichts. Zum Löschen muss man es ausdrücklich sagen.
+#
+# EINE Datei für beides, weil das Werkzeug per `ssh … 'bash -s' < datei`
+# hinübergereicht wird. Zwei Dateien wären zwei Wege, die auseinanderlaufen —
+# und der scharfe Gang MUSS genau das zählen, was der Nachsehen-Gang gezeigt hat.
 #
 # ── WOZU ──────────────────────────────────────────────────────────────────────
 # Kimboards Sperr-Liste nimmt gesperrte Zettel aus der ANZEIGE — in jedem
@@ -28,21 +37,45 @@
 #    aussieht und in Wahrheit „falsch gesucht" heißt.
 #
 # ── AUFRUF ────────────────────────────────────────────────────────────────────
-#   bash relais-wache.sh                    # mit den Vorgaben unten
+#   bash relais-wache.sh                    # nachsehen, mit den Vorgaben unten
+#   SCHARF=ja bash relais-wache.sh          # wirklich entfernen (sichert vorher)
 #   DB=/pfad/nostr.db bash relais-wache.sh  # andere Datenbank
-#   LISTE=/pfad/sperrliste.js bash relais-wache.sh   # lokale Liste statt Netz
+#   LISTE=/pfad/sperrliste.js …             # lokale Liste statt Netz
+#   SICHERUNG=/pfad/abzug.db …              # wohin die Sicherung geht
+#   STOPPEN=ja …                            # Relais während des Laufs anhalten
+#
+# Vom Tablet aus:  ssh root@<server> 'bash -s' < tools/relais-wache.sh
+#                  ssh root@<server> 'SCHARF=ja bash -s' < tools/relais-wache.sh
 #
 # Er gehört auf den Server, auf dem das Relais läuft (Hetzner-Cloud-Server),
 # nicht aufs Tablet. Er braucht `sqlite3` und `curl`.
+#
+# ── MUSS DAS RELAIS DAFÜR ANHALTEN? Gemessen, nicht vermutet ─────────────────
+# Nein — deshalb ist `STOPPEN` freiwillig. Am 2026-08-18 gemessen: aus einer
+# WAL-Datenbank lässt sich löschen, WÄHREND ein zweiter Verbinder weiterschreibt
+# (`BEGIN IMMEDIATE` + `busy_timeout`); 55 gleichzeitige Einfügungen, kein Fehler
+# auf beiden Seiten, `PRAGMA integrity_check` = ok.
+# EHRLICHE GRENZE: gemessen wurde mit zwei Verbindern im selben Programm. Beim
+# Relais sind es zwei Programme (Container und Server) über dieselbe Datei —
+# SQLite sperrt dafür über dasselbe Verfahren, aber gemessen ist das hier nicht.
+# Wem das zu dünn ist, nimmt `STOPPEN=ja`. Die Sicherung läuft in beiden Fällen.
 set -u
 
 DB="${DB:-/opt/relay/db/nostr.db}"
 LISTE="${LISTE:-https://raw.githubusercontent.com/lausiklauskn-png/Kimboard/main/assets/config/sperrliste.js}"
+SCHARF="${SCHARF:-nein}"
+STOPPEN="${STOPPEN:-nein}"
+SICHERUNG="${SICHERUNG:-}"
+CONTAINER="${CONTAINER:-relay}"
 
 sagen() { printf '%s\n' "$*"; }
 fehler() { printf '✖ %s\n' "$*" >&2; }
 
-sagen "══ Relais-Wache · NACHSEHEN (löscht nichts) ══"
+if [ "$SCHARF" = "ja" ]; then
+  sagen "══ Relais-Wache · ENTFERNEN (sichert zuerst) ══"
+else
+  sagen "══ Relais-Wache · NACHSEHEN (löscht nichts) ══"
+fi
 sagen ""
 
 # ── 1. Werkzeug und Datenbank vorhanden? ─────────────────────────────────────
@@ -122,6 +155,35 @@ sagen "Schema:    Kennung in Spalte '$sp_id' ($typ_id), Absender in '$sp_autor'"
 # werden geprüft — welche trifft, sagt das Skript gleich selbst.
 alsWert() { case "$typ_id" in *BLOB*|*blob*) printf "x'%s'" "$1";; *) printf "'%s'" "$1";; esac; }
 
+# Die EINE Bedingung, die beide Sorten zusammenfasst. Sie ist der Grund, warum
+# die Zahl unten stimmt: ein Ereignis, das ZUGLEICH über seine Kennung und über
+# seinen Absender gesperrt ist, taucht darin genau EINMAL auf.
+bedingung() {
+  local teil="" k
+  if [ "$n_ev" -gt 0 ]; then
+    local liste=""
+    while IFS= read -r k; do
+      [ -n "$k" ] || continue
+      liste="$liste${liste:+,}$(alsWert "$k")"
+    done <<EOF
+$ereignisse
+EOF
+    [ -n "$liste" ] && teil="$sp_id IN ($liste)"
+  fi
+  if [ "$n_ab" -gt 0 ]; then
+    local liste2=""
+    while IFS= read -r k; do
+      [ -n "$k" ] || continue
+      liste2="$liste2${liste2:+,}$(alsWert "$k")"
+    done <<EOF
+$absender
+EOF
+    [ -n "$liste2" ] && teil="$teil${teil:+ OR }$sp_autor IN ($liste2)"
+  fi
+  # Kann nicht leer werden: ohne Kennungen ist das Skript oben schon ausgestiegen.
+  printf '%s' "${teil:-0=1}"
+}
+
 gesamt="$(sqlite3 "$DB" "SELECT COUNT(*) FROM event;")"
 sagen "Im Speicher: $gesamt Ereignisse"
 sagen ""
@@ -159,17 +221,125 @@ EOF
   sagen ""
 fi
 
-# ── 6. Ergebnis ──────────────────────────────────────────────────────────────
-summe=$((treffer_ev + treffer_ab))
+# ── 6. Die EINE Zahl, auf die es ankommt ─────────────────────────────────────
+# NICHT treffer_ev + treffer_ab. Ein Ereignis kann ZUGLEICH über seine eigene
+# Kennung UND über seinen Absender gesperrt sein — die Summe zählte es dann
+# doppelt. Beim Nachsehen wäre das nur eine zu hohe Zahl; beim scharfen Gang
+# wäre es schlimmer: die Schlussrechnung „vorher − betroffen = nachher" ginge
+# nicht auf, und das Werkzeug meldete einen Fehlschlag, obwohl es richtig
+# gelöscht hat.
+#
+# Gefunden am 2026-08-18 beim Aufschreiben des scharfen Gangs. Die erste Probe
+# hatte die Überschneidung nie gebaut und war deshalb grün.
+wo="$(bedingung)"
+summe="$(sqlite3 "$DB" "SELECT COUNT(*) FROM event WHERE $wo;" 2>/dev/null || echo 0)"
+
 sagen "══ Ergebnis ══"
-sagen "Ein Löschlauf würde $summe von $gesamt Ereignissen entfernen."
+sagen "Betroffen sind $summe von $gesamt Ereignissen."
 sagen "  · über Zettel-Kennungen:   $treffer_ev"
 sagen "  · über Absender-Kennungen: $treffer_ab"
+[ $((treffer_ev + treffer_ab)) -ne "$summe" ] && \
+  sagen "  (die beiden überschneiden sich — $summe ist die Zahl, die zählt)"
 sagen ""
-sagen "Es wurde NICHTS gelöscht und NICHTS geändert — das ist der Nachsehen-Gang."
-sagen "Der scharfe Gang ist bewusst noch nicht gebaut: er braucht eine Sicherung"
-sagen "vor jedem Lauf und den Nachweis, dass er nur diese Kennungen trifft."
 
-# Rückgabewert 0 = die Auskunft steht. Er sagt NICHT, ob etwas gefunden wurde —
-# „nichts betroffen" ist ein gültiges Ergebnis, kein Fehler.
+# ── 7. Hier trennen sich die Gänge ───────────────────────────────────────────
+if [ "$SCHARF" != "ja" ]; then
+  sagen "Es wurde NICHTS gelöscht und NICHTS geändert — das ist der Nachsehen-Gang."
+  sagen "Zum wirklichen Entfernen:  SCHARF=ja bash relais-wache.sh"
+  # Rückgabewert 0 = die Auskunft steht. Er sagt NICHT, ob etwas gefunden wurde —
+  # „nichts betroffen" ist ein gültiges Ergebnis, kein Fehler.
+  exit 0
+fi
+
+if [ "$summe" = 0 ]; then
+  sagen "Nichts zu entfernen — die genannten Kennungen liegen nicht (mehr) hier."
+  exit 0
+fi
+
+# ── 8. SICHERUNG. Nicht abschaltbar. ─────────────────────────────────────────
+# `VACUUM INTO` zieht einen in sich stimmigen Abzug aus der LAUFENDEN Datenbank
+# (am 2026-08-18 gemessen). Ein `cp` täte das nicht: im WAL-Modus liegt der
+# neueste Stand teils in der Nebendatei, und ein halber Abzug ist schlimmer als
+# gar keiner — er sieht aus wie eine Sicherung.
+[ -n "$SICHERUNG" ] || SICHERUNG="${DB}.sicherung-$(date +%Y%m%d-%H%M%S).db"
+sagen "── Sicherung ──"
+sagen "Ziel: $SICHERUNG"
+rm -f "$SICHERUNG" 2>/dev/null
+if ! sqlite3 "$DB" "VACUUM INTO '$SICHERUNG';" 2>/dev/null; then
+  fehler "Sicherung fehlgeschlagen. Es wurde NICHTS entfernt."
+  exit 3
+fi
+gesichert="$(sqlite3 "$SICHERUNG" "SELECT COUNT(*) FROM event;" 2>/dev/null || echo -1)"
+if [ "$gesichert" != "$gesamt" ]; then
+  fehler "Die Sicherung trägt $gesichert statt $gesamt Ereignisse. Es wurde NICHTS entfernt."
+  exit 3
+fi
+sagen "  ✔ $gesichert Ereignisse gesichert — der Stand VOR dem Lauf."
+sagen ""
+
+# ── 9. Anhalten? Freiwillig (Begründung im Kopf). ────────────────────────────
+angehalten=nein
+if [ "$STOPPEN" = "ja" ]; then
+  if docker stop "$CONTAINER" >/dev/null 2>&1; then
+    angehalten=ja; sagen "Relais '$CONTAINER' angehalten."
+  else
+    fehler "'$CONTAINER' ließ sich nicht anhalten. Es wurde NICHTS entfernt."
+    exit 3
+  fi
+fi
+wieder_an() {
+  [ "$angehalten" = ja ] || return 0
+  docker start "$CONTAINER" >/dev/null 2>&1 && sagen "Relais '$CONTAINER' wieder gestartet." \
+    || fehler "Relais '$CONTAINER' ließ sich NICHT wieder starten — von Hand: docker start $CONTAINER"
+}
+
+# ── 10. Entfernen — in EINER Transaktion, mitsamt den Anhängseln ─────────────
+# Die `tag`-Tabelle hängt an `event.id`. Wer nur die Ereignisse nimmt, lässt
+# Zeilen zurück, die auf nichts mehr zeigen. Deshalb zuerst die Anhängsel,
+# dann die Ereignisse — in derselben Transaktion, sonst fällt eines von beidem
+# aus, wenn etwas dazwischenkommt.
+sagen "── Entfernen ──"
+if ! sqlite3 "$DB" "PRAGMA busy_timeout=15000;
+BEGIN IMMEDIATE;
+DELETE FROM tag WHERE event_id IN (SELECT id FROM event WHERE $wo);
+DELETE FROM event WHERE $wo;
+COMMIT;" 2>/dev/null; then
+  fehler "Entfernen fehlgeschlagen. Die Transaktion ist zurückgerollt — der Stand"
+  fehler "ist unverändert. Die Sicherung liegt trotzdem: $SICHERUNG"
+  wieder_an
+  exit 4
+fi
+
+# ── 11. Nachrechnen. Ohne das ist es kein Beweis, sondern eine Behauptung. ───
+nachher="$(sqlite3 "$DB" "SELECT COUNT(*) FROM event;" 2>/dev/null || echo -1)"
+rest="$(sqlite3 "$DB" "SELECT COUNT(*) FROM event WHERE $wo;" 2>/dev/null || echo -1)"
+verwaist="$(sqlite3 "$DB" "SELECT COUNT(*) FROM tag WHERE event_id NOT IN (SELECT id FROM event);" 2>/dev/null || echo -1)"
+erwartet=$((gesamt - summe))
+
+sagen "  vorher:    $gesamt"
+sagen "  betroffen: $summe"
+sagen "  nachher:   $nachher   (erwartet $erwartet)"
+sagen ""
+
+fehlgriff=0
+[ "$nachher" = "$erwartet" ] || { fehler "Die Rechnung geht NICHT auf: $nachher statt $erwartet."; fehlgriff=1; }
+[ "$rest" = 0 ] || { fehler "$rest der genannten Kennungen liegen noch da."; fehlgriff=1; }
+[ "$verwaist" = 0 ] || { fehler "$verwaist verwaiste Anhängsel geblieben."; fehlgriff=1; }
+
+wieder_an
+
+if [ "$fehlgriff" != 0 ]; then
+  fehler "Zurückholen: docker stop $CONTAINER && cp '$SICHERUNG' '$DB' && docker start $CONTAINER"
+  exit 4
+fi
+
+sagen "══ Erledigt ══"
+sagen "$summe Ereignisse entfernt, $nachher liegen noch hier."
+sagen "Nachgerechnet: die Zahl stimmt, keine der genannten Kennungen ist geblieben,"
+sagen "kein verwaistes Anhängsel zurückgeblieben."
+sagen ""
+sagen "Die Sicherung bleibt liegen: $SICHERUNG"
+sagen "Sie trägt den Stand VOR dem Lauf. Wer sie nicht mehr braucht, nimmt sie von"
+sagen "Hand weg — dieses Werkzeug räumt sie nicht auf, denn das wäre der eine Griff,"
+sagen "der sich nicht zurücknehmen lässt."
 exit 0

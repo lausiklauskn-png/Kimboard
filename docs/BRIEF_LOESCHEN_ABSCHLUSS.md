@@ -17,10 +17,18 @@ arbeitest.
 | Sperr-Liste (nimmt aus der **Anzeige**) | ✅ gebaut |
 | Studio 🔧 (sperren, Liste signieren, Schlüssel sichern) | ✅ gebaut |
 | Antwort auf „welche Relais-Software?" | ✅ gemessen: `nostr-rs-relay` 0.10.0, **kein NIP-86** |
-| **Nachsehen-Gang** `tools/relais-wache.sh` | ✅ gebaut, 27 Proben + 11 Gegenproben |
-| **Scharfer Gang** — wirklich aus dem Speicher nehmen | ⬜ **fehlt** |
-| Erste echte Sperr-Liste + `pruefschluessel` | ⬜ fehlt |
+| **Nachsehen-Gang** `tools/relais-wache.sh` | ✅ gebaut, 29 Proben |
+| **Scharfer Gang** `SCHARF=ja` — wirklich aus dem Speicher nehmen | ✅ gebaut, 38 Proben · **20/20 Gegenproben** |
+| Erste echte Sperr-Liste + `pruefschluessel` | ⬜ **fehlt — der nächste Schritt** |
+| Ein Lauf gegen die **echte** Datenbank auf dem Server | ⬜ fehlt |
 | Die 20 Geschwister-Apps | ⬜ **Befund unten — Richtungsentscheid für Klaus** |
+
+> **Nachtrag am selben Tag.** § 1 unten war beim Schreiben eine Liste dessen,
+> was fehlt. Der scharfe Gang ist danach **gebaut worden** — die Punkte 1–4
+> stehen, Punkt 5 (ein Takt) bewusst nicht. Der Abschnitt bleibt trotzdem
+> stehen: er sagt, **warum** das Werkzeug so aussieht, wie es aussieht, und
+> was beim Bauen dazugekommen ist. Der Stand steht in der Tabelle darüber und
+> ausführlich in `docs/MODERATION_UND_RECHT.md` § „Der scharfe Gang".
 
 Der Weg über NIP-86 ist **belegt tot**: weder `nostr-rs-relay` (Klaus' Server,
 per SSH gemessen) noch `strfry` (`relay.damus.io`, per Selbstauskunft gemessen)
@@ -29,11 +37,12 @@ harmlose Hälfte steht jetzt.
 
 ---
 
-## 1. Der scharfe Gang — was er braucht
+## 1. Der scharfe Gang — was er brauchte (und jetzt hat)
 
-`tools/relais-wache.sh` zählt heute richtig und fasst nichts an. Der zweite
-Gang macht daraus ein Entfernen. **Er ist bewusst nicht mitgebaut worden**, und
-die Gründe sind nicht Vorsicht um der Vorsicht willen:
+`tools/relais-wache.sh` zählt richtig und fasst im Nachsehen-Gang nichts an.
+Der zweite Gang macht daraus ein Entfernen. Das hier war die Liste dessen, was
+er dafür haben musste — **Punkte 1 bis 4 sind gebaut**, Punkt 5 nicht. Die
+Gründe sind nicht Vorsicht um der Vorsicht willen:
 
 1. **Eine Sicherung vor jedem Lauf, die nicht abschaltbar ist.** Am 2026-08-18
    hat Klaus 32 Testzettel von Hand entfernt; die Sicherung davor war der
@@ -44,12 +53,12 @@ die Gründe sind nicht Vorsicht um der Vorsicht willen:
    alles andere ist Beiwerk.
 3. **Verwaiste `tag`-Zeilen mit aufräumen.** Die Tabelle hängt an `event_id`.
    Beim Handlauf am 18. war das ein eigener Schritt.
-4. **`docker stop relay` oder nicht?** SQLite läuft im WAL-Modus, der Dienst
-   schreibt nebenher. Beim Handlauf war Anhalten der sichere Weg — für einen
-   getakteten Dienst wäre es eine Unterbrechung alle paar Minuten. Das ist eine
-   echte Abwägung, kein Selbstläufer: **erst messen**, ob ein Löschen im
-   laufenden Betrieb sauber durchgeht (`PRAGMA busy_timeout`, eine Transaktion),
-   dann entscheiden.
+4. **`docker stop relay` oder nicht?** ✅ **Gemessen: nicht nötig.** Aus einer
+   WAL-Datenbank lässt sich löschen, während ein zweiter Verbinder weiterschreibt
+   — 55 gleichzeitige Einfügungen, kein Fehler auf beiden Seiten,
+   `integrity_check` = ok. `STOPPEN=ja` bleibt als freiwilliger Weg. **Ehrliche
+   Grenze:** gemessen mit zwei Verbindern im selben Programm, beim Relais sind es
+   zwei Programme über dieselbe Datei.
 5. **Ein Takt.** Cron alle paar Minuten, oder auf Zuruf. Ein Dienst, der
    ungefragt löscht, braucht mehr Vertrauen als einer, den man aufruft — und
    Kimboards Sperr-Liste geht **nur nach oben**, was die Sache entschärft: was
@@ -58,6 +67,25 @@ die Gründe sind nicht Vorsicht um der Vorsicht willen:
 **Reihenfolge:** erst 2. (die Probe), dann der Code. Nicht andersherum — sonst
 hat man ein Werkzeug, dem man beim Löschen zusehen muss, statt eines, dem man
 zusehen konnte.
+
+**Was beim Bauen dazukam und vorher niemand auf der Liste hatte:**
+
+- **Ein Rechenfehler im schon gemergten Nachsehen-Gang.** Er meldete
+  `treffer_ev + treffer_ab` und zählte damit ein Ereignis **doppelt**, das
+  zugleich über seine Kennung und über seinen Absender gesperrt ist. Beim
+  Nachsehen nur eine zu hohe Zahl — im scharfen Gang hätte es die
+  Schlussrechnung umgeworfen und einen **richtigen** Lauf als Fehlschlag
+  gemeldet. Heute zählt eine einzige Abfrage über beide Sorten.
+- **Eine Nachrechnung lässt sich nicht beweisen, solange nichts falsch ist.**
+  Die Gegenprobe baute sie aus, und alle Proben blieben grün. Seitdem gibt es
+  zwei Prüfungen, die das Werkzeug an einer **gepatchten Kopie** absichtlich
+  falsch machen und darauf bestehen, dass es das bemerkt. Ohne die wäre die
+  Nachrechnung Zierde gewesen.
+- **Zwei Riegel, die einander abdecken, sind EIN Prüfpunkt.** Fällt die
+  Sicherung aus, schlägt auch die Stückzahl-Prüfung an. Ein Gegenproben-Eingriff
+  in nur einen von beiden beweist deshalb nichts — die Probe bliebe grün, und
+  zwar zu Recht. Die Gegenprobe greift jetzt über den ganzen Block und sagt im
+  Kommentar, warum. **Bewacht wird die Zusicherung, nicht die Zeile.**
 
 ---
 
@@ -68,11 +96,21 @@ zusehen konnte.
 solange es so ist, hat der scharfe Gang nichts zu tun und niemand hat den
 Rundlauf je an echten Daten gesehen.
 
-**Kleiner, lohnender Schritt:** Klaus sperrt im Studio einen belanglosen
-eigenen Testzettel, checkt die erzeugte Liste ein, trägt seine Kennung als
-`pruefschluessel` ein — und dann läuft der Nachsehen-Gang **einmal auf dem
-Server** und sagt „1 von 1623". Das ist der Beweis, dass die Kette von der
-Oberfläche bis in den Speicher trägt. Er kostet Minuten und ersetzt viel Raten.
+**Das ist jetzt der nächste Schritt — und der ganze Rest hängt daran.** Klaus
+sperrt im Studio einen belanglosen eigenen Testzettel, checkt die erzeugte Liste
+ein, trägt seine Kennung als `pruefschluessel` ein. Dann:
+
+```bash
+ssh root@167.233.204.72 'bash -s' < tools/relais-wache.sh          # muss „1 von 1623" sagen
+ssh root@167.233.204.72 'SCHARF=ja bash -s' < tools/relais-wache.sh   # entfernt ihn
+ssh root@167.233.204.72 'bash -s' < tools/relais-wache.sh          # muss „0 von 1622" sagen
+```
+
+Der dritte Aufruf ist der eigentliche Beweis: was weg ist, findet der
+Nachsehen-Gang nicht mehr. **Das Werkzeug ist nie gegen die echte Datenbank
+gelaufen** — es misst gegen echte SQLite-Datenbanken im richtigen Zuschnitt,
+aber `/opt/relay/db/nostr.db` hat es noch nie gesehen. Der erste Aufruf ist
+ungefährlich (er liest nur) und beantwortet genau das.
 
 ---
 
