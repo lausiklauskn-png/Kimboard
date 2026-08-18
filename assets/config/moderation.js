@@ -74,11 +74,29 @@
      * Oberfläche. Der Vergleich hier hält nur die App aufgeräumt — er hält
      * niemanden auf, und er behauptet es auch nicht.
      *
-     * Klaus trägt hier die Kennung ein, die im Siegel unter „Eigene Identität"
-     * steht. Solange sie fehlt, gibt es kein Studio (der lange Druck tut dann
-     * schlicht nichts). Ein Forker trägt seine eigene ein — oder lässt sie
-     * leer, wenn seine App kein Studio haben soll. */
-    betreiberSchluessel: '7dee8dd9088022e0a9be3667ad6ed3551a68c263ce557f34907485075d2fd6a0',
+     * EIN WERT ODER MEHRERE. Der Schlüssel hängt am BROWSER, nicht an der
+     * Person: DeX-Chrome und Tablet-Chrome sind zwei getrennte Browser mit zwei
+     * getrennten Schlüsseln. Wer dasselbe Brett von beiden Geräten aus
+     * verwalten will, trägt hier beide Kennungen ein — als Liste.
+     *
+     * Der Preis dafür ist ehrlich zu benennen: jede zusätzliche Kennung ist ein
+     * weiterer Schlüssel, dessen Verlust oder Diebstahl denselben Zugang
+     * eröffnet. Zwei Geräte sind zwei Stellen, an denen etwas schiefgehen kann.
+     * Die Alternative — EINE Identität per Sicherungs-Datei aufs zweite Gerät
+     * holen — ist sauberer, aber unbequemer. Beides ist vertretbar; hier steht
+     * die Liste, weil Klaus sie ausdrücklich wollte (2026-08-18).
+     *
+     * Ein einzelner Wert (String) wird weiterhin angenommen — ein Forker, der
+     * die alte Schreibweise kopiert hat, muss nichts ändern.
+     *
+     * Solange die Liste leer ist, gibt es kein Studio (der lange Druck tut dann
+     * schlicht nichts). Ein Forker trägt seine eigene Kennung ein — oder lässt
+     * sie leer, wenn seine App kein Studio haben soll. */
+    betreiberSchluessel: [
+      '7dee8dd9088022e0a9be3667ad6ed3551a68c263ce557f34907485075d2fd6a0'  // Klaus · Tablet
+      // Weitere Geräte hier ergänzen. Die Kennung des jeweiligen Geräts steht
+      // dort im Studio, wenn es sich (noch) nicht als Betreiber ausweist.
+    ],
 
     /* Öffentlicher Schlüssel (Nostr, 64 Hex-Zeichen), mit dem eine nachgeladene
      * Liste signiert sein MUSS. Ohne diesen Wert wird nichts nachgeladen —

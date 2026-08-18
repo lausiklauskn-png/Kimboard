@@ -294,6 +294,52 @@ try {
     await c.ctx.close();
   }
 
+  /* ═══ 3b. Mehrere Geräte — die Kennungs-Liste ═══
+     Ein Schlüssel hängt am BROWSER, nicht an der Person: DeX-Chrome und
+     Tablet-Chrome sind zwei getrennte Browser. Wer beide zum Verwalten benutzen
+     will, trägt beide Kennungen ein. */
+  {
+    const { p, ctx } = await neueSeite(browser, { mod: {}, nip11: null });
+    const ich = await meine(p);
+
+    // a) eigene Kennung als ZWEITER Eintrag einer Liste — muss reichen
+    await p.evaluate((k) => {
+      window.KB_MODERATION.betreiberSchluessel = ['a'.repeat(64), k, 'c'.repeat(64)];
+    }, ich);
+    await studioAuf(p);
+    ok(/Deine Relais/.test(await text(p)),
+      'die eigene Kennung als zweiter Eintrag einer Liste öffnet das Studio');
+    await p.evaluate(() => window.KBStudio.schliessen());
+
+    // b) ein einzelner String muss weiter gehen (alte Schreibweise, Fork-Fall)
+    await p.evaluate((k) => { window.KB_MODERATION.betreiberSchluessel = k; }, ich);
+    await studioAuf(p);
+    ok(/Deine Relais/.test(await text(p)), 'ein einzelner Wert wird weiterhin angenommen');
+    await p.evaluate(() => window.KBStudio.schliessen());
+
+    // c) Tippfehler in EINEM Eintrag darf die anderen nicht mitreißen
+    await p.evaluate((k) => {
+      window.KB_MODERATION.betreiberSchluessel = ['unbrauchbar', k];
+    }, ich);
+    await studioAuf(p);
+    ok(/Deine Relais/.test(await text(p)),
+      'ein unbrauchbarer Eintrag verwirft nicht die ganze Liste');
+    await p.evaluate(() => window.KBStudio.schliessen());
+
+    // d) nicht in der Liste = kein Studio, aber die eigene Kennung zum Nachtragen
+    await p.evaluate(() => {
+      window.KB_MODERATION.betreiberSchluessel = ['a'.repeat(64), 'c'.repeat(64)];
+    });
+    await studioAuf(p);
+    const t = await text(p);
+    ok(/nicht dein Brett/.test(t), 'wer nicht in der Liste steht, bekommt kein Studio');
+    ok(/2 Geräte/.test(t), '…das Fenster sagt, wie viele Geräte eingetragen sind');
+    ok(t.indexOf(ich) >= 0, '…und zeigt die eigene Kennung zum Nachtragen');
+    ok(/zweites Gerät/.test(t), '…mit dem Hinweis, wohin sie gehört');
+    ok(!/Netzweit sperren/.test(t), '…aber weiterhin keine Sperr-Knöpfe');
+    await ctx.close();
+  }
+
   /* ═══ 4. Einbahnstraße — auch für den Betreiber ═══ */
   {
     const { p, ctx } = await neueSeite(browser, { mod: {}, nip11: null });
@@ -692,13 +738,21 @@ try {
        auf Kleinschreibung normiert und HEX64 zwar beides annimmt, die App aber
        gegen `me()` prüft — das ist immer klein. */
     const mod = readFileSync(join(ROOT, 'assets/config/moderation.js'), 'utf8');
-    const treffer = /betreiberSchluessel:\s*(null|'([^']*)')/.exec(mod);
-    ok(!!treffer, 'moderation.js hat einen Eintrag für den Betreiber');
-    if (treffer && treffer[2] !== undefined) {
-      ok(/^[0-9a-f]{64}$/.test(treffer[2]),
-        'der eingetragene Betreiber-Schlüssel ist 64 Zeichen Hex in Kleinschreibung');
-    } else {
-      ok(true, 'kein Betreiber eingetragen — erlaubt (Fork-Fall), das Studio bleibt dann zu');
+    const roh = /betreiberSchluessel:\s*(null|'[^']*'|\[[^\]]*\])/.exec(mod);
+    ok(!!roh, 'moderation.js hat einen Eintrag für den Betreiber');
+    if (roh) {
+      /* Jeder Eintrag muss brauchbar sein — auch in einer Liste. Ein Tippfehler
+         wäre still: das betroffene Gerät käme nie ins Studio, und nirgends
+         erschiene ein Fehler. */
+      const kennungen = (roh[1].match(/'([^']*)'/g) || []).map((x) => x.slice(1, -1));
+      if (!kennungen.length) {
+        ok(true, 'kein Betreiber eingetragen — erlaubt (Fork-Fall), das Studio bleibt dann zu');
+      } else {
+        const schlecht = kennungen.filter((k) => !/^[0-9a-f]{64}$/.test(k));
+        ok(schlecht.length === 0,
+          'alle ' + kennungen.length + ' eingetragenen Betreiber-Kennungen sind 64 Zeichen Hex, klein');
+        ok(new Set(kennungen).size === kennungen.length, '…und keine steht doppelt darin');
+      }
     }
   }
 } catch (e) {

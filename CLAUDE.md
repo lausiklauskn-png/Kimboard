@@ -104,6 +104,11 @@ korrekt `exit=1` zurück — hinter einer Pipe bekommst du den Rückgabewert von
   gegen `betreiberSchluessel` ist **kein Türschloss** (der Wert steht öffentlich —
   Autorität hat der private Schlüssel beim Signieren, nicht die Oberfläche), und es
   kann wie alles andere **nur sperren, nie lösen**.
+  `betreiberSchluessel` nimmt **einen Wert ODER eine Liste** (Klaus 2026-08-18): ein
+  Schlüssel hängt am Browser, nicht an der Person — DeX und Tablet sind zwei. Ein
+  einzelner String wird weiter angenommen (Fork-Fall). Ein unbrauchbarer Eintrag fällt
+  **einzeln** heraus und reißt die Liste nicht mit; wer nicht darin steht, bekommt sein
+  eigenes Kennung zum Nachtragen gezeigt.
   Endgültiges Entfernen läuft über **NIP-86** und nur dort, wo das Relais es kann;
   das Studio fragt jedes Relais per **NIP-11** selbst und sagt ehrlich, wenn nicht.
   Damit beantwortet die App eine Frage, die aus einer Sitzung **nicht** zu beantworten
@@ -122,7 +127,7 @@ korrekt `exit=1` zurück — hinter einer Pipe bekommst du den Rückgabewert von
   Seit die Betreiber-Kennung in `moderation.js` steht, kostet ein Verlust zusätzlich den
   Studio-Zugang, und die Reparatur wäre ein Commit.
 
-- **Gegenprobe:** `bash tests/gegenprobe_moderation.sh` baut 38 Fehler ein, jeder muss
+- **Gegenprobe:** `bash tests/gegenprobe_moderation.sh` baut 40 Fehler ein, jeder muss
   eine Probe umwerfen. Beim Bau des Studios hat sie **vier** blinde Prüfungen gefunden,
   alle vier in der Probe statt im Code: eine Fußzeile außerhalb des Sichtfelds (die
   Maus traf nie etwas), eine gefälschte Antwort ohne Freigabe-Kopf (der Browser verwarf

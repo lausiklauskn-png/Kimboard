@@ -165,6 +165,15 @@ aufmachen. Was er dort nicht kann, ist etwas bewirken. Jede Handlung ist ein
 — der liegt in genau einem Browser und verlässt ihn nie. Die Autorität sitzt
 beim Relais und beim Schlüssel, nicht in der Oberfläche.
 
+**Ein Gerät ist ein Schlüssel.** `betreiberSchluessel` nimmt deshalb einen Wert
+oder eine **Liste**: DeX-Chrome und Tablet-Chrome sind zwei getrennte Browser mit
+zwei getrennten Schlüsseln. Wer dasselbe Brett von beiden verwalten will, trägt
+beide Kennungen ein. Der Preis ist ehrlich zu benennen — jede zusätzliche Kennung
+ist ein weiterer Schlüssel, dessen Verlust denselben Zugang eröffnet. Die
+Alternative (eine Identität per Sicherungs-Datei aufs zweite Gerät holen) ist
+sauberer, aber unbequemer; beides ist vertretbar. Wer nicht in der Liste steht,
+bekommt seine eigene Kennung zum Nachtragen angezeigt.
+
 **Die Einbahnstraße gilt auch hier.** Das Studio kann sperren, nie lösen. Ein
 Betreiber-Werkzeug, das die Regel umginge, wäre ein Loch in genau der Regel, die
 es durchsetzen soll. Gelöst wird in der Datei.
@@ -304,4 +313,4 @@ nur für ein Relais gilt, wäre schlimmer als gar keins.
 | Studio-Zugang (langer Druck aufs ©) | `index.html`, letzter `<script>`-Block vor `</body>` |
 | Brücke aus dem Modul-Scope | `index.html`: `signiere`, `__kb.zettel/relaisListe/sperreJetzt` |
 | Proben | `tests/smoke_melden.mjs`, `tests/smoke_sperrliste.mjs`, `tests/smoke_studio.mjs` |
-| Gegenprobe | `tests/gegenprobe_moderation.sh` — 38 eingebaute Fehler, jeder muss die Proben umwerfen |
+| Gegenprobe | `tests/gegenprobe_moderation.sh` — 40 eingebaute Fehler, jeder muss die Proben umwerfen |

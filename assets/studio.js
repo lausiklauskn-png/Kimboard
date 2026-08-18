@@ -599,10 +599,11 @@
     return s;
   }
 
-  function fremdesFenster(meine, erwartet) {
+  function fremdesFenster(meine, liste) {
+    liste = liste || [];
     var box = rahmen('🔧 Studio');
     var t = el('div', 'line-height:1.55');
-    if (!erwartet) {
+    if (!liste.length) {
       t.textContent = 'Für dieses Brett ist noch kein Betreiber eingetragen. Wenn du es betreibst, '
         + 'gehört deine Kennung in assets/config/moderation.js — dann öffnet sich hier das Studio.';
       /* Die Kennung zum Mitnehmen. Sie entsteht in jedem Browser neu und steht
@@ -632,8 +633,28 @@
         + 'trägt einen anderen Schlüssel.';
       var d = el('div', 'opacity:.72;margin-top:.5em;font-size:.85rem');
       d.textContent = 'Deine Kennung: ' + String(meine || '—').slice(0, 16) + '…  ·  '
-        + 'Betreiber: ' + String(erwartet).slice(0, 16) + '…';
+        + (liste.length === 1 ? 'Betreiber: ' : 'Betreiber (' + liste.length + ' Geräte): ')
+        + liste.map(function (k) { return k.slice(0, 12) + '…'; }).join(', ');
       t.appendChild(d);
+      /* Wenn Klaus selbst hier landet, weil er am ZWEITEN Gerät sitzt, braucht
+         er genau eines: die Kennung dieses Geräts zum Nachtragen. */
+      if (HEX64.test(String(meine || ''))) {
+        var z2 = el('div', 'margin:.7em 0 .3em;padding:8px 10px;border-radius:8px;'
+          + 'background:rgba(0,0,0,.28);font-family:ui-monospace,monospace;font-size:.8rem;'
+          + 'word-break:break-all;', "'" + meine + "',");
+        t.appendChild(z2);
+        var k2 = knopf('📋 Kennung kopieren');
+        k2.addEventListener('click', function () {
+          try { navigator.clipboard.writeText("'" + meine + "',"); k2.textContent = '✓ kopiert'; }
+          catch (_e) { k2.textContent = 'Bitte von Hand markieren'; }
+        });
+        t.appendChild(k2);
+        var w2 = el('div', 'opacity:.72;margin-top:.5em;line-height:1.45;font-size:.85rem');
+        w2.textContent = 'Ist das DEIN zweites Gerät? Dann kommt diese Zeile in '
+          + 'assets/config/moderation.js in die Liste „betreiberSchluessel". Danach verwaltest du '
+          + 'dasselbe Brett auch von hier aus.';
+        t.appendChild(w2);
+      }
     }
     box.appendChild(t);
     var e = el('div', 'opacity:.72;margin-top:.7em;line-height:1.45;font-size:.85rem');
@@ -674,17 +695,34 @@
     bg = null; offen = false; standKnoten = null;
   }
 
+  /* Die eingetragenen Betreiber — ein Wert oder mehrere.
+   * Ein Gerät ist ein Schlüssel: DeX-Chrome und Tablet-Chrome sind zwei
+   * getrennte Browser. Wer beide zum Verwalten benutzen will, trägt beide
+   * Kennungen ein. Ein einzelner String wird weiter angenommen, damit ein Fork
+   * mit der alten Schreibweise nichts ändern muss.
+   * Unbrauchbare Einträge fallen still heraus — aber nur die einzelnen; eine
+   * Liste mit einem Tippfehler darin verwirft nicht die ganze Liste. */
+  function betreiber() {
+    var roh = K().betreiberSchluessel;
+    if (typeof roh === 'string') roh = [roh];
+    if (!Array.isArray(roh)) return [];
+    return roh
+      .filter(function (k) { return typeof k === 'string' && HEX64.test(k.trim()); })
+      .map(function (k) { return k.trim().toLowerCase(); });
+  }
+  function istBetreiber(kennung) {
+    return betreiber().indexOf(String(kennung || '').toLowerCase()) >= 0;
+  }
+
   function oeffnen() {
     if (offen) return;
     var b = brücke();
     var meine = '';
     try { meine = (b && typeof b.me === 'function') ? b.me() : ''; } catch (_e) { meine = ''; }
-    var erwartet = K().betreiberSchluessel;
-    erwartet = (typeof erwartet === 'string' && HEX64.test(erwartet.trim()))
-      ? erwartet.trim().toLowerCase() : '';
+    var liste = betreiber();
 
-    if (!erwartet || String(meine).toLowerCase() !== erwartet) {
-      fremdesFenster(meine, erwartet);
+    if (!liste.length || !istBetreiber(meine)) {
+      fremdesFenster(meine, liste);
       return;
     }
 

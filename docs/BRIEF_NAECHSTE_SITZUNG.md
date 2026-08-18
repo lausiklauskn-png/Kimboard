@@ -25,9 +25,10 @@ genau diese Drehung hat nebenbei die Blockade gelöst, an der die Sache seit dem
 | **Sperren** aus dem Studio + signierte Liste erzeugen | ✅ gebaut, Rundlauf bewiesen |
 | **Endgültig entfernen** per NIP-86 | ✅ gebaut — **wirkt aber nur, wenn das Relais es kann** |
 | **Schlüssel sichern / zurückholen** (verschlüsselte Datei) | ✅ gebaut, Rundlauf bewiesen |
-| Betreiber-Kennung eingetragen | ✅ `7dee8dd9…d6a0` |
-| Probe `tests/smoke_studio.mjs` | ✅ 79 Prüfungen |
-| Gegenprobe erweitert | ✅ 36 Fehler, alle gefangen |
+| **Sichtbarer Schlüssel-Knopf** neben „Meine Spore" — für JEDEN Nutzer | ✅ gebaut |
+| Betreiber-Kennung eingetragen, als **Liste** (mehrere Geräte) | ✅ `7dee8dd9…d6a0` |
+| Probe `tests/smoke_studio.mjs` | ✅ 99 Prüfungen |
+| Gegenprobe erweitert | ✅ 40 Fehler, alle gefangen |
 
 ## Schritt 0 ist beantwortet — von der App, nicht von einer Sitzung
 
@@ -61,17 +62,23 @@ was Klaus wollte.
    2-Minuten-Cron aus dem Skill `auto-deploy-einrichten`). **Das ist ein
    Richtungsentscheid — Klaus fragen, nicht wählen.** Ein Software-Wechsel am
    laufenden Relais ist schwer umkehrbar.
-3. **Das zweite Gerät.** Die Betreiber-Kennung ist eingetragen — sie hängt aber
-   am **Browser**, nicht an der Person. Auf Klaus' zweitem Gerät (DeX vs. Tablet
-   sind getrennte Browser) geht das Studio deshalb nicht auf. Zwei Wege, beide
-   vertretbar: den Schlüssel per Sicherungs-Datei aufs zweite Gerät holen
-   (funktioniert heute schon), oder `betreiberSchluessel` zu einer **Liste**
-   machen. Klaus fragen, was ihm lieber ist — die Liste wäre bequemer, die eine
-   Identität sauberer.
-4. **Die erste Sperr-Liste erzeugen und `pruefschluessel` setzen.** Solange
+3. **Klaus' zweite Kennung nachtragen.** `betreiberSchluessel` ist jetzt eine
+   Liste (Klaus' Entscheid 2026-08-18). Er muss am zweiten Gerät einmal lang aufs
+   © drücken — das Fenster zeigt dort „das ist nicht dein Brett" **und** die
+   Kennung dieses Geräts zum Kopieren. Die kommt dann in die Liste.
+4. **Die „Spore"-Verwechslung auflösen — offene Frage an Klaus.** Gemessen am
+   2026-08-18: was die Seite als „Meine Spore" anzeigt, ist der
+   **Pinnwand-Schlüssel** (`sbkim_nostr_test_priv`, localStorage). Die
+   **SBKIM-Spore** fürs Mycel (Modul 02, IndexedDB-Schublade `kimboard`) ist eine
+   **andere** Identität und entsteht erst beim ersten Netz-Verbinden — in einem
+   frischen Browser gibt es sie gar nicht („Es existiert noch keine Identität für
+   Slot 'main'"). **Die Sicherung deckt sie NICHT ab.** Zwei Wege: die
+   Beschriftung ehrlich machen, oder die Sicherung auf beide Identitäten
+   erweitern. Klaus hat die Frage gestellt, die Entscheidung steht aus.
+5. **Die erste Sperr-Liste erzeugen und `pruefschluessel` setzen.** Solange
    `sbkim/sperrliste.json` fehlt, steht er auf `null` und es wird nichts
    nachgeladen (bewusst: sichtbar abgeschaltet statt still wirkungslos).
-5. **Aus dem alten Brief unverändert offen:** Prüf-Auftrag an
+6. **Aus dem alten Brief unverändert offen:** Prüf-Auftrag an
    `family-project/impressum.html` Punkt 5 („Netz-Inhalte sind Ende-zu-Ende
    verschlüsselt" — trifft auf DMs und Gruppen zu, das **offene Brett** läuft im
    Klartext; erst belegen, dann formulieren, eigener PR). Dazu der
@@ -98,11 +105,11 @@ was Klaus wollte.
 ```bash
 npm install --no-save playwright-core     # einmalig je Container
 node tests/alle.mjs                       # ALLES — 28 Prüfungen
-bash tests/gegenprobe_moderation.sh       # 36 eingebaute Fehler, jeder MUSS fangen
+bash tests/gegenprobe_moderation.sh       # 40 eingebaute Fehler, jeder MUSS fangen
 ```
 
 Zuletzt: **alle 28 grün** (Rückgabewert 0, ohne Pipe gemessen), Gegenprobe
-**36 von 36**.
+**40 von 40**.
 
 ### Was die Gegenprobe diesmal gefunden hat — vier blinde Prüfungen
 
@@ -149,7 +156,7 @@ Alles headless grün, am Tablet ungeprüft:
   (`navigator.clipboard` braucht eine sichere Herkunft — auf GitHub Pages
   gegeben).
 
-`CACHE_VERSION` = `kimboard-v60`, nach dem Merge Hard-Reload.
+`CACHE_VERSION` = `kimboard-v62`, nach dem Merge Hard-Reload.
 
 **Und der wichtigste Handgriff für Klaus, der noch aussteht:** einmal
 🔑 **Schlüssel sichern** drücken und die Datei irgendwohin bringen, wo ein
