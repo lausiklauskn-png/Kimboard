@@ -110,13 +110,19 @@ korrekt `exit=1` zurück — hinter einer Pipe bekommst du den Rückgabewert von
   ist: der Egress-Proxy sperrt beide Relais-Namen (403, `connect_rejected`).
 
 - **Der private Schlüssel liegt als Klartext in `localStorage`** und ist nur über die
-  Sicherung im Studio zu retten (🔑, verschlüsselte Datei, PBKDF2 600k + AES-GCM). Der
-  Bereich steht **in beiden** Fenster-Varianten — wer seinen Schlüssel verloren hat, ist
-  am eigenen Brett ein Fremder, und im Betreiber-Fenster wäre der Knopf dann unerreichbar.
+  Sicherung zu retten (🔑, verschlüsselte Datei, PBKDF2 600k + AES-GCM). Sie hängt an
+  **drei** Stellen, und jede hat ihren Grund:
+  · am sichtbaren Knopf `#schluessel-sichern` neben „Meine Spore" — **für jeden Nutzer**,
+    nicht nur für Klaus. Jeder bekommt beim ersten Öffnen ungefragt einen Schlüssel;
+    läge die Sicherung nur hinter dem langen Druck aufs ©, wäre sie für alle außer dem
+    Betreiber unerreichbar. Dieser Weg zeigt **nur** den Schlüssel-Bereich, nie die
+    Sperr-Knöpfe (`smoke_studio` misst das).
+  · im Betreiber-Studio · und im „nicht dein Brett"-Fenster — denn wer seinen Schlüssel
+    verloren hat, ist am eigenen Brett ein Fremder.
   Seit die Betreiber-Kennung in `moderation.js` steht, kostet ein Verlust zusätzlich den
   Studio-Zugang, und die Reparatur wäre ein Commit.
 
-- **Gegenprobe:** `bash tests/gegenprobe_moderation.sh` baut 36 Fehler ein, jeder muss
+- **Gegenprobe:** `bash tests/gegenprobe_moderation.sh` baut 38 Fehler ein, jeder muss
   eine Probe umwerfen. Beim Bau des Studios hat sie **vier** blinde Prüfungen gefunden,
   alle vier in der Probe statt im Code: eine Fußzeile außerhalb des Sichtfelds (die
   Maus traf nie etwas), eine gefälschte Antwort ohne Freigabe-Kopf (der Browser verwarf

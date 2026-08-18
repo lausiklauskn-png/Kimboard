@@ -179,10 +179,23 @@ Protokoll, das eine Sitzung einmal abgeschrieben hätte.
 
 ### Der Schlüssel — sichern und zurückholen (gebaut 2026-08-18)
 
-Vierter Bereich im Studio, und er steht **in beiden Fenster-Varianten**. Das ist
-kein Versehen: wer seinen Schlüssel verloren hat, ist am eigenen Brett ein
-Fremder — läge der Zurückholen-Knopf nur im Betreiber-Fenster, wäre er genau
-dann unerreichbar, wenn man ihn braucht.
+Vierter Bereich im Studio — und zusätzlich an einem **sichtbaren Knopf neben
+„Meine Spore"**, den jeder Nutzer sieht.
+
+Das ist der Kern und keine Nebensache: der Schlüssel geht **jeden** an, der
+Kimboard benutzt. Er entsteht beim ersten Öffnen von selbst, ohne Anmeldung, und
+niemand merkt es. Wer später seine Browserdaten löscht, verliert Kontakte und
+die Möglichkeit, eigene Zettel zurückzuziehen — genau wie der Betreiber. Läge die
+Sicherung nur hinter dem langen Druck aufs ©, wäre sie für alle außer Klaus
+unerreichbar; das wäre ein Werkzeug, das nur der kennt, der es gebaut hat.
+
+Der sichtbare Weg zeigt **nur** den Schlüssel-Bereich — keine Sperr-Knöpfe, keine
+Relais-Verwaltung, keine Sperr-Liste. Ein fremder Nutzer soll hier seinen
+Schlüssel sichern, nicht versehentlich vor Betreiber-Werkzeugen sitzen.
+
+Im Studio steht der Bereich in **beiden** Fenster-Varianten: wer seinen Schlüssel
+verloren hat, ist am eigenen Brett ein Fremder — läge der Zurückholen-Knopf nur
+im Betreiber-Fenster, wäre er genau dann unerreichbar, wenn man ihn braucht.
 
 **Warum es das braucht.** Der private Schlüssel liegt als Klartext in
 `localStorage` (`sbkim_nostr_test_priv`). Das ist bei Nostr-Clients üblich und
@@ -291,4 +304,4 @@ nur für ein Relais gilt, wäre schlimmer als gar keins.
 | Studio-Zugang (langer Druck aufs ©) | `index.html`, letzter `<script>`-Block vor `</body>` |
 | Brücke aus dem Modul-Scope | `index.html`: `signiere`, `__kb.zettel/relaisListe/sperreJetzt` |
 | Proben | `tests/smoke_melden.mjs`, `tests/smoke_sperrliste.mjs`, `tests/smoke_studio.mjs` |
-| Gegenprobe | `tests/gegenprobe_moderation.sh` — 36 eingebaute Fehler, jeder muss die Proben umwerfen |
+| Gegenprobe | `tests/gegenprobe_moderation.sh` — 38 eingebaute Fehler, jeder muss die Proben umwerfen |

@@ -701,7 +701,33 @@
     bereichSchluessel(box);
   }
 
+  /* ---------- Nur der Schlüssel — für jeden Nutzer ------------------------
+   * Das Studio ist Klaus' Werkzeug und versteckt. Der SCHLÜSSEL geht aber jeden
+   * an, der Kimboard benutzt: er entsteht beim ersten Öffnen von selbst, ohne
+   * Anmeldung, und niemand merkt es. Wer später seine Browserdaten löscht,
+   * verliert damit seine Kontakte und die Möglichkeit, eigene Zettel
+   * zurückzuziehen — genauso wie der Betreiber.
+   *
+   * Läge die Sicherung nur hinter dem langen Druck aufs ©, wäre sie für alle
+   * anderen unerreichbar. Das wäre kein Versehen, sondern eine Falle: ein
+   * Werkzeug, das nur der kennt, der es gebaut hat.
+   *
+   * Deshalb derselbe Bereich, nur über einen sichtbaren Knopf in der Seite —
+   * eine Fassung, kein zweiter Bau.
+   * ---------------------------------------------------------------------- */
+  function nurSchluessel() {
+    if (offen) return;
+    var box = rahmen('🔑 Dein Schlüssel');
+    var hin = el('div', 'opacity:.8;line-height:1.5;margin-bottom:.2em');
+    hin.textContent = 'Kimboard hat dir beim ersten Öffnen einen Schlüssel gegeben — ohne Anmeldung, '
+      + 'ohne Konto. Er ist deine Kennung auf dem Brett: damit unterschreibst du deine Zettel, '
+      + 'und daran erkennen dich deine Kontakte wieder.';
+    box.appendChild(hin);
+    bereichSchluessel(box);
+  }
+
   window.KBStudio = {
+    nurSchluessel: nurSchluessel,
     umschalten: function () { if (offen) schliessen(); else oeffnen(); },
     oeffnen: oeffnen,
     schliessen: schliessen,
