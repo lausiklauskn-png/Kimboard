@@ -420,7 +420,14 @@
   <main>
   <div class="card">
     <div class="row" style="justify-content: space-between;">
-      <span class="pill">Meine Spore: <code id="me">…</code>
+      <!-- „Meine Kennung", nicht „Meine Spore" — geändert 2026-08-18 auf Klaus'
+           Wort. Hier steht der PINNWAND-Schlüssel (localStorage), mit dem Zettel
+           unterschrieben werden. Die SBKIM-Spore fürs Mycel (Modul 02) ist eine
+           ANDERE Identität in einer anderen Schublade und entsteht erst beim
+           ersten Netz-Verbinden. Beides „Spore" zu nennen hat gekostet: die
+           Schlüssel-Sicherung darunter rettet nur DIESE Kennung, nicht die
+           Spore — und das war bei der alten Beschriftung nicht zu erkennen. -->
+      <span class="pill">Meine Kennung: <code id="me" title="Deine Absender-Kennung auf dem Brett. Nicht zu verwechseln mit der SBKIM-Spore fürs Mycel — das ist eine eigene Identität.">…</code>
         <!-- Sichtbar für JEDEN Nutzer, nicht nur für den Betreiber. Der Schlüssel
              entsteht beim ersten Öffnen von selbst; wer seine Browserdaten löscht,
              verliert Kontakte und die Möglichkeit, eigene Zettel zurückzuziehen.
@@ -735,7 +742,12 @@ try {
 if (!activeRelays || !activeRelays.length) activeRelays = RELAY_POOL.slice(0, 5); // Default: 5 gestreut
 function saveRelays() { try { localStorage.setItem(LS_RELAYS, JSON.stringify(activeRelays)); } catch { /* */ } }
 
-// ---- Identität (gleiche Spore wie der Pinnwand-Test, falls vorhanden) ----
+/* ---- Identität: der PINNWAND-Schlüssel ------------------------------------
+ * Nicht die SBKIM-Spore (Modul 02) — die liegt in der IndexedDB-Schublade und
+ * entsteht erst beim ersten Netz-Verbinden. Dieser hier liegt in localStorage,
+ * signiert die Zettel und wird in der Seite als „Meine Kennung" angezeigt.
+ * Wer beides „Spore" nennt, verwechselt zwei Identitäten — und übersieht, dass
+ * die Schlüssel-Sicherung nur diese eine rettet. */
 const LS_KEY = 'sbkim_nostr_test_priv';
 let privHex = localStorage.getItem(LS_KEY);
 if (!privHex || privHex.length !== 64) {

@@ -830,6 +830,17 @@ try {
     const idx = readFileSync(join(ROOT, 'index.html'), 'utf8');
     ok(/assets\/studio\.js\?v=/.test(idx), 'der Zugang lädt studio.js mit Fassungs-Nummer');
 
+    /* Die Beschriftung darf nicht zurückrutschen. Was dort steht, ist der
+       PINNWAND-Schlüssel; die SBKIM-Spore (Modul 02) ist eine andere Identität
+       in einer anderen Schublade. Beides „Spore" zu nennen hat gekostet: die
+       Sicherung daneben rettet nur diese eine, und das war an der alten
+       Beschriftung nicht zu erkennen (Klaus 2026-08-18). */
+    ok(/Meine Kennung:/.test(idx), 'die Seite beschriftet es als „Meine Kennung"');
+    ok(!/Meine Spore:/.test(idx), '…und NICHT als „Meine Spore" (das ist eine andere Identität)');
+    const hilfe = readFileSync(join(ROOT, 'assets/hilfe.js'), 'utf8');
+    ok(/'me':/.test(hilfe), 'die Kennung hat eine Erklär-Blase');
+    ok(/SBKIM-Spore/.test(hilfe), '…die den Unterschied zur Spore ausdrücklich benennt');
+
     /* Der ausgelieferte Betreiber-Schlüssel muss BRAUCHBAR sein, wenn er
        überhaupt gesetzt ist. `null` ist erlaubt und richtig (ein Forker
        betreibt dieses Brett nicht) — aber ein Tippfehler wäre still: das

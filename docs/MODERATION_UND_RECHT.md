@@ -222,6 +222,17 @@ der Datei liegt; sie ist öffentlich. Beim Zurückholen wird **nach** dem
 Entschlüsseln geprüft, ob der Schlüssel wirklich zu dieser Kennung gehört —
 sonst schriebe ein Zufallstreffer Unsinn in den Speicher.
 
+**Was gesichert wird — und was nicht.** Die Seite zeigt oben „Meine Kennung"
+(bis zum 2026-08-18 hieß es „Meine Spore", und das war irreführend). Dort steht
+der **Pinnwand-Schlüssel** aus `localStorage`, mit dem Zettel unterschrieben
+werden — **genau den** rettet die Sicherung.
+
+Die **SBKIM-Spore** fürs Mycel (Modul 02) ist eine **andere** Identität: sie
+liegt in der IndexedDB-Schublade `kimboard` und entsteht erst beim ersten
+Netz-Verbinden — in einem frischen Browser gibt es sie gar nicht. **Sie ist von
+dieser Sicherung nicht erfasst.** Beides „Spore" zu nennen verdeckte genau das;
+darum heißt es jetzt, was es ist, und die Erklär-Blase benennt den Unterschied.
+
 **Der Schlüssel verlässt den Modul-Bereich nicht.** Die Brücke bekommt zwei
 Funktionen, die mit ihm arbeiten, nie ihn selbst. Wer sie aufruft, bekommt eine
 verschlüsselte Datei zurück, nichts Lesbares.
