@@ -177,6 +177,37 @@ am 2026-08-18). Aus Klaus' Browser ist die Leitung offen. Also fragt die App.
 Das ist keine Notlösung: die Auskunft ist dort ohnehin aktueller als in jedem
 Protokoll, das eine Sitzung einmal abgeschrieben hätte.
 
+### Der Schlüssel — sichern und zurückholen (gebaut 2026-08-18)
+
+Vierter Bereich im Studio, und er steht **in beiden Fenster-Varianten**. Das ist
+kein Versehen: wer seinen Schlüssel verloren hat, ist am eigenen Brett ein
+Fremder — läge der Zurückholen-Knopf nur im Betreiber-Fenster, wäre er genau
+dann unerreichbar, wenn man ihn braucht.
+
+**Warum es das braucht.** Der private Schlüssel liegt als Klartext in
+`localStorage` (`sbkim_nostr_test_priv`). Das ist bei Nostr-Clients üblich und
+für sich vertretbar — er verlässt das Gerät nie. Weh tut nicht der Diebstahl,
+sondern der **Verlust**: „Browserdaten löschen" wirft ihn weg, und danach ist
+man jemand anderes. Kontakte erkennen einen nicht mehr, eigene Zettel lassen
+sich nicht mehr zurückziehen, und seit der Betreiber-Schlüssel in
+`moderation.js` steht, geht auch das Studio nicht mehr auf — repariert würde das
+nur durch einen neuen Commit.
+
+**Wie.** Eine mit Passwort verschlüsselte Datei (PBKDF2-SHA256, 600.000 Runden,
+AES-GCM-256 — wie netzweit üblich, kein eigener Krypto-Einfall). Die Kennung
+steht im Klartext darin, damit man beim Zurückholen sieht, welche Identität in
+der Datei liegt; sie ist öffentlich. Beim Zurückholen wird **nach** dem
+Entschlüsseln geprüft, ob der Schlüssel wirklich zu dieser Kennung gehört —
+sonst schriebe ein Zufallstreffer Unsinn in den Speicher.
+
+**Der Schlüssel verlässt den Modul-Bereich nicht.** Die Brücke bekommt zwei
+Funktionen, die mit ihm arbeiten, nie ihn selbst. Wer sie aufruft, bekommt eine
+verschlüsselte Datei zurück, nichts Lesbares.
+
+**Die ehrliche Kehrseite:** ohne das Passwort ist die Datei auch für den
+Besitzer wertlos. Es gibt keine Hintertür, und es soll auch keine geben. Passwort
+und Datei gehören getrennt abgelegt.
+
 ### Ausblenden (gab es schon)
 
 Das ✕ nimmt eine Nachricht **auf diesem Gerät** weg, der 🔇-Knopf einen ganzen
@@ -256,7 +287,8 @@ nur für ein Relais gilt, wäre schlimmer als gar keins.
 | Lokal ausblenden / stummschalten | `index.html`: `hideQuestion`, `sperreAbsender`, `openAusgeblendet` |
 | Heim-Relais | `index.html`: `HOME_RELAY`, `sendSockets()` vs. `liveSockets()` |
 | Studio (Betreiber-Werkzeug) | `assets/studio.js` |
+| Schlüssel sichern / zurückholen | `index.html`: `sichereSchluessel`, `stelleSchluesselWiederHer` · `assets/studio.js`: `bereichSchluessel` |
 | Studio-Zugang (langer Druck aufs ©) | `index.html`, letzter `<script>`-Block vor `</body>` |
 | Brücke aus dem Modul-Scope | `index.html`: `signiere`, `__kb.zettel/relaisListe/sperreJetzt` |
 | Proben | `tests/smoke_melden.mjs`, `tests/smoke_sperrliste.mjs`, `tests/smoke_studio.mjs` |
-| Gegenprobe | `tests/gegenprobe_moderation.sh` — 29 eingebaute Fehler, jeder muss die Proben umwerfen |
+| Gegenprobe | `tests/gegenprobe_moderation.sh` — 36 eingebaute Fehler, jeder muss die Proben umwerfen |

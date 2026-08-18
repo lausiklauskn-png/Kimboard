@@ -24,8 +24,10 @@ genau diese Drehung hat nebenbei die Blockade gelöst, an der die Sache seit dem
 | **Zugang**: langer Druck ~1,5 s aufs © | ✅ gebaut |
 | **Sperren** aus dem Studio + signierte Liste erzeugen | ✅ gebaut, Rundlauf bewiesen |
 | **Endgültig entfernen** per NIP-86 | ✅ gebaut — **wirkt aber nur, wenn das Relais es kann** |
-| Probe `tests/smoke_studio.mjs` | ✅ 64 Prüfungen |
-| Gegenprobe erweitert | ✅ 29 Fehler, alle gefangen |
+| **Schlüssel sichern / zurückholen** (verschlüsselte Datei) | ✅ gebaut, Rundlauf bewiesen |
+| Betreiber-Kennung eingetragen | ✅ `7dee8dd9…d6a0` |
+| Probe `tests/smoke_studio.mjs` | ✅ 79 Prüfungen |
+| Gegenprobe erweitert | ✅ 36 Fehler, alle gefangen |
 
 ## Schritt 0 ist beantwortet — von der App, nicht von einer Sitzung
 
@@ -59,14 +61,17 @@ was Klaus wollte.
    2-Minuten-Cron aus dem Skill `auto-deploy-einrichten`). **Das ist ein
    Richtungsentscheid — Klaus fragen, nicht wählen.** Ein Software-Wechsel am
    laufenden Relais ist schwer umkehrbar.
-3. **`betreiberSchluessel` eintragen.** Ohne ihn gibt es kein Studio. Klaus
-   bekommt die fertige Zeile im Studio selbst zum Kopieren (langer Druck aufs ©
-   → „📋 Zeile kopieren"). Achtung, das ist eine echte Grenze: die Kennung hängt
-   am **Browser**, nicht an der Person. Auf dem zweiten Gerät ist sie eine
-   andere, und dort geht das Studio dann nicht auf. Ob das reicht oder ob
-   mehrere Kennungen zugelassen werden sollen, weiß erst Klaus, wenn er es
-   benutzt hat.
-4. **Aus dem alten Brief unverändert offen:** Prüf-Auftrag an
+3. **Das zweite Gerät.** Die Betreiber-Kennung ist eingetragen — sie hängt aber
+   am **Browser**, nicht an der Person. Auf Klaus' zweitem Gerät (DeX vs. Tablet
+   sind getrennte Browser) geht das Studio deshalb nicht auf. Zwei Wege, beide
+   vertretbar: den Schlüssel per Sicherungs-Datei aufs zweite Gerät holen
+   (funktioniert heute schon), oder `betreiberSchluessel` zu einer **Liste**
+   machen. Klaus fragen, was ihm lieber ist — die Liste wäre bequemer, die eine
+   Identität sauberer.
+4. **Die erste Sperr-Liste erzeugen und `pruefschluessel` setzen.** Solange
+   `sbkim/sperrliste.json` fehlt, steht er auf `null` und es wird nichts
+   nachgeladen (bewusst: sichtbar abgeschaltet statt still wirkungslos).
+5. **Aus dem alten Brief unverändert offen:** Prüf-Auftrag an
    `family-project/impressum.html` Punkt 5 („Netz-Inhalte sind Ende-zu-Ende
    verschlüsselt" — trifft auf DMs und Gruppen zu, das **offene Brett** läuft im
    Klartext; erst belegen, dann formulieren, eigener PR). Dazu der
@@ -93,11 +98,11 @@ was Klaus wollte.
 ```bash
 npm install --no-save playwright-core     # einmalig je Container
 node tests/alle.mjs                       # ALLES — 28 Prüfungen
-bash tests/gegenprobe_moderation.sh       # 29 eingebaute Fehler, jeder MUSS fangen
+bash tests/gegenprobe_moderation.sh       # 36 eingebaute Fehler, jeder MUSS fangen
 ```
 
 Zuletzt: **alle 28 grün** (Rückgabewert 0, ohne Pipe gemessen), Gegenprobe
-**29 von 29**.
+**36 von 36**.
 
 ### Was die Gegenprobe diesmal gefunden hat — vier blinde Prüfungen
 
@@ -144,13 +149,19 @@ Alles headless grün, am Tablet ungeprüft:
   (`navigator.clipboard` braucht eine sichere Herkunft — auf GitHub Pages
   gegeben).
 
-`CACHE_VERSION` = `kimboard-v59`, nach dem Merge Hard-Reload.
+`CACHE_VERSION` = `kimboard-v60`, nach dem Merge Hard-Reload.
+
+**Und der wichtigste Handgriff für Klaus, der noch aussteht:** einmal
+🔑 **Schlüssel sichern** drücken und die Datei irgendwohin bringen, wo ein
+gelöschter Browser sie nicht mitnimmt. Bis dahin hängt seine Identität an einem
+einzigen `localStorage`-Eintrag.
 
 ## Kurz-Karte
 
 | Thema | Fundstelle |
 |---|---|
 | Studio | `assets/studio.js` |
+| Schlüssel sichern / zurückholen | `index.html`: `sichereSchluessel`, `stelleSchluesselWiederHer` |
 | Zugang (langer Druck aufs ©) | `index.html`, letzter `<script>`-Block vor `</body>` |
 | Brücke aus dem Modul-Scope | `index.html`: `signiere`, `__kb.zettel/relaisListe/sperreJetzt` |
 | Betreiber-Ausweis | `assets/config/moderation.js`: `betreiberSchluessel` |

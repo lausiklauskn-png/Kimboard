@@ -552,6 +552,78 @@ try {
     await b.ctx.close();
   }
 
+  /* ═══ 7b. Schlüssel sichern und zurückholen ═══
+     Der private Schlüssel liegt als Klartext in localStorage und war bis
+     2026-08-18 unrettbar: „Browserdaten löschen" hieß neue Identität, und seit
+     der Betreiber-Schlüssel im Repo steht, zusätzlich kein Studio mehr.
+     Geprüft wird der volle Rundlauf — sichern, wegwerfen, zurückholen. */
+  {
+    const { p, ctx } = await neueSeite(browser, { mod: {}, nip11: null });
+    const vorher = await meine(p);
+
+    // Die Datei darf den Schlüssel NICHT lesbar enthalten.
+    const datei = await p.evaluate(() => window.__kb.sichereSchluessel('probe-passwort-123'));
+    const geheimnis = await p.evaluate(() => localStorage.getItem('sbkim_nostr_test_priv'));
+    ok(datei && datei.art === 'kimboard-schluessel', 'die Sicherung ist eine Kimboard-Schlüsseldatei');
+    ok(datei.runden === 600000 && datei.kdf === 'PBKDF2-SHA256',
+      '…mit dem netzweit üblichen Verfahren (600.000 Runden)');
+    ok(datei.kennung === vorher, '…und nennt die Kennung, zu der sie gehört');
+    ok(JSON.stringify(datei).indexOf(geheimnis) < 0,
+      'der private Schlüssel steht NICHT lesbar in der Datei');
+
+    // Zu kurzes Passwort wird abgewiesen.
+    const kurzPw = await p.evaluate(() => window.__kb.sichereSchluessel('kurz')
+      .then(() => null).catch((e) => e.message));
+    ok(typeof kurzPw === 'string' && /8 Zeichen/.test(kurzPw), 'ein zu kurzes Passwort wird abgewiesen');
+
+    // Falsches Passwort: Fehler, und der Speicher bleibt UNBERÜHRT.
+    const falsch = await p.evaluate((d) => window.__kb.stelleSchluesselWiederHer(d, 'falsch-falsch')
+      .then(() => null).catch((e) => e.message), datei);
+    ok(typeof falsch === 'string' && /Falsches Passwort/.test(falsch), 'ein falsches Passwort wird erkannt');
+    ok(await p.evaluate((g) => localStorage.getItem('sbkim_nostr_test_priv') === g, geheimnis),
+      '…und der Speicher bleibt dabei unberührt');
+
+    // Eine Datei, deren Kennung nicht zum Inhalt passt, wird verworfen.
+    const verbogen = await p.evaluate(([d]) => {
+      const kopie = JSON.parse(JSON.stringify(d));
+      kopie.kennung = 'f'.repeat(64);
+      return window.__kb.stelleSchluesselWiederHer(kopie, 'probe-passwort-123')
+        .then(() => null).catch((e) => e.message);
+    }, [datei]);
+    ok(typeof verbogen === 'string' && /passen nicht zusammen/.test(verbogen),
+      'eine Datei mit falscher Kennung wird verworfen');
+
+    // Etwas anderes als eine Schlüsseldatei ebenso.
+    const fremd = await p.evaluate(() => window.__kb.stelleSchluesselWiederHer({ art: 'irgendwas' }, 'x')
+      .then(() => null).catch((e) => e.message));
+    ok(typeof fremd === 'string' && /keine Kimboard-Schlüsseldatei/.test(fremd),
+      'eine fremde Datei wird abgewiesen');
+
+    /* DER RUNDLAUF: Schlüssel wegwerfen (wie „Browserdaten löschen"), aus der
+       Datei zurückholen, neu laden — und es muss wieder dieselbe Kennung sein. */
+    await p.evaluate(() => localStorage.removeItem('sbkim_nostr_test_priv'));
+    await p.evaluate((d) => window.__kb.stelleSchluesselWiederHer(d, 'probe-passwort-123'), datei);
+    await p.reload({ waitUntil: 'domcontentloaded' });
+    await p.waitForFunction(() => !!(window.__kb && window.__kb.dispatch), null, { timeout: 20000 });
+    const nachher = await meine(p);
+    ok(nachher === vorher, 'RUNDLAUF: nach Verlust und Zurückholen ist es wieder dieselbe Kennung');
+    await ctx.close();
+  }
+
+  /* ═══ 7c. Der Zurückholen-Weg steht auch für „Fremde" bereit ═══
+     Wer seinen Schlüssel verloren hat, ist am eigenen Brett ein Fremder. Läge
+     der Knopf nur im Betreiber-Fenster, wäre er genau dann unerreichbar, wenn
+     man ihn braucht. */
+  {
+    const { p, ctx } = await neueSeite(browser, { mod: { betreiberSchluessel: 'b'.repeat(64) }, nip11: null });
+    await studioAuf(p);
+    const t = await text(p);
+    ok(/nicht dein Brett/.test(t), 'mit fremdem Schlüssel: „nicht dein Brett"');
+    ok(/Dein Schlüssel/.test(t), '…aber der Schlüssel-Bereich ist trotzdem da');
+    ok(/zurückholen/i.test(t), '…samt Zurückholen-Knopf (sonst wäre er nach Verlust unerreichbar)');
+    await ctx.close();
+  }
+
   /* ═══ 8. Fail-soft ═══ */
   {
     const { p, ctx, errs } = await neueSeite(browser, { mod: {}, nip11: null });
