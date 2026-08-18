@@ -276,6 +276,57 @@ nur für ein Relais gilt, wäre schlimmer als gar keins.
   Der Weg dahin ist dann eine Entscheidung, keine Frage mehr: entweder ein
   Wechsel der Relais-Software, oder der ursprünglich geplante kleine Dienst auf
   dem Server, der die Sperr-Liste im Takt liest.
+### Die eine offene Frage — und die zwei Wege, sie zu beantworten
+
+Klaus am 2026-08-18: *„Was benötigst Du jetzt noch, damit wir sehen können, ob wir
+auf dem Relais family-projekt.de Daten endgültig löschen können?"*
+
+Es fehlt **eine einzige Auskunft**: kann `relay.family-projekt.de` Verwaltungs-
+Aufträge annehmen (NIP-86)?
+
+**Weg 1 — im Studio nachsehen (10 Sekunden, nichts zu installieren).**
+Langer Druck aufs © → Bereich „📡 Deine Relais". Dort steht Software, Fassung
+und ob Verwaltung möglich ist. Drei mögliche Ausgänge:
+
+| Was dort steht | Was es heißt |
+|---|---|
+| `strfry` · ✔ Verwaltung möglich | fertig — der 🗑-Knopf wirkt sofort |
+| `nostr-rs-relay` · ✖ keine Verwaltung | erwartbar; dann Weiche unten |
+| „keine Auskunft (CORS oder offline)" | die App kommt nicht heran → Weg 2 |
+
+Der dritte Ausgang ist kein Fehler der App: viele Relais geben ihre
+Selbstauskunft nicht an fremde Seiten heraus (fehlender CORS-Kopf). Dann sagt
+das Studio ehrlich „keine Auskunft", statt etwas zu behaupten.
+
+**Weg 2 — einmal auf dem Server nachsehen.** Nur nötig, wenn Weg 1 nichts
+sagt. Der Befehl gehört auf den **Hetzner-Cloud-Server**, nicht aufs Tablet
+(dort läuft Termux, kein Server). Er **liest nur** und ändert nichts:
+
+```bash
+ssh root@167.233.204.72 'echo "== Container =="; docker ps --format "{{.Names}} | {{.Image}} | {{.Status}}"; echo; echo "== Selbstauskunft des Relais =="; for p in 8080 7000 7777 8008; do echo "-- Port $p"; curl -sS -m 4 -H "Accept: application/nostr+json" http://127.0.0.1:$p/ | head -c 600; echo; done; echo; echo "== Speicher =="; docker exec relay sh -c "find / -xdev \( -name "*.db" -o -name "*.sqlite*" \) 2>/dev/null | head -20" 2>/dev/null || echo "(Container heisst nicht relay — siehe Liste oben)"'
+```
+
+Was die Antwort trägt: die **Software samt Fassung**, ob **ein oder zwei**
+Relais laufen (zwei Namen können auf dasselbe zeigen), und **wo der Speicher
+liegt**.
+
+**Danach steht die Weiche**, und sie ist ein Richtungsentscheid für Klaus, kein
+Selbstläufer:
+
+- **Relais-Software wechseln** (`strfry` kann NIP-86). Dann wirkt der Knopf im
+  Studio unmittelbar, und es braucht keinen zusätzlichen Dienst. Preis: ein
+  Wechsel am laufenden Relais ist schwer umkehrbar, und der bestehende Speicher
+  muss mitgenommen oder aufgegeben werden.
+- **Kleiner Dienst auf dem Server**, der die Sperr-Liste in festem Takt liest
+  und die genannten Ereignisse aus dem Speicher nimmt (Muster: der
+  2-Minuten-Cron aus dem Skill `auto-deploy-einrichten`). Preis: ein Teil mehr,
+  der laufen muss — dafür bleibt die Relais-Software unangetastet.
+
+**Was in beiden Fällen schon steht:** der Melde-Weg (Art. 16 DSA), die
+Sperr-Liste, und das Studio, das beides bedient. Was fehlt, ist allein die
+letzte Meile — aus „in jedem Kimboard unsichtbar" ein „aus dem Speicher
+entfernt" zu machen, und zwar dort, wo Klaus tatsächlich Betreiber ist.
+
 - **Die erzeugte Liste muss von Hand ins Repo.** Das Studio signiert sie und
   legt sie als Datei hin; einchecken muss Klaus. Ein Weg, der sie direkt
   veröffentlicht, bräuchte einen Server mit Token (wie im
