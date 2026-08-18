@@ -53,7 +53,13 @@ was Klaus wollte.
 
 ## Was als Nächstes ansteht
 
-1. **Klaus' Sichttest abwarten und die Relais-Auskunft ablesen.** Erst danach
+1. ~~**Klaus' Sichttest abwarten und die Relais-Auskunft ablesen.**~~
+   **✅ ERLEDIGT 2026-08-18:** `nostr-rs-relay` 0.10.0, **kein NIP-86**, EIN
+   Relais unter zwei Namen, Datenbank `/opt/relay/db/nostr.db` (SQLite/WAL,
+   ~26 MB), `restricted_writes: false`. Volle Aufstellung samt Nebenbefunden in
+   `docs/MODERATION_UND_RECHT.md` § 6. Die Weiche unten ist damit
+   **entscheidbar**, und Weg 2 ist konkret baubar.
+   *(ursprünglicher Text)* Erst danach
    ist die Entscheidung unter 2. eine Entscheidung und keine Vermutung. Was er
    sieht, gehört in `docs/MODERATION_UND_RECHT.md` § 6.
 2. **Dann die Weiche für „wirklich weg":** entweder das Heim-Relais auf eine
