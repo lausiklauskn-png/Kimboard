@@ -76,18 +76,19 @@ probe "Zettel- und Absender-Kennungen bleiben getrennt" \
   'ereignisse="$(abschnitt ereignisse)"' \
   'ereignisse="$(printf "%s" "$roh" | grep -oE "'"'"'[0-9a-fA-F]{64}'"'"'" | tr -d "'"'"'" | tr A-F a-f | sort -u)"'
 
-# Ein Beispiel im Kommentar ist keine Sperre.
-probe "Kommentar-Beispiele zaehlen nicht mit" \
+# Ein auskommentierter Eintrag ist keine Sperre. Er traegt einen Doppelpunkt
+# wie ein echter — nur der Abschnitts-Schnitt haelt ihn draussen.
+probe "auskommentierte Eintraege zaehlen nicht mit" \
   ersetze tools/relais-wache.sh \
-  '    | sed -n "/${1}:[[:space:]]*{/,/^[[:space:]]*}/p" \' \
-  '    | cat \'
+  '      teil="${flach#*ereignisse}"' \
+  '      teil="$flach"'
 
 # Nur am TEXT-Schema messbar: bei BLOB liest SQLite `x'ABCD'` selbst
 # schreibweise-unabhängig. Genau daran war die Probe beim ersten Bau blind.
 probe "GROSS geschriebene Kennungen werden normalisiert" \
   ersetze tools/relais-wache.sh \
-  "    | tr 'A-F' 'a-f' \\" \
-  "    | cat \\"
+  "    | tr 'A-F' 'a-f'" \
+  "    | cat"
 
 # Lieber abbrechen als eine Null melden, die „falsch gesucht" heisst.
 probe "eine fehlende Datenbank bricht ab" \
@@ -129,6 +130,26 @@ probe "die leere Liste wird als solche benannt" \
   ersetze tools/relais-wache.sh \
   '  sagen "Die Sperr-Liste ist leer — es gäbe nichts zu entfernen."' \
   '  sagen "Nichts gefunden."'
+
+# Die zweite Quelle. Ohne sie bliebe genau das liegen, was Klaus zuletzt im
+# Studio gesperrt hat — in Kimboard unsichtbar, auf dem Server weiter da.
+probe "die signierte Liste wird ueberhaupt gelesen" \
+  ersetze tools/relais-wache.sh \
+  'roh_json="$(hole "$LISTE_JSON")"' \
+  'roh_json=""'
+
+probe "beide Listen werden VEREINIGT, nicht ersetzt" \
+  ersetze tools/relais-wache.sh \
+  '  { kennungen "$roh_js" "$1"; kennungen "$roh_json" "$1"; } | sort -u' \
+  '  { kennungen "$roh_js" "$1"; } | sort -u'
+
+# DER GEFÄHRLICHE. Ohne den Doppelpunkt-Anker liest das Werkzeug den Umschlag
+# des signierten Ereignisses mit — bei alphabetisch sortierten Feldern wäre das
+# Klaus' EIGENER Schlüssel als gesperrter Absender.
+probe "der UMSCHLAG wird nicht als Sperre gelesen" \
+  ersetze tools/relais-wache.sh \
+  '    | grep -oE "[0-9a-fA-F]{64}\\\\?[\"'"'"'][[:space:]]*:" \' \
+  '    | grep -oE "[\"'"'"'][0-9a-fA-F]{64}[\"'"'"']" \'
 
 echo
 echo "── und jetzt der scharfe Gang ──"

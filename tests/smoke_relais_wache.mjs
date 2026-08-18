@@ -100,10 +100,11 @@ ${absender.map((k) => `      '${k}': { grund: 'Probe', seit: '2026-08-18' },`).j
   };
 })();`;
 
-function lauf(dbPfad, listePfad) {
+function lauf(dbPfad, listePfad, jsonPfad) {
   try {
     const aus = execFileSync('bash', [SKRIPT], {
-      env: { ...process.env, PATH: binDir + ':' + process.env.PATH, DB: dbPfad, LISTE: listePfad },
+      env: { ...process.env, PATH: binDir + ':' + process.env.PATH, DB: dbPfad,
+             LISTE: listePfad, LISTE_JSON: jsonPfad || '' },
       encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']
     });
     return { code: 0, aus };
@@ -177,10 +178,10 @@ try {
     const l = join(arbeit, 'kommentar.js');
     writeFileSync(l, listeJs([], []).replace(
       "stand: '2026-08-18',",
-      "stand: '2026-08-18',\n    /* '" + e1 + "' steht NUR im Kommentar */"));
+      "stand: '2026-08-18',\n    /* '" + e1 + "': { grund: 'auskommentiert' }, */"));
     const r = lauf(db1, l);
     ok(/Sperr-Liste ist leer/.test(r.aus),
-      'eine Kennung, die nur im Kommentar steht, zählt nicht');
+      'ein AUSKOMMENTIERTER Eintrag zählt nicht (steht vor `ereignisse`)');
   }
 
   /* ═══ 6. Der zweite Schema-Zuschnitt: Kennungen als Zeichenkette ═══
@@ -236,6 +237,122 @@ try {
     const r2 = lauf(fremd, l);
     ok(r2.code === 2, 'fremdes Schema: Abbruch statt einer Null');
     ok(/nicht gefunden/.test(r2.aus), '…mit der Angabe, was fehlt');
+  }
+
+  /* ═══ 7b. DIE ZWEITE LISTE — die signierte, im JSON-Zuschnitt ═══
+     Klaus' Sperren entstehen im Studio und landen als SIGNIERTES Ereignis in
+     `sbkim/sperrliste.json`. Dort steht die Liste als JSON in EINER Zeile mit
+     maskierten Anführungszeichen — ein zeilenweises `sed` fand darin gar
+     nichts und hätte eine Null gemeldet, die wie „nichts gesperrt" aussieht.
+     Der Zettel wäre in jedem Kimboard unsichtbar und auf dem Server weiter da.
+     (Befund 2026-08-18, beim allerersten echten Eintrag.) */
+  {
+    const j = join(arbeit, 'signiert.json');
+    writeFileSync(j, JSON.stringify({
+      pubkey: hex('klaus'), created_at: 1787087777, kind: 30078,
+      tags: [['d', 'kimboard-sperrliste']],
+      content: JSON.stringify({
+        fassung: 1, stand: '2026-08-18',
+        ereignisse: { [e1]: { grund: 'Testsperrung', seit: '2026-08-18' } },
+        absender: {}
+      }),
+      id: hex('id'), sig: hex('sig') + hex('sig2')
+    }, null, 2));
+
+    const leer = join(arbeit, 'leer2.js');
+    writeFileSync(leer, listeJs([], []));
+    const vorher = summe(db1);
+
+    /* Nur die signierte Liste trägt etwas — die eingebackene ist leer. */
+    const r = lauf(db1, leer, j);
+    ok(/Betroffen sind 1 von 4/.test(r.aus),
+      'die SIGNIERTE Liste (JSON, maskierte Anführungszeichen) wird gelesen');
+    ok(/Signiert:/.test(r.aus), '…und in der Ausgabe als eigene Quelle benannt');
+    ok(summe(db1) === vorher, '…ohne die Datenbank anzufassen');
+
+    /* Beide zusammen: die Kennungen werden vereinigt, nicht ersetzt. */
+    const eine = join(arbeit, 'eine.js');
+    writeFileSync(eine, listeJs([e3], []));
+    const r2 = lauf(db1, eine, j);
+    ok(/Betroffen sind 2 von 4/.test(r2.aus),
+      'beide Listen zusammen: die Kennungen werden VEREINIGT');
+
+    /* Dieselbe Kennung in beiden darf nicht doppelt zählen. */
+    const gleich = join(arbeit, 'gleich.js');
+    writeFileSync(gleich, listeJs([e1], []));
+    const r3 = lauf(db1, gleich, j);
+    ok(/Betroffen sind 1 von 4/.test(r3.aus),
+      '…dieselbe Kennung in beiden zählt nur EINMAL');
+
+    /* Fehlt die signierte Liste, läuft es mit der eingebackenen weiter. */
+    const r4 = lauf(db1, eine, join(arbeit, 'gibtesnicht.json'));
+    ok(r4.code === 0 && /Betroffen sind 1 von 4/.test(r4.aus),
+      'fehlt die signierte Liste, trägt die eingebackene allein');
+  }
+
+  /* ═══ 7b2. DER UMSCHLAG DARF NICHT MITGELESEN WERDEN ═══
+     Das signierte Ereignis trägt neben der Liste noch `pubkey`, `id` und
+     `sig`. Die sind WERTE, keine gesperrten Kennungen. Der erste Entwurf las
+     „alles nach dem Wort absender" und fing damit die `id` mit ein.
+
+     Hier steht der Fall, der es gefährlich macht: die Felder ALPHABETISCH
+     sortiert — so gibt es jedes gängige JSON-Werkzeug aus. Dann steht `pubkey`
+     NACH `content`, und ein Werkzeug, das den Umschlag mitliest, hielte KLAUS'
+     EIGENEN SCHLÜSSEL für einen gesperrten Absender. Ein scharfer Lauf hätte
+     alles entfernt, was er je geschrieben hat. */
+  {
+    const klaus = hex('klaus-echt');
+    const inhalt = JSON.stringify({
+      fassung: 1, stand: '2026-08-18',
+      ereignisse: { [e1]: { grund: 'Testsperrung', seit: '2026-08-18' } },
+      absender: {}
+    });
+    /* Alphabetisch: content · created_at · id · kind · pubkey · sig · tags */
+    const alpha = join(arbeit, 'alphabetisch.json');
+    writeFileSync(alpha, JSON.stringify({
+      content: inhalt, created_at: 1787087777, id: hex('id2'), kind: 30078,
+      pubkey: klaus, sig: hex('s1') + hex('s2'), tags: [['d', 'kimboard-sperrliste']]
+    }, null, 2));
+
+    const db = join(arbeit, 'umschlag.db');
+    baueDb(db, [
+      { id: e1, autor: klaus, text: 'der gesperrte' },
+      { id: hex('u2'), autor: klaus, text: 'harmlos, von Klaus' },
+      { id: hex('u3'), autor: klaus, text: 'auch harmlos' }
+    ]);
+    const leer = join(arbeit, 'leer4.js');
+    writeFileSync(leer, listeJs([], []));
+    const r = lauf(db, leer, alpha);
+
+    ok(/Betroffen sind 1 von 3/.test(r.aus),
+      'DER UMSCHLAG WIRD NICHT MITGELESEN — nur der eine gesperrte Zettel');
+    ok(/über Absender-Kennungen: 0/.test(r.aus),
+      '…KLAUS\' EIGENER SCHLÜSSEL gilt NICHT als gesperrter Absender');
+    ok(!new RegExp(hex('id2').slice(0, 16)).test(r.aus),
+      '…und die Kennung des Ereignisses selbst taucht nirgends auf');
+  }
+
+  /* ═══ 7c. Die ECHTE Datei aus diesem Repo ═══
+     Nicht nur eine nachgebaute — die, die wirklich ausgeliefert wird. Sonst
+     prüfte die Probe ein Muster und nicht den Ernstfall. */
+  {
+    const echt = join(ROOT, 'sbkim', 'sperrliste.json');
+    const roh = JSON.parse(readFileSync(echt, 'utf8'));
+    const inhalt = JSON.parse(roh.content);
+    const ids = Object.keys(inhalt.ereignisse || {});
+    ok(ids.length > 0, 'die echte sbkim/sperrliste.json trägt mindestens einen Eintrag');
+
+    const db = join(arbeit, 'echt.db');
+    baueDb(db, [
+      { id: ids[0], autor: hex('x'), text: 'der gesperrte' },
+      { id: hex('harmlos'), autor: hex('x'), text: 'ein anderer' }
+    ]);
+    const leer = join(arbeit, 'leer3.js');
+    writeFileSync(leer, listeJs([], []));
+    const r = lauf(db, leer, echt);
+    ok(/Betroffen sind 1 von 2/.test(r.aus),
+      'die ECHTE signierte Liste findet genau ihren Eintrag');
+    ok(/Stand:/.test(r.aus), '…und ihr Stand wird angezeigt');
   }
 
   /* ═══ 8. Der Nachsehen-Gang ist die VORGABE ═══
