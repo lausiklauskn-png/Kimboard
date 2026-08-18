@@ -78,7 +78,7 @@
      * steht. Solange sie fehlt, gibt es kein Studio (der lange Druck tut dann
      * schlicht nichts). Ein Forker trägt seine eigene ein — oder lässt sie
      * leer, wenn seine App kein Studio haben soll. */
-    betreiberSchluessel: null,
+    betreiberSchluessel: '7dee8dd9088022e0a9be3667ad6ed3551a68c263ce557f34907485075d2fd6a0',
 
     /* Öffentlicher Schlüssel (Nostr, 64 Hex-Zeichen), mit dem eine nachgeladene
      * Liste signiert sein MUSS. Ohne diesen Wert wird nichts nachgeladen —

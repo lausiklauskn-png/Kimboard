@@ -224,6 +224,11 @@ probe "die Software des Relais wird wirklich genannt" smoke_studio.mjs \
   "            r.software ? ('Software: ' + r.software.replace(/^.*\\//, '')) : 'Software: unbekannt'," \
   "            'Software: unbekannt',"
 
+probe "ein unbrauchbarer Betreiber-Schlüssel fällt auf" smoke_studio.mjs \
+  ersetze assets/config/moderation.js \
+  "    betreiberSchluessel: '7dee8dd9088022e0a9be3667ad6ed3551a68c263ce557f34907485075d2fd6a0'," \
+  "    betreiberSchluessel: '7DEE8DD9088022E0A9BE3667AD6ED3551A68C263CE557F34907485075D2FD6A',"
+
 probe "studio.js bleibt aus dem Offline-Vorrat heraus" smoke_studio.mjs \
   ersetze sw.js \
   '  "./assets/config/sperrliste.js",' \
