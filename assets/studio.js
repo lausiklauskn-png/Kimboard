@@ -209,6 +209,13 @@
           e.textContent = 'Dieses Relais nimmt keine Aufträge entgegen. Endgültiges Entfernen '
             + 'geht dort nur auf dem Server selbst. Sperren wirkt trotzdem — in jedem Kimboard.';
           z.appendChild(e);
+        } else if (!r.ok) {
+          /* Nicht dasselbe wie ein Nein — und darf auch nicht so klingen. */
+          var u = el('div', 'opacity:.72;margin-top:.25em;line-height:1.45');
+          u.textContent = 'Ob dieses Relais Aufträge annimmt, weiß ich nicht: es gibt seine '
+            + 'Selbstauskunft nicht an diese Seite heraus. Das ist kein Fehler und kein Nein — '
+            + 'nur eine fehlende Freigabe. Sperren wirkt davon unberührt.';
+          z.appendChild(u);
         }
         liste.appendChild(z);
       });
@@ -353,13 +360,53 @@
   function entfernenDialog(ev, zeile) {
     var ziele = verwaltbareRelais();
     if (!ziele.length) {
-      alert(
-        'Keines deiner Relais nimmt Aufträge entgegen (NIP-86).\n\n'
-        + 'Das heißt nicht, dass nichts geht — es heißt nur, dass es nicht von hier aus geht. '
-        + 'Auf deinem eigenen Server kannst du den Zettel weiterhin aus dem Speicher nehmen; '
-        + 'oben unter „Deine Relais" steht, welche Software dort läuft.\n\n'
-        + 'Sperren wirkt unabhängig davon — in jedem Kimboard, sofort.'
-      );
+      /* HIER GENAU HINSEHEN — der Unterschied ist nicht kosmetisch.
+       * „Kann kein NIP-86" und „hat nicht geantwortet" sind zwei verschiedene
+       * Dinge, und nur das erste ist eine Aussage über das Relais. Das zweite
+       * ist eine Aussage über UNS: die Selbstauskunft kam nicht durch (meist
+       * ein fehlender Freigabe-Kopf am Server, siehe relaisAuskunft).
+       *
+       * Der erste Entwurf schrieb in beiden Fällen „Keines deiner Relais nimmt
+       * Aufträge entgegen". Das war eine Behauptung ohne Beleg — genau der
+       * Fehler, den Sages Tafel meint: „nicht gefunden" ist erst dann eine
+       * Aussage, wenn man überall hineingesehen hat. Klaus ist am 2026-08-18
+       * darüber gestolpert, weil sein eigenes Relais gar nicht antwortet. */
+      var stumm = relaisStand.filter(function (r) { return !r.ok; });
+      var nein = relaisStand.filter(function (r) { return r.ok && !r.kannVerwaltung; });
+
+      var text;
+      if (!relaisStand.length) {
+        text = 'Die Relais sind noch nicht abgefragt. Schließ das Fenster, öffne es neu '
+          + 'und warte, bis unter „📡 Deine Relais" etwas steht.';
+      } else if (!nein.length && stumm.length) {
+        /* Der ehrliche Fall: wir WISSEN es nicht. */
+        text = 'Ich weiß nicht, ob deine Relais Aufträge annehmen — sie haben ihre '
+          + 'Selbstauskunft nicht herausgegeben:\n\n'
+          + stumm.map(function (r) { return '· ' + r.url + ' — ' + r.grund; }).join('\n')
+          + '\n\nDas ist KEIN Fehler des Relais und sagt auch nicht, dass es nicht ginge. '
+          + 'Es heißt nur, dass diese Seite nicht nachsehen darf (meist ein fehlender '
+          + 'Freigabe-Kopf am Server). Solange das so ist, schicke ich lieber gar nichts, '
+          + 'als einen Auftrag ins Ungewisse zu senden und dir Erfolg zu melden.';
+      } else if (nein.length && !stumm.length) {
+        /* Der belegte Fall: sie haben geantwortet und sagen nein. */
+        text = 'Deine Relais nehmen keine Aufträge entgegen (NIP-86):\n\n'
+          + nein.map(function (r) {
+              return '· ' + r.url + ' — ' + (r.software ? r.software.replace(/^.*\//, '') : 'unbekannt');
+            }).join('\n')
+          + '\n\nDas heißt nicht, dass nichts geht — es heißt nur, dass es nicht von hier '
+          + 'aus geht. Auf deinem eigenen Server kannst du den Zettel weiterhin aus dem '
+          + 'Speicher nehmen.';
+      } else {
+        /* Gemischt — beides benennen, nichts zusammenrühren. */
+        text = 'Von hier aus geht es bei keinem deiner Relais:\n\n'
+          + nein.map(function (r) { return '· ' + r.url + ' — nimmt keine Aufträge an'; })
+              .concat(stumm.map(function (r) { return '· ' + r.url + ' — keine Auskunft (' + r.grund + ')'; }))
+              .join('\n')
+          + '\n\nBei den einen ist es belegt, bei den anderen weiß ich es schlicht nicht. '
+          + 'In beiden Fällen schicke ich nichts.';
+      }
+
+      alert(text + '\n\nSperren wirkt unabhängig davon — in jedem Kimboard, sofort.');
       return;
     }
     var namen = ziele.map(function (r) { return r.url; }).join('\n');

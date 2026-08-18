@@ -276,6 +276,19 @@ probe "das Schlüssel-Fenster zeigt Fremden KEINE Sperr-Knöpfe" smoke_studio.mj
 
   window.KBStudio = {"
 
+# Der Unterschied zwischen „kann nicht" und „weiß nicht". Fiele er weg, behauptete
+# die App wieder etwas, wo sie nie hineingesehen hat — der Fehler, über den Klaus
+# am 2026-08-18 gestolpert ist.
+probe "schweigende Relais werden nicht als Nein ausgegeben" smoke_studio.mjs \
+  ersetze assets/studio.js \
+  "      var stumm = relaisStand.filter(function (r) { return !r.ok; });" \
+  "      var stumm = [];"
+
+probe "ein belegtes Nein wird auch als solches benannt" smoke_studio.mjs \
+  ersetze assets/studio.js \
+  "      var nein = relaisStand.filter(function (r) { return r.ok && !r.kannVerwaltung; });" \
+  "      var nein = [];"
+
 probe "ein unbrauchbarer Eintrag in der Betreiber-Liste fällt auf" smoke_studio.mjs \
   ersetze assets/config/moderation.js \
   "      '7dee8dd9088022e0a9be3667ad6ed3551a68c263ce557f34907485075d2fd6a0'  // Klaus · Tablet" \

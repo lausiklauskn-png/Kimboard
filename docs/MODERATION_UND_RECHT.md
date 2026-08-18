@@ -276,6 +276,105 @@ nur für ein Relais gilt, wäre schlimmer als gar keins.
   Der Weg dahin ist dann eine Entscheidung, keine Frage mehr: entweder ein
   Wechsel der Relais-Software, oder der ursprünglich geplante kleine Dienst auf
   dem Server, der die Sperr-Liste im Takt liest.
+### ✅ BEANTWORTET am 2026-08-18 — was auf dem Server wirklich läuft
+
+Klaus hat nachgesehen (Termux → `ssh root@167.233.204.72`). Damit ist Schritt 0
+geschlossen, nach zwei Tagen. Gemessen, nicht vermutet:
+
+| Frage | Antwort |
+|---|---|
+| Welche Software? | **`scsibug/nostr-rs-relay:latest`**, Fassung **0.10.0**, läuft seit drei Wochen |
+| Kann sie NIP-86? | **Nein.** `supported_nips` = 1, 2, 9, 11, 12, 15, 16, 20, 22, 33, 40 — die 86 fehlt |
+| Ein Relais oder zwei? | **Eines.** Beide Namen zeigen im Caddy auf denselben Container: `relay.family-projekt.de` **und** `relay.pwa-toolpoint.de` → `reverse_proxy relay:8080` |
+| Wo liegt der Speicher? | **`/opt/relay/db/nostr.db`** (im Container `/usr/src/app/db`) — SQLite im WAL-Modus, am 2026-08-18 rund **26 MB** |
+
+Zwei Dinge, die dabei nebenbei herauskamen und für später zählen:
+
+- **NIP-09 ist dabei.** Das Relais **befolgt** Lösch-Meldungen — aber nur die des
+  Absenders. Gegen fremde Hassrede hilft das weiterhin nicht (siehe § 2); für
+  „ich nehme meinen eigenen Zettel zurück" wirkt es wirklich.
+- **`restricted_writes: false`** — jeder darf auf dieses Relais schreiben, nicht
+  nur Klaus' Leute. Das ist eine bewusste Wahl („dummes, neutrales, log-freies
+  Rendezvous"), aber sie gehört zur Lagebeurteilung: das offene Brett ist offen,
+  und die Melde- und Abhilfepflicht trifft genau deshalb zu.
+
+**Was daraus folgt.** Der Knopf „🗑 Endgültig vom Relais" im Studio wird auf
+absehbare Zeit sagen, dass es nicht geht — und das ist richtig so, denn es geht
+über NIP-86 wirklich nicht. Die Weiche unten ist damit keine Vermutung mehr,
+sondern eine Entscheidung zwischen zwei bekannten Wegen. **Neu ist, dass Weg 2
+jetzt konkret baubar ist:** der Pfad zur Datenbank ist bekannt.
+
+Zum zweiten Weg noch eine Warnung, die vor dem Bauen zu klären ist: an einer
+SQLite-Datei zu schreiben, **während** das Relais sie benutzt, will sorgfältig
+gemacht werden (WAL-Modus hilft, ersetzt aber keine Vorsicht). Ein Dienst, der
+das tut, braucht eine Sicherung vorher und muss belegen, dass er nur die
+genannten Ereignisse trifft — nicht mehr. Das ist eine eigene Bau-Sitzung wert,
+keine Nebenbei-Änderung.
+
+### Was WIRKLICH auf dem Relais liegt — und die Lücke, die dabei auffiel
+
+Gemessen am 2026-08-18 (1.655 Ereignisse, 25.06.–17.08.):
+
+| Kennzeichen | Anzahl | Was es ist |
+|---|---:|---|
+| `sbkim-rdv` | 558 | Anmeldungen im gemeinsamen Netz-Raum (Modul 23) |
+| `sbkim-anastomosis` + `-reply` | 885 | Handshakes zwischen Knoten (Modul 05) |
+| `sbkim-qry` / `-query` / `-query-reply` | 178 | **Cross-Knoten-Fragen und Antworten** |
+| `sbkim-frage-antwort-test` | 32 | die Kimboard-Zettel |
+
+**Das Verhältnis ist die eigentliche Nachricht: Kimboard macht 2 % aus.** Die
+übrigen 98 % sind das Mycel bei der Arbeit — und davon altert das meiste sehr
+schnell (ein Handshake von vor sechs Wochen nützt niemandem mehr, eine
+Anmelde-Karte auch nicht). Wer je über Speicher-Aufräumen nachdenkt, findet
+dort den Hebel, nicht bei den Zetteln.
+
+#### ⚠ Die Lücke: eine Frage ans Mycel wird genauso gespeichert
+
+Klaus' Frage am 2026-08-18: *„Es gibt noch woanders Fragen — im Rezeptbuch wird
+nach einem Rezept gefragt … jemand kann ja auch Hassrede in eine Suchfunktion
+schreiben."*
+
+**Er hat recht, und die 178 Ereignisse oben sind der Beleg.** Zwei Suchen sind
+aber sauber zu trennen:
+
+- **Suche im eigenen Bestand** (Rezeptbuch durchsucht sein eigenes Buch) — läuft
+  **komplett im Browser**. Kein Relais, keine Speicherung, kein Mitleser.
+- **Frage ans Mycel** (Modul 23 `askNode`) — geht als gewöhnliches
+  Nostr-Ereignis mit Tag `sbkim-qry` hinaus, **Inhalt im Klartext**
+  (`content: JSON.stringify({…})`, keine Verschlüsselung), und **bleibt auf dem
+  Relais liegen** — genau wie ein Brett-Zettel.
+
+Wer also Hassrede in ein Mycel-Suchfeld tippt, hinterlässt sie auf dem Server.
+Zwei Umstände mildern das, lösen es aber nicht auf: es wird **nirgends
+angezeigt** (die Empfänger-App verarbeitet es maschinell, es gibt kein
+Publikum), und es ist deshalb als Verbreitungsweg wenig attraktiv. Gespeichert
+und abrufbar ist es trotzdem, und es liegt auf Klaus' Server — die
+Abhilfepflicht (§ 3) unterscheidet nicht nach Kennzeichen.
+
+**Die Sperr-Liste erfasst das heute NICHT.** Sie filtert, was Kimboard
+**anzeigt**; eine `sbkim-qry`-Anfrage wird nie angezeigt und rutscht damit
+durch.
+
+**Konsequenz für den geplanten Dienst (Weg B):** Er darf nicht nach dem
+Kimboard-Kennzeichen greifen, sondern muss **jedes Ereignis entfernen, dessen
+Kennung in der Sperr-Liste steht** — unabhängig vom Tag. Dann deckt er Zettel
+und Anfragen gleichermaßen ab. Von Anfang an mitgedacht kostet das nichts;
+nachträglich wäre es ein zweiter Bau.
+
+#### Die 32 Testzettel sind weg (2026-08-18)
+
+Klaus wollte sie loswerden — es waren Testfragen ohne Wert. Vorgehen, das sich
+als Muster taugt:
+
+1. **Sicherung zuerst:** `cp /opt/relay/db/nostr.db /root/nostr-sicherung-<datum>.db`
+2. **Trockenlauf:** zählen, was die Abfrage treffen würde (Ergebnis: 32 von 1.655)
+3. **Relais anhalten**, löschen, verwaiste Etiketten mit aufräumen, `VACUUM`
+4. **Starten und nachzählen:** 1.623 übrig, `sbkim-frage-antwort-test`
+   vollständig verschwunden, alle anderen Kennzeichen unverändert
+
+Die Auszeit betrug Sekunden. **Kein Knoten musste sich neu anmelden** — genau
+das war der Grund, gezielt zu löschen statt die Datenbank zu leeren.
+
 ### Die eine offene Frage — und die zwei Wege, sie zu beantworten
 
 Klaus am 2026-08-18: *„Was benötigst Du jetzt noch, damit wir sehen können, ob wir
@@ -313,10 +412,14 @@ liegt**.
 **Danach steht die Weiche**, und sie ist ein Richtungsentscheid für Klaus, kein
 Selbstläufer:
 
-- **Relais-Software wechseln** (`strfry` kann NIP-86). Dann wirkt der Knopf im
-  Studio unmittelbar, und es braucht keinen zusätzlichen Dienst. Preis: ein
-  Wechsel am laufenden Relais ist schwer umkehrbar, und der bestehende Speicher
-  muss mitgenommen oder aufgegeben werden.
+- ~~**Relais-Software wechseln** (`strfry` kann NIP-86).~~ **WIDERLEGT am
+  2026-08-18.** Die Annahme stammte aus der Erinnerung einer Sitzung und wurde
+  geprüft, statt geglaubt: `relay.damus.io` läuft auf strfry und meldet
+  `supported_nips` = 1, 2, 4, 9, 11, 28, 40, 45, 70, 77 — **keine 86**. Ob die
+  Software es grundsätzlich könnte, ist damit offen; für Kimboard macht das
+  keinen Unterschied, denn die App prüft genau diese Liste. Ein Wechsel brächte
+  also den ganzen Aufwand und keinen Schritt nach vorn. **Weg A ist damit vom
+  Tisch.**
 - **Kleiner Dienst auf dem Server**, der die Sperr-Liste in festem Takt liest
   und die genannten Ereignisse aus dem Speicher nimmt (Muster: der
   2-Minuten-Cron aus dem Skill `auto-deploy-einrichten`). Preis: ein Teil mehr,

@@ -94,7 +94,12 @@ async function neueSeite(browser, { mod, quelle, nip11, zaehleStudio } = {}) {
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Authorization, Content-Type, Accept'
     };
-    await p.route(/^https:\/\/relay\./, async (r) => {
+    /* ALLE fremden https-Ziele fangen, nicht nur `relay.*`: im Pool steht auch
+       `nos.lol`. Das Muster von zuvor ließ es durch, der echte Abruf scheiterte,
+       und aus dem Fall „alle antworten" wurde unbemerkt der gemischte — die
+       Prüfung maß etwas anderes, als sie behauptete. Die Seite selbst läuft auf
+       http://127.0.0.1 und ist davon nicht betroffen. */
+    await p.route(/^https:\/\//, async (r) => {
       const req = r.request();
       if (req.method() === 'OPTIONS') return r.fulfill({ status: 204, headers: frei, body: '' });
       if (req.method() === 'POST') {
@@ -109,9 +114,13 @@ async function neueSeite(browser, { mod, quelle, nip11, zaehleStudio } = {}) {
         });
       }
       if (nip11 === null) return r.abort();
+      /* Eine Funktion darf je Host verschieden antworten — nur so lässt sich der
+         GEMISCHTE Fall messen (eines sagt nein, eines schweigt). */
+      const antwort = (typeof nip11 === 'function') ? nip11(req.url()) : nip11;
+      if (antwort === null) return r.abort();
       return r.fulfill({
         status: 200, contentType: 'application/nostr+json', headers: frei,
-        body: JSON.stringify(nip11)
+        body: JSON.stringify(antwort)
       });
     });
   }
@@ -708,6 +717,97 @@ try {
        nicht; es muss der Bereich selbst sein. */
     ok(!/auf dem Brett liegt/.test(t), '…und nicht einmal die Zettel-Übersicht');
     await ctx.close();
+  }
+
+  /* ═══ 7e. „Kann nicht" und „weiß nicht" sind zweierlei ═══
+     Der erste Entwurf schrieb in beiden Fällen „Keines deiner Relais nimmt
+     Aufträge entgegen". Das war eine Behauptung ohne Beleg: bei fehlender
+     Selbstauskunft hat die App nie hineingesehen. Klaus ist am 2026-08-18
+     darüber gestolpert — sein eigenes Relais antwortet gar nicht.
+     Gemessen wird der TEXT, den der Nutzer wirklich zu lesen bekommt. */
+  {
+    const ANTWORTET = { name: 'T', software: 'nostr-rs-relay', version: '0.9.0', supported_nips: [1, 9, 11] };
+
+    async function dialogText(einstellung) {
+      const { p, ctx } = await neueSeite(browser, { mod: {}, nip11: einstellung });
+      const ich = await meine(p);
+      await p.evaluate((k) => { window.KB_MODERATION.betreiberSchluessel = k; }, ich);
+
+      /* Ohne Zettel am Brett gibt es keine Zeile und damit keinen Knopf — die
+         Prüfung klickte dann ins Leere und maß gar nichts. Beim ersten Lauf
+         genau so passiert. */
+      const zettel = await p.evaluate(async () => {
+        const { schnorr, utils } = await import('./modules/noble-secp256k1.js');
+        const { eventId } = await import('./modules/echtheit.js');
+        const hex = (b) => [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+        const roh = (h) => Uint8Array.from(h.match(/.{2}/g).map((x) => parseInt(x, 16)));
+        const priv = utils.randomPrivateKey();
+        const e = {
+          pubkey: hex(schnorr.getPublicKey(priv)), created_at: Math.floor(Date.now() / 1000),
+          kind: 1, tags: [['t', 'sbkim-pin']], content: 'DIALOG-PROBE'
+        };
+        e.id = await eventId(e);
+        e.sig = hex(await schnorr.sign(roh(e.id), priv));
+        await window.__kb.dispatch(e, 'wss://test');
+        return e.id;
+      });
+      await p.waitForFunction((i) => !!document.querySelector('[data-qid="' + i + '"]'),
+        zettel, { timeout: 10000 });
+
+      await studioAuf(p);
+      // warten, bis die Relais-Abfrage durch ist — sonst misst man den Leerlauf
+      await p.waitForFunction(
+        () => /Software:|keine Auskunft/.test(document.getElementById('studio-fenster').innerText),
+        null, { timeout: 20000 });
+
+      /* `alert` VORHER durch einen Rekorder ersetzen, statt Playwrights
+         Dialog-Weg zu benutzen.
+         WARUM SO UMSTÄNDLICH: `Promise.all([waitForEvent, evaluate])` ist ein
+         Deadlock. `waitForEvent` löst aus, sobald der Dialog erscheint — aber
+         `evaluate` kehrt erst zurück, wenn er geschlossen ist, und geschlossen
+         würde er erst NACH dem `Promise.all`. Die Probe stand deshalb
+         49 Minuten und gab 23 Bytes aus; sie war nicht langsam, sie hing.
+         So gemessen wird derselbe Text, den der Nutzer zu lesen bekäme, und
+         nichts kann blockieren. */
+      await p.evaluate(() => {
+        window.__gesehen = '';
+        window.alert = (t) => { window.__gesehen = String(t); };
+      });
+      await p.evaluate(() => {
+        const b = [...document.querySelectorAll('#studio-fenster button')]
+          .find((x) => /Endgültig vom Relais/.test(x.textContent));
+        if (!b) throw new Error('kein Knopf „Endgültig vom Relais" gefunden');
+        b.click();
+      });
+      await p.waitForFunction(() => !!window.__gesehen, null, { timeout: 10000 });
+      const gesehen = await p.evaluate(() => window.__gesehen);
+      const fensterText = await text(p);
+      await ctx.close();
+      return { gesehen, fensterText };
+    }
+
+    // a) ALLE schweigen (Klaus' Fall: fehlender Freigabe-Kopf)
+    const a = await dialogText(null);
+    ok(/weiß nicht/i.test(a.gesehen), 'schweigende Relais: die App sagt „ich weiß nicht"');
+    ok(!/nehmen keine Aufträge entgegen/.test(a.gesehen),
+      '…und behauptet NICHT, sie nähmen keine Aufträge an');
+    ok(/kein Fehler/i.test(a.gesehen), '…benennt, dass es kein Fehler des Relais ist');
+    ok(/Sperren wirkt/.test(a.gesehen), '…und dass Sperren trotzdem wirkt');
+    ok(/weiß ich nicht/.test(a.fensterText),
+      'auch in der Relais-Liste steht „weiß ich nicht", kein Nein');
+
+    // b) ALLE antworten und können kein NIP-86
+    const b = await dialogText(ANTWORTET);
+    ok(/nehmen keine Aufträge entgegen/.test(b.gesehen),
+      'antwortende Relais ohne NIP-86: das darf die App behaupten — sie hat nachgesehen');
+    ok(/nostr-rs-relay/.test(b.gesehen), '…und nennt die Software, die es gesagt hat');
+    ok(!/weiß nicht/i.test(b.gesehen), '…ohne Unwissenheit vorzuschützen');
+
+    // c) GEMISCHT — beides muss dastehen, nichts zusammengerührt
+    const c = await dialogText((url) => /family-projekt/.test(url) ? null : ANTWORTET);
+    ok(/nimmt keine Aufträge an/.test(c.gesehen), 'gemischt: das belegte Nein steht da');
+    ok(/keine Auskunft/.test(c.gesehen), '…und die Unwissenheit daneben');
+    ok(/belegt/.test(c.gesehen), '…mit dem Unterschied ausdrücklich benannt');
   }
 
   /* ═══ 8. Fail-soft ═══ */
