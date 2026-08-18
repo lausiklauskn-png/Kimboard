@@ -276,6 +276,41 @@ nur für ein Relais gilt, wäre schlimmer als gar keins.
   Der Weg dahin ist dann eine Entscheidung, keine Frage mehr: entweder ein
   Wechsel der Relais-Software, oder der ursprünglich geplante kleine Dienst auf
   dem Server, der die Sperr-Liste im Takt liest.
+### ✅ BEANTWORTET am 2026-08-18 — was auf dem Server wirklich läuft
+
+Klaus hat nachgesehen (Termux → `ssh root@167.233.204.72`). Damit ist Schritt 0
+geschlossen, nach zwei Tagen. Gemessen, nicht vermutet:
+
+| Frage | Antwort |
+|---|---|
+| Welche Software? | **`scsibug/nostr-rs-relay:latest`**, Fassung **0.10.0**, läuft seit drei Wochen |
+| Kann sie NIP-86? | **Nein.** `supported_nips` = 1, 2, 9, 11, 12, 15, 16, 20, 22, 33, 40 — die 86 fehlt |
+| Ein Relais oder zwei? | **Eines.** Beide Namen zeigen im Caddy auf denselben Container: `relay.family-projekt.de` **und** `relay.pwa-toolpoint.de` → `reverse_proxy relay:8080` |
+| Wo liegt der Speicher? | **`/opt/relay/db/nostr.db`** (im Container `/usr/src/app/db`) — SQLite im WAL-Modus, am 2026-08-18 rund **26 MB** |
+
+Zwei Dinge, die dabei nebenbei herauskamen und für später zählen:
+
+- **NIP-09 ist dabei.** Das Relais **befolgt** Lösch-Meldungen — aber nur die des
+  Absenders. Gegen fremde Hassrede hilft das weiterhin nicht (siehe § 2); für
+  „ich nehme meinen eigenen Zettel zurück" wirkt es wirklich.
+- **`restricted_writes: false`** — jeder darf auf dieses Relais schreiben, nicht
+  nur Klaus' Leute. Das ist eine bewusste Wahl („dummes, neutrales, log-freies
+  Rendezvous"), aber sie gehört zur Lagebeurteilung: das offene Brett ist offen,
+  und die Melde- und Abhilfepflicht trifft genau deshalb zu.
+
+**Was daraus folgt.** Der Knopf „🗑 Endgültig vom Relais" im Studio wird auf
+absehbare Zeit sagen, dass es nicht geht — und das ist richtig so, denn es geht
+über NIP-86 wirklich nicht. Die Weiche unten ist damit keine Vermutung mehr,
+sondern eine Entscheidung zwischen zwei bekannten Wegen. **Neu ist, dass Weg 2
+jetzt konkret baubar ist:** der Pfad zur Datenbank ist bekannt.
+
+Zum zweiten Weg noch eine Warnung, die vor dem Bauen zu klären ist: an einer
+SQLite-Datei zu schreiben, **während** das Relais sie benutzt, will sorgfältig
+gemacht werden (WAL-Modus hilft, ersetzt aber keine Vorsicht). Ein Dienst, der
+das tut, braucht eine Sicherung vorher und muss belegen, dass er nur die
+genannten Ereignisse trifft — nicht mehr. Das ist eine eigene Bau-Sitzung wert,
+keine Nebenbei-Änderung.
+
 ### Die eine offene Frage — und die zwei Wege, sie zu beantworten
 
 Klaus am 2026-08-18: *„Was benötigst Du jetzt noch, damit wir sehen können, ob wir
