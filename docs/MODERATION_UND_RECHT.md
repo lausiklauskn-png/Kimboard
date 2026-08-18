@@ -475,17 +475,63 @@ schreibweise-unabhängig, und die Probe kannte nur BLOB-Datenbanken. Der ganze
 **Text-Zweig** des Skripts war damit überhaupt nicht gemessen. Seitdem prüft sie
 gegen beide Zuschnitte — **27 statt 23**, und die Zahl ist jetzt echt.
 
-**Was der scharfe Gang noch braucht** (bewusst nicht in dieser Sitzung):
+### Der scharfe Gang (gebaut 2026-08-18) — `SCHARF=ja`
 
-- eine **Sicherung vor jedem Lauf**, die nicht optional ist,
-- den Nachweis, dass er **nur** die genannten Kennungen trifft (Zählung vorher
-  = Zählung der Treffer = Zählung nachher),
-- die Entscheidung, ob das Relais dafür kurz anhält. Am 2026-08-18 hat Klaus
-  32 Testzettel von Hand entfernt; dabei war `docker stop relay` der sichere
-  Weg, weil SQLite im WAL-Modus läuft und der laufende Dienst schreibt,
-- verwaiste `tag`-Zeilen mit aufräumen (die Tabelle hängt an `event_id`),
-- und einen **Takt** — Cron oder Hand. Ein Dienst, der ungefragt löscht, braucht
-  mehr Vertrauen als einer, den man aufruft.
+Derselbe Aufruf, ein Wort mehr. **Eine Datei für beide Gänge**, weil das
+Werkzeug per `ssh … 'bash -s' < datei` hinübergereicht wird — zwei Dateien wären
+zwei Wege, die auseinanderlaufen, und der scharfe Gang muss genau das entfernen,
+was der Nachsehen-Gang gezeigt hat.
+
+```bash
+ssh root@167.233.204.72 'bash -s'            < tools/relais-wache.sh   # nachsehen
+ssh root@167.233.204.72 'SCHARF=ja bash -s'  < tools/relais-wache.sh   # entfernen
+```
+
+**Der Nachsehen-Gang ist die Vorgabe.** Ein versehentlicher Aufruf tut nichts.
+
+Was er tut, in dieser Reihenfolge — und jeder Schritt ist ein Riegel:
+
+1. **Sicherung, nicht abschaltbar.** `VACUUM INTO` zieht einen in sich
+   stimmigen Abzug aus der **laufenden** Datenbank. Ein `cp` täte das nicht: im
+   WAL-Modus liegt der neueste Stand teils in der Nebendatei, und ein halber
+   Abzug ist schlimmer als gar keiner — er sieht aus wie eine Sicherung. Trägt
+   der Abzug nicht dieselbe Stückzahl wie das Original, wird **nichts** entfernt.
+2. **Entfernen in einer Transaktion**, Anhängsel (`tag`) zuerst, dann die
+   Ereignisse. Getrennt liefe man Gefahr, dass eines von beidem ausfällt.
+3. **Nachrechnen.** Vorher − betroffen = nachher · keine genannte Kennung ist
+   geblieben · kein verwaistes Anhängsel. Geht eines nicht auf, meldet es einen
+   Fehlschlag (Rückgabewert 4) und nennt den Befehl zum Zurückspielen.
+4. **Die Sicherung bleibt liegen.** Das Werkzeug räumt sie nicht weg — das wäre
+   der eine Griff, der sich nicht zurücknehmen lässt.
+
+**Muss das Relais dafür anhalten? Gemessen, nicht vermutet: nein.** Aus einer
+WAL-Datenbank lässt sich löschen, während ein zweiter Verbinder weiterschreibt
+(`BEGIN IMMEDIATE` + `busy_timeout`) — 55 gleichzeitige Einfügungen, kein Fehler
+auf beiden Seiten, `PRAGMA integrity_check` = ok. **Ehrliche Grenze:** gemessen
+wurde mit zwei Verbindern im selben Programm; beim Relais sind es zwei Programme
+über dieselbe Datei. SQLite sperrt dafür über dasselbe Verfahren, aber gemessen
+ist das hier nicht. Wem das zu dünn ist, nimmt `STOPPEN=ja`; die Sicherung läuft
+in beiden Fällen.
+
+**Der Fehler, den das Aufschreiben gefunden hat.** Der Nachsehen-Gang meldete
+`treffer_ev + treffer_ab` — und zählte damit ein Ereignis **doppelt**, das
+zugleich über seine eigene Kennung und über seinen Absender gesperrt ist. Beim
+Nachsehen war das nur eine zu hohe Zahl. Im scharfen Gang wäre es schlimmer
+gewesen: die Schlussrechnung wäre nicht aufgegangen, und das Werkzeug hätte
+einen **richtigen** Lauf als Fehlschlag gemeldet. Die erste Probe hatte die
+Überschneidung nie gebaut und war deshalb grün. Heute zählt eine einzige
+Abfrage über beide Sorten, und die Überschneidung ist ein eigener Prüfpunkt.
+
+**Und der Befund, der die Proben selbst betrifft:** die Gegenprobe baute die
+Nachrechnung aus — und alles blieb grün. Nicht weil sie wertlos wäre, sondern
+weil **eine Nachrechnung sich nicht beweisen lässt, solange nichts falsch ist**.
+Seitdem gibt es zwei Prüfungen, die das Werkzeug an einer gepatchten Kopie
+absichtlich falsch machen und darauf bestehen, dass es das **bemerkt**.
+
+**Was weiterhin fehlt:** ein **Takt**. Heute läuft der Gang auf Zuruf. Ein
+Dienst, der ungefragt löscht, braucht mehr Vertrauen als einer, den man aufruft
+— und weil Kimboards Sperr-Liste **nur nach oben** geht, ist der Zuruf-Betrieb
+kein Provisorium, sondern eine vertretbare Dauerlösung.
 
 - **Die erzeugte Liste muss von Hand ins Repo.** Das Studio signiert sie und
   legt sie als Datei hin; einchecken muss Klaus. Ein Weg, der sie direkt
@@ -527,4 +573,6 @@ gegen beide Zuschnitte — **27 statt 23**, und die Zahl ist jetzt echt.
 | Gegenprobe | `tests/gegenprobe_moderation.sh` — 40 eingebaute Fehler, jeder muss die Proben umwerfen |
 | Nachsehen-Gang auf dem Relais | `tools/relais-wache.sh` — löscht nichts, zeigt nur, was ein Löschlauf träfe |
 | Probe dazu | `tests/smoke_relais_wache.mjs` (echte SQLite-DB, beide Schema-Zuschnitte) · `tests/_sqlite3-ersatz.mjs` |
-| Gegenprobe dazu | `tests/gegenprobe_wache.sh` — 11 eingebaute Fehler; einer war beim ersten Lauf ungefangen |
+| Scharfer Gang (`SCHARF=ja`) | dieselbe Datei — Sicherung, Transaktion, Nachrechnen |
+| Probe dazu | `tests/smoke_relais_scharf.mjs` (38 Prüfungen, darunter zwei an einer absichtlich verbogenen Kopie) |
+| Gegenprobe dazu | `tests/gegenprobe_wache.sh` — 20 eingebaute Fehler; beim ersten Lauf blieben fünf ungefangen |

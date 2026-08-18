@@ -144,7 +144,7 @@ try {
     writeFileSync(l, listeJs([e1, e3], []));
     const r = lauf(db1, l);
     ok(r.code === 0, 'mit zwei Zettel-Kennungen: sauberer Abschluss');
-    ok(/würde 2 von 4 Ereignissen entfernen/.test(r.aus), '…zählt genau 2 von 4');
+    ok(/Betroffen sind 2 von 4/.test(r.aus), '…zählt genau 2 von 4');
     ok(/über Zettel-Kennungen:   2/.test(r.aus), '…beide über Zettel-Kennungen');
     ok(/über Absender-Kennungen: 0/.test(r.aus), '…keine über Absender');
     ok(summe(db1) === vorher, 'DIE DATENBANK IST UNVERÄNDERT (Prüfsumme gleich)');
@@ -158,7 +158,7 @@ try {
     const l = join(arbeit, 'qry.js');
     writeFileSync(l, listeJs([e2], []));
     const r = lauf(db1, l);
-    ok(/würde 1 von 4/.test(r.aus),
+    ok(/Betroffen sind 1 von 4/.test(r.aus),
       'eine gesperrte MYCEL-ANFRAGE wird gefunden (Kennung schlägt Tag)');
   }
 
@@ -202,12 +202,12 @@ try {
     const r = lauf(db2, l);
     ok(/Kennung in Spalte 'event_hash' \(TEXT\)/.test(r.aus),
       'ein Text-Schema wird als solches erkannt');
-    ok(/würde 1 von 4/.test(r.aus), '…und richtig abgefragt (nicht als x\'…\')');
+    ok(/Betroffen sind 1 von 4/.test(r.aus), '…und richtig abgefragt (nicht als x\'…\')');
 
     const lg = join(arbeit, 'text-gross.js');
     writeFileSync(lg, listeJs([e1.toUpperCase()], []));
     const rg = lauf(db2, lg);
-    ok(/würde 1 von 4/.test(rg.aus),
+    ok(/Betroffen sind 1 von 4/.test(rg.aus),
       'GROSS geschriebene Kennungen werden normalisiert (nur hier messbar)');
 
     const vorher = summe(db2);
@@ -220,7 +220,7 @@ try {
     const l = join(arbeit, 'gross.js');
     writeFileSync(l, listeJs([e1.toUpperCase()], []));
     const r = lauf(db1, l);
-    ok(/würde 1 von 4/.test(r.aus), 'GROSS geschriebene Kennungen auch am BLOB-Schema');
+    ok(/Betroffen sind 1 von 4/.test(r.aus), 'GROSS geschriebene Kennungen auch am BLOB-Schema');
   }
 
   /* ═══ 7. Lieber abbrechen als falsch zählen ═══ */
@@ -229,7 +229,7 @@ try {
     const r = lauf(join(arbeit, 'gibtesnicht.db'), l);
     ok(r.code === 2, 'fehlende Datenbank: Abbruch mit eigenem Rückgabewert');
     ok(/nicht lesbar/.test(r.aus), '…mit klarer Ansage');
-    ok(!/würde \d+ von/.test(r.aus), '…und OHNE eine Zahl, die wie ein Ergebnis aussieht');
+    ok(!/Betroffen sind \d+ von/.test(r.aus), '…und OHNE eine Zahl, die wie ein Ergebnis aussieht');
 
     const fremd = join(arbeit, 'fremd.db');
     const d = new DatabaseSync(fremd); d.exec('CREATE TABLE etwas (a TEXT)'); d.close();
@@ -238,12 +238,33 @@ try {
     ok(/nicht gefunden/.test(r2.aus), '…mit der Angabe, was fehlt');
   }
 
-  /* ═══ 8. Der scharfe Gang ist wirklich nicht drin ═══ */
+  /* ═══ 8. Der Nachsehen-Gang ist die VORGABE ═══
+     Bis zum 2026-08-18 stand hier eine Textsuche: „im Skript steht kein DELETE".
+     Sie war richtig, solange es nur einen Gang gab — und wurde in dem Moment
+     wertlos, in dem der scharfe dazukam: sie hätte umfallen müssen, obwohl
+     nichts kaputt war. Ersetzt durch die Zusicherung, die wirklich zählt und
+     die auch dann noch gilt: OHNE `SCHARF=ja` bleibt die Datenbank unberührt,
+     gemessen an der Prüfsumme, mit einem Wrapper, der schreiben DÜRFTE.
+     (Die volle Messung liegt in `smoke_relais_scharf.mjs`; hier steht der Teil,
+     der zum Nachsehen-Gang selbst gehört.) */
   {
+    const db = join(arbeit, 'vorgabe.db');
+    baueDb(db, [
+      { id: e1, autor: A, text: 'eins' },
+      { id: e3, autor: B, text: 'drei' }
+    ]);
+    const l = join(arbeit, 'vorgabe.js');
+    writeFileSync(l, listeJs([e1], [B]));
+    const vorher = summe(db);
+    const r = lauf(db, l);   // KEIN SCHARF gesetzt — die Vorgabe
+    ok(r.code === 0, 'ohne Angabe läuft der Nachsehen-Gang');
+    ok(summe(db) === vorher, 'OHNE `SCHARF=ja` BLEIBT DIE DATENBANK UNBERÜHRT');
+    ok(/NICHTS gelöscht/.test(r.aus), '…und das Skript sagt es');
+    ok(/SCHARF=ja/.test(r.aus), '…und nennt den Weg, es wirklich zu tun');
+
     const quelle = readFileSync(SKRIPT, 'utf8');
-    ok(!/\bDELETE\b/i.test(quelle), 'im Skript steht kein DELETE');
-    ok(!/\bDROP\b|\bVACUUM\b|\bUPDATE\b/i.test(quelle), '…und kein DROP, VACUUM oder UPDATE');
-    ok(/löscht nichts/i.test(quelle), '…und es sagt selbst, dass es nichts löscht');
+    ok(/SCHARF/.test(quelle) && /!= "ja"/.test(quelle),
+      '…die Weiche im Skript verlangt ausdrücklich „ja"');
   }
 } catch (e) {
   fail++; console.error(e);

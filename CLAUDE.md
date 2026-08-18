@@ -135,18 +135,35 @@ korrekt `exit=1` zurück — hinter einer Pipe bekommst du den Rückgabewert von
   Seit die Betreiber-Kennung in `moderation.js` steht, kostet ein Verlust zusätzlich den
   Studio-Zugang, und die Reparatur wäre ein Commit.
 
-- **Der Nachsehen-Gang gehört auf den Server, nicht aufs Tablet.**
-  `tools/relais-wache.sh` liest die Sperr-Liste und sagt, was ein Löschlauf im
-  Relais-Speicher träfe — **er löscht nichts**. Zwei Dinge macht er bewusst anders als
-  die App: er greift nach der **Kennung** statt nach dem Brett-Tag (sonst blieben die
-  Mycel-Anfragen `sbkim-qry` liegen — am 2026-08-18 waren das 178 Stück), und er
-  **erfragt das Schema**, statt es anzunehmen. Passt nichts, bricht er mit einem
-  eigenen Rückgabewert ab, statt eine Null zu melden, die wie „nichts betroffen"
-  aussieht.
-  **`x'ABCD'` liest SQLite selbst schreibweise-unabhängig** — wer nur gegen eine
-  BLOB-Datenbank prüft, misst die Groß/klein-Behandlung des Skripts gar nicht. Genau
-  daran war `smoke_relais_wache` beim ersten Lauf blind (23 grün, davon eine
-  bedeutungslos); seit dem Text-Schema sind es 27 echte.
+- **Die Relais-Wache gehört auf den Server, nicht aufs Tablet.**
+  `tools/relais-wache.sh` liest die Sperr-Liste und hat **zwei Gänge in einer Datei**:
+  ohne alles sieht sie nur nach, mit `SCHARF=ja` entfernt sie wirklich. **Der
+  Nachsehen-Gang ist die Vorgabe** — ein versehentlicher Aufruf tut nichts. Eine
+  Datei, weil das Werkzeug per `ssh … 'bash -s' < datei` hinübergereicht wird; zwei
+  Dateien wären zwei Wege, die auseinanderlaufen.
+  Zwei Dinge macht sie bewusst anders als die App: sie greift nach der **Kennung**
+  statt nach dem Brett-Tag (sonst blieben die Mycel-Anfragen `sbkim-qry` liegen — am
+  2026-08-18 waren das 178 Stück; **so deckt sie den Verkehr aller 21 Apps ab**,
+  nicht nur Kimboards), und sie **erfragt das Schema**, statt es anzunehmen. Passt
+  nichts, bricht sie mit eigenem Rückgabewert ab, statt eine Null zu melden, die wie
+  „nichts betroffen" aussieht.
+
+- **Drei Fallen, jede beim Bauen einmal zugeschnappt:**
+  · **`x'ABCD'` liest SQLite selbst schreibweise-unabhängig.** Wer nur gegen eine
+    BLOB-Datenbank prüft, misst die Groß/klein-Behandlung gar nicht. Genau daran war
+    `smoke_relais_wache` beim ersten Lauf blind — 23 grün, davon eine bedeutungslos.
+  · **`treffer_ev + treffer_ab` zählt doppelt.** Ein Ereignis kann zugleich über
+    seine Kennung UND über seinen Absender gesperrt sein. Beim Nachsehen nur eine zu
+    hohe Zahl; im scharfen Gang hätte es die Schlussrechnung umgeworfen und einen
+    **richtigen** Lauf als Fehlschlag gemeldet. Heute zählt **eine** Abfrage über
+    beide Sorten.
+  · **Eine Nachrechnung lässt sich nicht beweisen, solange nichts falsch ist.** Die
+    Gegenprobe baute sie aus — alles blieb grün. Deshalb machen zwei Prüfungen das
+    Werkzeug an einer **gepatchten Kopie** absichtlich falsch und bestehen darauf,
+    dass es das bemerkt. Aus demselben Grund ist „ohne geprüfte Sicherung wird nicht
+    gelöscht" **ein** Gegenproben-Eingriff über den ganzen Block: die beiden Riegel
+    decken einander ab, ein Eingriff in nur einen beweist nichts. **Bewacht wird die
+    Zusicherung, nicht die Zeile.**
 
 - **Gegenprobe:** `bash tests/gegenprobe_moderation.sh` baut 40 Fehler ein, jeder muss
   eine Probe umwerfen. Beim Bau des Studios hat sie **vier** blinde Prüfungen gefunden,
@@ -158,8 +175,10 @@ korrekt `exit=1` zurück — hinter einer Pipe bekommst du den Rückgabewert von
   Davor fand sie zwei echte Fehler im Code, die keine Probe sah: eine **behauptete**
   statt gemessene Ausfüllzeit im Melde-Weg (hätte den Bot-Riegel des Dienstes
   ausgehebelt) und die eingefrorene Sperr-Liste oben.
-  `bash tests/gegenprobe_wache.sh` tut dasselbe für den Nachsehen-Gang (11 Fehler)
-  und hat dort beim ersten Lauf eine blinde Prüfung gefunden.
+  `bash tests/gegenprobe_wache.sh` tut dasselbe für die Relais-Wache (20 Fehler,
+  beide Gänge). Beim ersten Lauf blieben **fünf** ungefangen — und keiner davon war
+  ein Fehler im Code, sondern jedes Mal eine Prüfung, die nie verlangt hatte,
+  wovon sie handelte.
 
 ## Selbst-Merge-Freibrief (Klaus 2026-06-28, netzweit für ALLE Repos)
 
