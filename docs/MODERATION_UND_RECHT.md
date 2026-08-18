@@ -441,6 +441,52 @@ Sperr-Liste, und das Studio, das beides bedient. Was fehlt, ist allein die
 letzte Meile — aus „in jedem Kimboard unsichtbar" ein „aus dem Speicher
 entfernt" zu machen, und zwar dort, wo Klaus tatsächlich Betreiber ist.
 
+### Der Nachsehen-Gang (gebaut 2026-08-18) — `tools/relais-wache.sh`
+
+Weg B ist damit angefangen, und zwar an dem Ende, an dem nichts kaputtgehen
+kann. Das Skript liest **dieselbe Sperr-Liste, die auch die App liest**, sieht
+in `/opt/relay/db/nostr.db` nach und sagt genau, welche Ereignisse ein Löschlauf
+treffen **würde**. Es löscht nichts, ändert nichts, schreibt nichts.
+
+```bash
+ssh root@167.233.204.72 'bash -s' < tools/relais-wache.sh    # vom Tablet aus
+```
+
+**Warum zuerst dieser Gang und nicht gleich der scharfe.** Ein Werkzeug, das
+löscht, bevor man ihm beim Zählen zusehen konnte, ist keins. Und es gab hier
+wirklich etwas zu sehen: das Skript macht **zwei Dinge bewusst anders als die
+App**.
+
+1. **Es greift nach der Kennung, nicht nach dem Brett-Kennzeichen.** Die App
+   filtert, was *Kimboard* anzeigt. Auf dem Relais liegen aber auch Fragen ans
+   Mycel (Tag `sbkim-qry`, am 2026-08-18 gemessen: 178 Stück) — im Klartext,
+   genau wie Zettel. Wer nach dem Kimboard-Tag greift, lässt sie liegen.
+2. **Es findet das Schema selbst.** Wie `nostr-rs-relay` Kennungen ablegt (BLOB
+   oder Text, welche Spalte), hängt an der Fassung. Passt nichts, **bricht es
+   ab** — statt eine Null zu melden, die wie „nichts betroffen" aussieht und in
+   Wahrheit „falsch gesucht" heißt.
+
+**Was die Gegenprobe daran gefunden hat.** `tests/smoke_relais_wache.mjs` war
+beim ersten Lauf grün — 23 von 23. `tests/gegenprobe_wache.sh` baut elf Fehler
+ein, und **einer davon blieb ungefangen**: die Prüfung „GROSS geschriebene
+Kennungen werden normalisiert" wäre auch dann grün geblieben, wenn das Skript
+gar nicht normalisierte. Grund: SQLite liest `x'ABCD'` **selbst**
+schreibweise-unabhängig, und die Probe kannte nur BLOB-Datenbanken. Der ganze
+**Text-Zweig** des Skripts war damit überhaupt nicht gemessen. Seitdem prüft sie
+gegen beide Zuschnitte — **27 statt 23**, und die Zahl ist jetzt echt.
+
+**Was der scharfe Gang noch braucht** (bewusst nicht in dieser Sitzung):
+
+- eine **Sicherung vor jedem Lauf**, die nicht optional ist,
+- den Nachweis, dass er **nur** die genannten Kennungen trifft (Zählung vorher
+  = Zählung der Treffer = Zählung nachher),
+- die Entscheidung, ob das Relais dafür kurz anhält. Am 2026-08-18 hat Klaus
+  32 Testzettel von Hand entfernt; dabei war `docker stop relay` der sichere
+  Weg, weil SQLite im WAL-Modus läuft und der laufende Dienst schreibt,
+- verwaiste `tag`-Zeilen mit aufräumen (die Tabelle hängt an `event_id`),
+- und einen **Takt** — Cron oder Hand. Ein Dienst, der ungefragt löscht, braucht
+  mehr Vertrauen als einer, den man aufruft.
+
 - **Die erzeugte Liste muss von Hand ins Repo.** Das Studio signiert sie und
   legt sie als Datei hin; einchecken muss Klaus. Ein Weg, der sie direkt
   veröffentlicht, bräuchte einen Server mit Token (wie im
@@ -479,3 +525,6 @@ entfernt" zu machen, und zwar dort, wo Klaus tatsächlich Betreiber ist.
 | Brücke aus dem Modul-Scope | `index.html`: `signiere`, `__kb.zettel/relaisListe/sperreJetzt` |
 | Proben | `tests/smoke_melden.mjs`, `tests/smoke_sperrliste.mjs`, `tests/smoke_studio.mjs` |
 | Gegenprobe | `tests/gegenprobe_moderation.sh` — 40 eingebaute Fehler, jeder muss die Proben umwerfen |
+| Nachsehen-Gang auf dem Relais | `tools/relais-wache.sh` — löscht nichts, zeigt nur, was ein Löschlauf träfe |
+| Probe dazu | `tests/smoke_relais_wache.mjs` (echte SQLite-DB, beide Schema-Zuschnitte) · `tests/_sqlite3-ersatz.mjs` |
+| Gegenprobe dazu | `tests/gegenprobe_wache.sh` — 11 eingebaute Fehler; einer war beim ersten Lauf ungefangen |
