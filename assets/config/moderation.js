@@ -105,7 +105,11 @@
      * austauschen kann.
      *
      * Klaus trägt hier die Kennung ein, die im Siegel unter „Eigene Identität"
-     * steht. Solange sie fehlt, wirkt allein die eingebackene Liste. */
-    pruefschluessel: null
+     * steht. Solange sie fehlt, wirkt allein die eingebackene Liste.
+     *
+     * Eingetragen 2026-08-18: Klaus' Tablet-Kennung — dieselbe, mit der das
+     * Studio die Liste signiert. Nachgerechnet wurde vor dem Eintragen, mit
+     * `modules/echtheit.js` selbst: Kennung stimmt, Signatur gültig. */
+    pruefschluessel: '7dee8dd9088022e0a9be3667ad6ed3551a68c263ce557f34907485075d2fd6a0'
   };
 })();

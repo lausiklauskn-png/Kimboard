@@ -1,0 +1,14 @@
+{
+  "pubkey": "7dee8dd9088022e0a9be3667ad6ed3551a68c263ce557f34907485075d2fd6a0",
+  "created_at": 1787087777,
+  "kind": 30078,
+  "tags": [
+    [
+      "d",
+      "kimboard-sperrliste"
+    ]
+  ],
+  "content": "{\"fassung\":1,\"stand\":\"2026-08-18\",\"ereignisse\":{\"701a583486f4089914d532f91ebbe2252f55da9e258496d57bfc9e620ca324e5\":{\"grund\":\"Testsperrung\",\"seit\":\"2026-08-18\"}},\"absender\":{}}",
+  "id": "828254dca14a9c42246278ccb17bb441892546917cf9c7fe97c4140a4cdb01f5",
+  "sig": "c8b87f18ef1f6c9e3884378a185a114a710a59a7155560867baade3c80cbd344406abcdf52682c4c0bdb789faae1b42b5316f239c9391d690dff69c05f93c33d"
+}

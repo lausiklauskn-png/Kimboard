@@ -62,7 +62,14 @@
 set -u
 
 DB="${DB:-/opt/relay/db/nostr.db}"
+# ZWEI Listen, weil die App zwei liest — und was Kimboard verbirgt, muss der
+# Server auch finden. Die eingebackene (`.js`) ist Teil der Auslieferung; die
+# signierte (`.json`) ist das, was das Studio zwischen zwei Auslieferungen
+# erzeugt. Läge hier nur die erste, bliebe genau das liegen, was Klaus zuletzt
+# gesperrt hat — der Zettel wäre in jedem Kimboard unsichtbar und auf dem
+# Server weiter da. (Befund 2026-08-18, beim ersten echten Eintrag.)
 LISTE="${LISTE:-https://raw.githubusercontent.com/lausiklauskn-png/Kimboard/main/assets/config/sperrliste.js}"
+LISTE_JSON="${LISTE_JSON:-https://raw.githubusercontent.com/lausiklauskn-png/Kimboard/main/sbkim/sperrliste.json}"
 SCHARF="${SCHARF:-nein}"
 STOPPEN="${STOPPEN:-nein}"
 SICHERUNG="${SICHERUNG:-}"
@@ -85,19 +92,29 @@ done
 [ -r "$DB" ] || { fehler "Datenbank nicht lesbar: $DB"; exit 2; }
 sagen "Datenbank: $DB ($(du -h "$DB" | cut -f1))"
 
-# ── 2. Die Sperr-Liste holen ─────────────────────────────────────────────────
-roh=""
-if [ -r "$LISTE" ]; then
-  roh="$(cat "$LISTE")"
-  sagen "Liste:     $LISTE (lokal)"
-else
-  roh="$(curl -sS -m 20 "$LISTE" 2>/dev/null)"
-  [ -n "$roh" ] || { fehler "Liste nicht erreichbar: $LISTE"; exit 2; }
-  sagen "Liste:     $LISTE"
-fi
+# ── 2. Die Sperr-Listen holen — BEIDE ────────────────────────────────────────
+hole() {  # $1 = Datei oder Adresse; leise, ein Fehlschlag ist kein Abbruch
+  [ -n "$1" ] || return 1
+  if [ -r "$1" ]; then cat "$1"; else curl -sS -m 20 "$1" 2>/dev/null; fi
+}
 
-# Stand der Liste, falls angegeben — damit man sieht, ob man die aktuelle liest.
-stand="$(printf '%s' "$roh" | sed -n "s/.*stand:[[:space:]]*'\([^']*\)'.*/\1/p" | head -1)"
+roh_js="$(hole "$LISTE")"
+roh_json="$(hole "$LISTE_JSON")"
+
+if [ -z "$roh_js" ] && [ -z "$roh_json" ]; then
+  fehler "Keine der beiden Listen erreichbar:"
+  fehler "  $LISTE"
+  fehler "  $LISTE_JSON"
+  exit 2
+fi
+[ -n "$roh_js" ]   && sagen "Liste:     $LISTE" || sagen "Liste:     — (nicht erreichbar: $LISTE)"
+[ -n "$roh_json" ] && sagen "Signiert:  $LISTE_JSON" || sagen "Signiert:  — (nicht vorhanden)"
+
+# Stand der Listen, damit man sieht, ob man die aktuelle liest. Beide
+# Schreibweisen: `stand: '…'` (eingebacken) und `\"stand\":\"…\"` (signiert).
+stand="$(printf '%s\n%s' "$roh_js" "$roh_json" \
+  | sed -n -e "s/.*stand:[[:space:]]*'\([^']*\)'.*/\1/p" -e 's/.*stand[^:]*:[^0-9]*\([0-9-]\{10\}\).*/\1/p' \
+  | sort -u | tr '\n' ' ')"
 [ -n "$stand" ] && sagen "Stand:     $stand"
 sagen ""
 
@@ -106,16 +123,54 @@ sagen ""
 # Die beiden dürfen nicht in einen Topf: ein versehentlich als Absender
 # eingetragener Wert nähme weit mehr weg, als jemand erwartet.
 #
-# Gelesen wird abschnittsweise zwischen `ereignisse:` und `absender:`. Die
-# Beispiele in den Kommentaren stören nicht: sie sind bewusst gekürzt
-# ('a1b2…') und damit keine 64 Hex-Zeichen.
-abschnitt() {  # $1 = Feldname
-  printf '%s' "$roh" \
-    | sed -n "/${1}:[[:space:]]*{/,/^[[:space:]]*}/p" \
-    | grep -oE "'[0-9a-fA-F]{64}'" \
-    | tr -d "'" \
-    | tr 'A-F' 'a-f' \
-    | sort -u
+# ZWEI SCHREIBWEISEN, EIN VERFAHREN. Die eingebackene Liste ist JavaScript über
+# viele Zeilen (`ereignisse: { 'abc…': {…} }`), die signierte ist JSON in EINER
+# Zeile mit maskierten Anführungszeichen (`\"ereignisse\":{\"abc…\":{…}}`). Ein
+# zeilenweises `sed` fand deshalb in der zweiten gar nichts — und hätte eine
+# Null gemeldet, die wie „nichts gesperrt" aussieht.
+#
+# ── DIE GEFÄHRLICHE STELLE, und sie hat beim Bauen wirklich zugeschnappt ─────
+# Eine gesperrte Kennung steht in BEIDEN Schreibweisen als SCHLÜSSEL da, also
+# mit einem Doppelpunkt dahinter:   'abc…': { grund: … }   bzw.  \"abc…\":{…}
+# Der Umschlag des signierten Ereignisses trägt daneben aber noch `pubkey`,
+# `id` und `sig` — und die sind WERTE:   \"pubkey\": \"7dee…\",
+#
+# Der erste Entwurf las „alles nach dem Wort absender" und fing damit die `id`
+# des Ereignisses als gesperrten ABSENDER mit ein. In dieser Datei blieb das
+# folgenlos. Läge `pubkey` weiter hinten — und die meisten JSON-Werkzeuge
+# sortieren die Felder alphabetisch, dann steht `pubkey` NACH `content` —, dann
+# wäre es KLAUS' EIGENER SCHLÜSSEL gewesen, und ein scharfer Lauf hätte alles
+# entfernt, was er je geschrieben hat.
+#
+# Deshalb greift der Ausdruck unten nur nach Kennungen, hinter denen ein
+# DOPPELPUNKT steht. Das trennt Schlüssel von Werten und gilt in beiden
+# Schreibweisen — unabhängig davon, in welcher Reihenfolge die Felder stehen.
+#
+# Zusätzlich wird abschnittsweise geschnitten (`#` und `%%` treffen jeweils das
+# ERSTE Vorkommen). Die Beispiele in den Kommentaren stehen VOR `ereignisse`
+# und fallen heraus; gekürzt sind sie ohnehin ('a1b2…' ist keine 64 Zeichen).
+kennungen() {  # $1 = roher Text, $2 = Feldname
+  local flach="${1//$'\n'/ }" teil
+  case "$2" in
+    ereignisse)
+      [ "${flach#*ereignisse}" = "$flach" ] && return 0   # Feld gar nicht da
+      teil="${flach#*ereignisse}"
+      teil="${teil%%absender*}"
+      ;;
+    absender)
+      [ "${flach#*absender}" = "$flach" ] && return 0
+      teil="${flach#*absender}"
+      ;;
+  esac
+  # 64 Hex · evtl. ein Maskierungs-Zeichen · Anführungszeichen · Doppelpunkt
+  printf '%s' "$teil" \
+    | grep -oE "[0-9a-fA-F]{64}\\\\?[\"'][[:space:]]*:" \
+    | grep -oE "^[0-9a-fA-F]{64}" \
+    | tr 'A-F' 'a-f'
+}
+
+abschnitt() {  # $1 = Feldname — über BEIDE Listen, zusammengeführt
+  { kennungen "$roh_js" "$1"; kennungen "$roh_json" "$1"; } | sort -u
 }
 
 ereignisse="$(abschnitt ereignisse)"

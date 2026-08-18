@@ -297,6 +297,13 @@ try {
     const errs = [];
     p.on('pageerror', (e) => errs.push(String(e)));
     await p.route('**/assets/config/sperrliste.js', (r) => r.fulfill(alsJs(js)));
+    /* Die SIGNIERTE Liste hier wegnehmen. Sie trägt seit dem 2026-08-18 einen
+       echten Eintrag, und ohne diese Zeile misst der Test unten nicht mehr,
+       was er meint: „aus der KAPUTTEN eingebackenen Liste kommt nichts durch"
+       würde an einem völlig gesunden Eintrag aus der anderen Quelle scheitern.
+       Ein Fehlschlag aus dem falschen Grund ist so wertlos wie ein grüner Haken
+       aus dem falschen Grund. */
+    await p.route('**/sbkim/sperrliste.json', (r) => r.fulfill({ status: 404, body: '' }));
     await p.goto(SEITE, { waitUntil: 'domcontentloaded' });
     let lebt = true;
     try {

@@ -82,7 +82,7 @@ ${absender.map((k) => `      '${k}': { grund: 'Probe', seit: '2026-08-18' },`).j
 function lauf(dbPfad, listePfad, extra) {
   try {
     const aus = execFileSync('bash', [SKRIPT], {
-      env: { ...process.env, PATH: binDir + ':' + process.env.PATH, DB: dbPfad, LISTE: listePfad, ...(extra || {}) },
+      env: { ...process.env, PATH: binDir + ':' + process.env.PATH, DB: dbPfad, LISTE: listePfad, LISTE_JSON: '', ...(extra || {}) },
       encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']
     });
     return { code: 0, aus };
