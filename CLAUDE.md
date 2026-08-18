@@ -135,6 +135,19 @@ korrekt `exit=1` zurück — hinter einer Pipe bekommst du den Rückgabewert von
   Seit die Betreiber-Kennung in `moderation.js` steht, kostet ein Verlust zusätzlich den
   Studio-Zugang, und die Reparatur wäre ein Commit.
 
+- **Der Nachsehen-Gang gehört auf den Server, nicht aufs Tablet.**
+  `tools/relais-wache.sh` liest die Sperr-Liste und sagt, was ein Löschlauf im
+  Relais-Speicher träfe — **er löscht nichts**. Zwei Dinge macht er bewusst anders als
+  die App: er greift nach der **Kennung** statt nach dem Brett-Tag (sonst blieben die
+  Mycel-Anfragen `sbkim-qry` liegen — am 2026-08-18 waren das 178 Stück), und er
+  **erfragt das Schema**, statt es anzunehmen. Passt nichts, bricht er mit einem
+  eigenen Rückgabewert ab, statt eine Null zu melden, die wie „nichts betroffen"
+  aussieht.
+  **`x'ABCD'` liest SQLite selbst schreibweise-unabhängig** — wer nur gegen eine
+  BLOB-Datenbank prüft, misst die Groß/klein-Behandlung des Skripts gar nicht. Genau
+  daran war `smoke_relais_wache` beim ersten Lauf blind (23 grün, davon eine
+  bedeutungslos); seit dem Text-Schema sind es 27 echte.
+
 - **Gegenprobe:** `bash tests/gegenprobe_moderation.sh` baut 40 Fehler ein, jeder muss
   eine Probe umwerfen. Beim Bau des Studios hat sie **vier** blinde Prüfungen gefunden,
   alle vier in der Probe statt im Code: eine Fußzeile außerhalb des Sichtfelds (die
@@ -145,6 +158,8 @@ korrekt `exit=1` zurück — hinter einer Pipe bekommst du den Rückgabewert von
   Davor fand sie zwei echte Fehler im Code, die keine Probe sah: eine **behauptete**
   statt gemessene Ausfüllzeit im Melde-Weg (hätte den Bot-Riegel des Dienstes
   ausgehebelt) und die eingefrorene Sperr-Liste oben.
+  `bash tests/gegenprobe_wache.sh` tut dasselbe für den Nachsehen-Gang (11 Fehler)
+  und hat dort beim ersten Lauf eine blinde Prüfung gefunden.
 
 ## Selbst-Merge-Freibrief (Klaus 2026-06-28, netzweit für ALLE Repos)
 
