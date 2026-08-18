@@ -93,7 +93,8 @@
      * schlicht nichts). Ein Forker trägt seine eigene Kennung ein — oder lässt
      * sie leer, wenn seine App kein Studio haben soll. */
     betreiberSchluessel: [
-      '7dee8dd9088022e0a9be3667ad6ed3551a68c263ce557f34907485075d2fd6a0'  // Klaus · Tablet
+      '7dee8dd9088022e0a9be3667ad6ed3551a68c263ce557f34907485075d2fd6a0',  // Klaus · Tablet
+      '987395611fe1f8421922a3732b4df55f29af5305b05547b931dfaca611025051'   // Klaus · Handy
       // Weitere Geräte hier ergänzen. Die Kennung des jeweiligen Geräts steht
       // dort im Studio, wenn es sich (noch) nicht als Betreiber ausweist.
     ],
