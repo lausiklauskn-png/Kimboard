@@ -1,231 +1,168 @@
 # Brief an die nächste Sitzung — Kimboard
 
-**Stand: 2026-08-17, Ende der Sitzung „Recht & Moderation".**
-`main` war beim Start `1072f59`. Gebaut wurde auf
-`claude/kimboard-recht-moderation-tbbacm`.
+**Stand: 2026-08-18, Ende der Sitzung „Studio — Strang A".**
+`main` war beim Start `51d68e3`.
 
-Lies zuerst diesen Brief, dann `CLAUDE.md`, dann
-[`docs/MODERATION_UND_RECHT.md`](MODERATION_UND_RECHT.md). Danach nur den
-Code-Bereich, an dem du arbeitest — `index.html` ist groß, lies gezielt mit Grep.
+Lies zuerst diesen Brief, dann `CLAUDE.md`, dann `docs/MODERATION_UND_RECHT.md`.
+Danach nur den Code-Bereich, an dem du arbeitest — `index.html` ist groß, lies
+gezielt mit Grep.
 
-> Der ältere `BRIEF_MODERATION_UND_RECHT.md` ist damit **abgearbeitet bis auf
-> Strang A**. Was daraus offen blieb, steht unten unter „Was als Nächstes".
+## Was in dieser Sitzung entstanden ist
 
----
+Klaus, wörtlich: *„Ich möchte von meinem Gerät KIMboard beim längerem Klick auf
+Copyright © die Funktion eines Studios wie in PWA Toolpoint, dass ich die
+Kontrolle inkl. endgültigem Löschen auf dem Kimboard habe."*
 
-## Was gebaut ist
+Das hat die Richtung von Strang A gedreht — **weg** vom stummen Server-Wächter,
+der eine Datei im Takt liest, **hin** zu einem Bedienfeld in Klaus' Hand. Und
+genau diese Drehung hat nebenbei die Blockade gelöst, an der die Sache seit dem
+17. hing (dazu unten mehr).
 
-| Strang | Stand |
+| Teil | Stand |
 |---|---|
-| **C — Melde-Weg** (Art. 16 DSA) | ✅ fertig |
-| **B — Sperr-Liste** (App-Seite) | ✅ fertig |
-| **Die Papiere** | ✅ fertig |
-| **A — Server-Wächter** | ⏸ **wartet auf Schritt 0** (siehe unten) |
+| **Studio** (`assets/studio.js`) mit drei Bereichen | ✅ gebaut |
+| **Zugang**: langer Druck ~1,5 s aufs © | ✅ gebaut |
+| **Sperren** aus dem Studio + signierte Liste erzeugen | ✅ gebaut, Rundlauf bewiesen |
+| **Endgültig entfernen** per NIP-86 | ✅ gebaut — **wirkt aber nur, wenn das Relais es kann** |
+| Probe `tests/smoke_studio.mjs` | ✅ 64 Prüfungen |
+| Gegenprobe erweitert | ✅ 29 Fehler, alle gefangen |
 
-**Strang C.** ⚑ an jedem Zettel und jeder Antwort, neben dem ✕. Melde-Fenster mit
-Gründen (Hassrede zuerst), Freitext, anonym möglich. Der Weg ist derselbe
-erprobte Dienst, den der family-projekt.de-Marktplatz benutzt
-(`zweck: "meldung"`) — Kimboards Herkunft `lausiklauskn-png.github.io` stand
-dort **bereits** in `allowed_origins`, es war **keine** Server-Änderung nötig.
-Fail-soft auf `mailto:`, und ohne jede Adresse eine ehrliche Ansage statt eines
-Knopfes, der ins Nichts sendet. Der beanstandete **Inhalt reist nicht mit** —
-nur die Kennungen. Kein Automatismus.
+## Schritt 0 ist beantwortet — von der App, nicht von einer Sitzung
 
-**Strang B.** `assets/config/sperrliste.js`, mit `defer` im `<head>`, damit sie
-vor dem ersten Zettel dasteht. Zettel **und** Absender sperrbar (Klaus'
-Entscheidung). Gesperrtes verschwindet **spurlos** — kein Platzhalter, kein
-Grund am Brett (auch Klaus' Entscheidung: bei Hassrede ist die stehengelassene
-Lücke samt Begründung schon die halbe Verbreitung). Dass die App filtert, steht
-trotzdem offen im Fenster „👁 Ausgeblendet", mit Zahl. Optional eine
-nachgeladene Liste, aber nur mit gültiger Signatur des konfigurierten
-Schlüssels — geprüft mit derselben Funktion wie jeder Zettel.
+Monatelang stand die Frage offen, welche Relais-Software auf Klaus' Server
+läuft. Aus einer Bau-Sitzung ist sie **nicht** zu beantworten, und das ist jetzt
+belegt statt vermutet: der Egress-Proxy weist beide Namen als
+Organisations-Sperre aus (`connect_rejected`, „gateway answered 403 to CONNECT",
+Status-Endpunkt am 2026-08-18). Der README dazu sagt ausdrücklich: nicht
+umgehen, sondern melden.
 
-**Die Papiere.** `docs/MODERATION_UND_RECHT.md` neu. Im Impressum standen zwei
-Sätze, die nicht mehr stimmten — beide berichtigt, siehe unten.
+Aus **Klaus' Browser** ist die Leitung offen. Also fragt die App: das Studio
+ruft jedes verbundene Relais per NIP-11 ab und zeigt Software, Fassung und ob
+NIP-86 dabei ist. Das ist keine Notlösung — die Auskunft ist dort ohnehin
+aktueller als in jedem Protokoll, das eine Sitzung einmal abgeschrieben hätte.
 
----
-
-## Die zwei echten Fehler, die die Gegenprobe gefunden hat
-
-Das ist der Teil, den du kennen musst, weil er sich wiederholen wird.
-
-**1. Eine behauptete Zahl statt einer gemessenen.** Der Melde-Weg schickte
-`fp_elapsed: Math.max(1700, …)`. Der Dienst wirft alles weg, was schneller als
-1,5 s ausgefüllt wurde — mit `Math.max` hätte der Client ihm 1700 ms gemeldet,
-auch wenn 200 vergangen waren, und damit seinen Bot-Riegel von unserer Seite
-ausgehebelt. Aufgefallen ist es nur, weil die Gegenprobe die Wartezeit ausbaute
-und die Prüfung **trotzdem grün blieb**: die Zahl war ohnehin gelogen, also
-konnte kein Wächter etwas merken.
-
-**2. Der Service-Worker fror die Sperr-Liste ein.** `sw.js` ist cache-first für
-alles Gleich-Ursprüngliche. Die nachgeladene Liste wäre **einmal** geholt und
-dann bis zur nächsten Auslieferung aus dem Vorrat bedient worden. Klaus sperrt
-etwas, und die installierten Kimboards sähen es nie. Eine Moderations-Liste, die
-veraltet ausgeliefert wird, ist schlimmer als keine — sie sieht aus, als wirke
-sie. Jetzt netz-zuerst, Cache nur offline.
-
-Gefunden hat das **keine** Überlegung, sondern eine Probe, die sprunghaft rot
-wurde und deren Fehler wanderten. Das sah zuerst wie Zufall aus. Es war keiner.
-
-> **Die Regel daraus:** Eine Prüfung wird nicht sprunghaft, sie hat eine
-> Ursache. Und: was du dem Gegenüber über dich selbst meldest, muss gemessen
-> sein, nicht behauptet — sonst prüft niemand mehr etwas, auch du nicht.
-
----
-
-## Schritt 0 — offen, und Strang A hängt daran
-
-Aus der Sitzungs-Umgebung ist der Server **nicht** erreichbar (belegt erneut am
-2026-08-17: `CONNECT tunnel failed, response 403`). Beide Namen lösen auf
-denselben Rechner auf:
-
-```
-167.233.204.72   relay.family-projekt.de
-167.233.204.72   relay.pwa-toolpoint.de
-```
-
-Klaus hat **einen** kopierfertigen Befehl bekommen (er gehört auf den
-**Hetzner-Server**, nicht aufs Tablet). Die Antwort lag bei Sitzungsende noch
-nicht vor. Falls du sie hast, steht sie oben in Klaus' Nachricht; falls nicht,
-frag danach, **bevor** du Strang A anfässt:
-
-```
-ssh root@167.233.204.72 'echo "== 1 CONTAINER =="; docker ps -a --format "{{.Names}} | {{.Image}} | {{.Status}} | {{.Ports}}"; echo; echo "== 2 SPEICHER =="; for c in $(docker ps -q); do docker inspect -f "{{.Name}}{{range .Mounts}} [{{.Source}} -> {{.Destination}}]{{end}}" $c; done; echo; echo "== 3 DATEIEN =="; ls -la /opt/relay/; find /opt/relay -maxdepth 4 \( -name "*.db" -o -name "*.toml" \) -printf "%p  %s B  %TY-%Tm-%Td\n" 2>/dev/null; echo; echo "== 4 STECKBRIEF family =="; curl -s -m 8 -H "Accept: application/nostr+json" https://relay.family-projekt.de/; echo; echo; echo "== 5 STECKBRIEF toolpoint =="; curl -s -m 8 -H "Accept: application/nostr+json" https://relay.pwa-toolpoint.de/; echo; echo; echo "== 6 CADDY =="; grep -nE "relay|reverse_proxy" /opt/relay/Caddyfile'
-```
-
-Abschnitt 4 und 5 sind der Kern: die Relais-Software beantwortet dort selbst,
-wie sie heißt, welche Fassung sie hat und **welche NIPs sie kann**. Steht `9` in
-der Liste, befolgt sie Lösch-Meldungen. Sind beide Antworten gleich, ist es
-**ein** Relais mit zwei Namen.
-
-**Ein Eingriff in den Relais-Speicher ist schwer umkehrbar.** Ergibt Schritt 0
-etwas anderes als erwartet (`nostr-rs-relay`, SQLite, log-frei), **frag Klaus**,
-bevor du baust. Das ist echtes Zweifeln im Sinne des Freibriefs.
-
----
+**Was Klaus dort sehen wird, ist absehbar und wird enttäuschen:**
+`nostr-rs-relay` (laut `family-project/docs/PULS.md` die dort laufende Software)
+kann **kein** NIP-86. Der Knopf „🗑 Endgültig vom Relais" wird also sagen, dass
+es nicht geht — und **nichts schicken**, statt einen Auftrag ins Leere zu senden
+und Erfolg zu melden. Das ist die ehrliche Fassung, aber es ist noch nicht das,
+was Klaus wollte.
 
 ## Was als Nächstes ansteht
 
-1. **Strang A — der Server-Wächter.** Ein kleiner Dienst auf dem Hetzner-Server,
-   der in festem Takt `sbkim/sperrliste.json` aus dem Repo liest und die
-   genannten Ereignisse aus dem Relais-Speicher entfernt. Muster: der
-   2-Minuten-Cron aus dem Skill `auto-deploy-einrichten` — der Server zieht sich,
-   was im Repo steht; nur die Nutzlast ist neu. Kein zweites Bedienfeld, kein
-   zweiter Ort der Wahrheit. **Setzt Schritt 0 voraus.**
-2. **Das Werkzeug zum Signieren der nachgeladenen Liste.** Solange es fehlt,
-   steht `pruefschluessel` in `assets/config/moderation.js` auf `null` und es
-   wird **nichts** nachgeladen — sichtbar abgeschaltet statt still wirkungslos.
-   Offene Frage an Klaus, die ich bewusst nicht geraten habe: **welcher
-   Schlüssel signiert?** Seine Kimboard-Identität, oder ein eigener nur dafür?
-   Eine Identität, die sowohl Zettel schreibt als auch Sperren unterschreibt,
-   vermischt zwei Rollen.
-3. **Prüf-Auftrag an `family-project/impressum.html`, Punkt 5.** Dort steht
-   „Netz-Inhalte sind Ende-zu-Ende verschlüsselt." Das trifft auf
-   Direktnachrichten (`modules/dm_crypto.js`) und Gruppen zu; das **offene
-   Brett** läuft im Klartext über dasselbe Relais. Die Aussage ist damit
-   möglicherweise zu weit gefasst. **Erst belegen, dann formulieren** — eigene
-   Entscheidung, eigener PR, anderes Repo.
-4. **Aus dem alten Brief noch offen:** der Zwei-Geräte-Lauf mit einer Gruppe
-   (nur Klaus), die Platzhalter-Stunde und die acht Sekunden für „Rückgängig"
-   (beide geraten, nicht gemessen), und die Frage, ob `relay.nostr.band` — ein
-   Archiv- und **Suchdienst** — in den Voreinstellungs-Fünf stehen sollte.
+1. **Klaus' Sichttest abwarten und die Relais-Auskunft ablesen.** Erst danach
+   ist die Entscheidung unter 2. eine Entscheidung und keine Vermutung. Was er
+   sieht, gehört in `docs/MODERATION_UND_RECHT.md` § 6.
+2. **Dann die Weiche für „wirklich weg":** entweder das Heim-Relais auf eine
+   Software mit NIP-86 umstellen (`strfry`), oder der ursprünglich geplante
+   kleine Dienst auf dem Server, der die Sperr-Liste im Takt liest (Muster:
+   2-Minuten-Cron aus dem Skill `auto-deploy-einrichten`). **Das ist ein
+   Richtungsentscheid — Klaus fragen, nicht wählen.** Ein Software-Wechsel am
+   laufenden Relais ist schwer umkehrbar.
+3. **`betreiberSchluessel` eintragen.** Ohne ihn gibt es kein Studio. Klaus
+   bekommt die fertige Zeile im Studio selbst zum Kopieren (langer Druck aufs ©
+   → „📋 Zeile kopieren"). Achtung, das ist eine echte Grenze: die Kennung hängt
+   am **Browser**, nicht an der Person. Auf dem zweiten Gerät ist sie eine
+   andere, und dort geht das Studio dann nicht auf. Ob das reicht oder ob
+   mehrere Kennungen zugelassen werden sollen, weiß erst Klaus, wenn er es
+   benutzt hat.
+4. **Aus dem alten Brief unverändert offen:** Prüf-Auftrag an
+   `family-project/impressum.html` Punkt 5 („Netz-Inhalte sind Ende-zu-Ende
+   verschlüsselt" — trifft auf DMs und Gruppen zu, das **offene Brett** läuft im
+   Klartext; erst belegen, dann formulieren, eigener PR). Dazu der
+   Zwei-Geräte-Lauf mit einer Gruppe, die geratene Platzhalter-Stunde, die acht
+   Sekunden für „Rückgängig", und ob `relay.nostr.band` — ein Archiv- und
+   Suchdienst — in den Voreinstellungs-Fünf stehen sollte.
 
----
+## Was das Studio bewusst NICHT kann
+
+- **Es veröffentlicht die Sperr-Liste nicht selbst.** Es signiert sie und legt
+  sie als Datei hin; einchecken muss Klaus. Ein direkter Weg bräuchte einen
+  Server mit Token (wie im family-projekt.de-Studio) — den hat Kimboard bewusst
+  nicht.
+- **Es kann nichts lösen.** Sperren geht aus der Oberfläche, gelöst wird nur in
+  der Datei. Ein Betreiber-Werkzeug, das diese Regel umginge, wäre ein Loch in
+  genau der Regel, die es durchsetzen soll.
+- **Der lange Druck ist kein Schutz**, und der Schlüssel-Vergleich auch nicht:
+  `betreiberSchluessel` steht öffentlich in `moderation.js`. Wer das Fenster
+  aufmacht, kann trotzdem nichts bewirken — jede Handlung ist ein signiertes
+  Ereignis, und signieren kann nur, wer den privaten Schlüssel hat.
 
 ## Prüfen
 
 ```bash
 npm install --no-save playwright-core     # einmalig je Container
-node tests/alle.mjs                       # ALLES — 27 Prüfungen (~8 Min)
-node tests/alle.mjs sperr                 # nur die Sperr-Liste
-bash tests/gegenprobe_moderation.sh       # 17 eingebaute Fehler, jeder MUSS fangen
+node tests/alle.mjs                       # ALLES — 28 Prüfungen
+bash tests/gegenprobe_moderation.sh       # 29 eingebaute Fehler, jeder MUSS fangen
 ```
 
-Zuletzt gemessen: **alle 27 grün**, Gegenprobe **17 von 17 gefangen**.
+Zuletzt: **alle 28 grün** (Rückgabewert 0, ohne Pipe gemessen), Gegenprobe
+**29 von 29**.
 
-**`npm test` ist nicht „die Prüfung"** — es fasst die Proben unter `tests/`
-nicht an. Und **`| tail` ist zum Lesen da, nicht zum Urteilen**: über grün
-entscheidet nur der eigene Rückgabewert.
+### Was die Gegenprobe diesmal gefunden hat — vier blinde Prüfungen
 
-**Warte auf die Bedingung, nie auf die Uhr.** Die neuen Proben tun das
-durchgehend (`waitForFunction` statt `waitForTimeout`). Zwei Stellen, an denen
-das hier konkret zählte: die Nachlade-Kette (`window.__kb`) und der
-Service-Worker (`navigator.serviceWorker.controller`) — ohne die zweite hätte
-der SW-Abschnitt gar nicht den Fall geprüft, den er meint, und wäre **stumm**
-statt falsch gewesen.
+Alle vier in der **Probe**, keine im Code. Sie sind es wert, gelesen zu werden,
+weil sie sich alle gleich anfühlen: grün, und trotzdem nichts gemessen.
 
-### Zwei Dinge, die dir sonst Zeit kosten
+1. **Die Fußzeile lag außerhalb des Sichtfelds.** Die Maus traf sie nie, und
+   „ein kurzer Tipp öffnet nichts" war deshalb grün, ohne etwas zu berühren.
+   → `scrollIntoViewIfNeeded()`, und eine eigene Prüfung, dass sie wirklich im
+   Bild liegt.
+2. **Eine per `route` gefälschte Antwort ohne Freigabe-Kopf.** Der Browser
+   verwarf sie, das Studio meldete völlig korrekt „keine Auskunft" — gemessen
+   wurde die eigene Nachlässigkeit. Gefälschte Antworten brauchen dieselben
+   CORS-Köpfe wie echte, und der POST auch eine Antwort auf die Vorab-Frage
+   (OPTIONS).
+3. **Gewartet auf ein Wort, das schon dastand.** „Verwaltung" steht in der
+   Erklärzeile über der Liste — die Bedingung feuerte sofort, und gelesen wurde
+   „wird abgefragt …". → Auf etwas warten, das es **nur nach** der Abfrage gibt.
+4. **Nach dem Schlüssel in der falschen Form gesucht.** `priv` ist ein
+   Byte-Feld (`fromHex(privHex)`), kein Hex-Text; `JSON.stringify` macht daraus
+   `{"0":18,…}`. Die Suche ging daran vorbei. → In beiden Formen suchen.
 
-- **`page.route` fängt keine Abrufe ab, die aus einem Service-Worker kommen.**
-  Deshalb laufen die geleiteten Fälle in `smoke_sperrliste.mjs` mit
-  `serviceWorkers: 'block'`; sein Verhalten prüft ein eigener Abschnitt mit
-  wachem SW und einer echten Datei, die sich zwischen zwei Abrufen ändert.
-- **`assets/hilfe.js` erzwingt einen Eintrag nur für Elemente mit `id`.** Knöpfe
-  mit reiner Klasse (`.q-melden`) fängt die Vollständigkeits-Prüfung nicht —
-  dort braucht es einen eigenen Wächter, und den gibt es jetzt.
-
----
+Dazu eine Prüfung, die sich **gar nicht** mit der Maus messen ließ: zieht man
+über Text, beginnt Chrome eine Textauswahl und schickt von sich aus
+`pointercancel` — der Druck bricht dann auch ohne unseren Handler ab. Auf Klaus'
+Tablet ist aber genau dieser Handler der wirksame Weg (dort scrollt der Finger).
+Deshalb misst `smoke_studio.mjs` ihn mit echten Pointer-Ereignissen, und
+**direkt daneben steht die Gegenprobe dazu**: ohne Wischen muss derselbe Weg
+öffnen — sonst wäre die Prüfung grün, weil die künstlichen Ereignisse überhaupt
+nichts auslösen.
 
 ## Was nur Klaus prüfen kann
 
-Alles Folgende ist **headless grün, am Tablet ungeprüft**:
+Alles headless grün, am Tablet ungeprüft:
 
-- Ob ⚑ und ✕ am Handy nebeneinander gut treffbar sind. Gemessen ist es (frei
-  treffbar, gleich groß, in einer Spalte, Kopftext läuft nicht darunter durch) —
-  ob es sich gut *anfühlt*, ist etwas anderes.
-- Ob eine echte Meldung wirklich in `info@family-projekt.de` ankommt. Headless
-  ist nur bewiesen, dass der richtige Aufruf mit dem richtigen Inhalt rausgeht.
-- Wie sich das Melde-Fenster auf einem schmalen Schirm liest.
+- Ob der lange Druck aufs © **mit dem Finger** gut trifft, ohne beim Scrollen
+  von allein aufzugehen.
+- Was die Relais-Auskunft **wirklich** sagt (siehe oben — das ist der eigentlich
+  interessante Punkt).
+- Ob das Studio-Fenster auf schmalem Schirm lesbar ist. Es ist ein 640-px-Kasten
+  mit `max-height:86vh` und eigenem Rollbalken; auf dem Handy dürfte die
+  Zettel-Liste eng werden.
+- Ob „📋 Zeile kopieren" auf dem Tablet in die Zwischenablage kommt
+  (`navigator.clipboard` braucht eine sichere Herkunft — auf GitHub Pages
+  gegeben).
 
-Nach dem Merge: **Hard-Reload** (Strg+Shift+R bzw. der ⟳-Knopf), sonst liefert
-der Service-Worker die alte Fassung. `CACHE_VERSION` steht auf `kimboard-v58`.
+`CACHE_VERSION` = `kimboard-v59`, nach dem Merge Hard-Reload.
 
----
-
-## Arbeitsweise (Klaus)
-
-- **Antworten auf Deutsch**, ruhig und präzise. Klaus ist kein Programmierer,
-  lernt aber gern. **Einzelschritte** mit klarem Erfolgsmerkmal. Keine
-  Terminal-Befehle für ihn — die einzige Ausnahme ist der `ssh`-Einzeiler oben,
-  und der ist genau einer.
-- **Selbst-Merge-Freibrief gilt** (netzweit, Klaus 2026-06-28): eigene PRs
-  selbstständig mergen, sobald getestet, abgegrenzt und nicht architektonisch
-  zweifelhaft. Bei echtem Zweifel erst fragen.
-- **Branch frisch von `origin/main`**, Push mit ausdrücklicher Refspec, danach
-  `git diff --stat origin/main origin/<branch>` — ein leerer PR lässt sich
-  mergen und meldet Erfolg.
-- **`CACHE_VERSION` erhöhen**, sobald eine Schalen-Datei sich ändert.
-- **Ehrlichkeit vor Fertig-Meldung.** Bei diesem Thema doppelt: ein Versprechen
-  „endgültig gelöscht", das nur für ein Relais gilt, wäre schlimmer als gar
-  keins.
-
----
-
-## Kurz-Karte: wo was liegt
+## Kurz-Karte
 
 | Thema | Fundstelle |
 |---|---|
-| Melde-Knopf, Fenster, Absende-Weg | `index.html`: `meldeKnopf`, `openMeldeDialog`, `sendeMeldung` |
-| Melde-/Sperr-Konfiguration (Forker ändern hier) | `assets/config/moderation.js` |
-| Die Sperr-Liste selbst | `assets/config/sperrliste.js` |
+| Studio | `assets/studio.js` |
+| Zugang (langer Druck aufs ©) | `index.html`, letzter `<script>`-Block vor `</body>` |
+| Brücke aus dem Modul-Scope | `index.html`: `signiere`, `__kb.zettel/relaisListe/sperreJetzt` |
+| Betreiber-Ausweis | `assets/config/moderation.js`: `betreiberSchluessel` |
+| Melden | `index.html`: `meldeKnopf`, `openMeldeDialog`, `sendeMeldung` |
+| Die Sperr-Liste | `assets/config/sperrliste.js` |
 | Anwenden · Nachladen · Nachwischen | `index.html`: `istNetzGesperrt`, `ladeSperrQuelle`, `wischeGesperrte` |
 | Netz-zuerst für die Liste | `sw.js` (sonst friert sie ein) |
-| Heim-Relais · Senden/Lesen-Trennung | `index.html`: `HOME_RELAY`, `sendSockets()` vs. `liveSockets()` |
-| Zurückziehen (NIP-09) | `index.html`: `zurueckziehenFuerAlle`, `handleDeletion` |
-| Ausblenden · Stummschalten | `index.html`: `hideQuestion`, `sperreAbsender`, `openAusgeblendet` |
-| Erklär-Blasen | `assets/hilfe.js` — Klassen-Knöpfe fängt die Prüfung NICHT |
 | Einordnung + Rechtslage | `docs/MODERATION_UND_RECHT.md` |
-| Proben · Gegenprobe | `tests/smoke_melden.mjs`, `tests/smoke_sperrliste.mjs`, `tests/gegenprobe_moderation.sh` |
+| Proben · Gegenprobe | `tests/smoke_studio.mjs`, `tests/smoke_melden.mjs`, `tests/smoke_sperrliste.mjs`, `tests/gegenprobe_moderation.sh` |
 
----
+## Abschluss-Befehl
 
-## Abschluss-Befehl für die nächste Sitzung
-
-Diese Kette reißt nie ab. Am Ende der Sitzung:
-
-1. Diesen Brief fortschreiben — Stand, was gebaut, was offen, was als Nächstes.
-2. Den vollständigen Brief **als Codeblock in die Chat-Antwort** ausgeben.
-   Klaus' Tab ist der Einstiegspunkt, nicht der Dateibrowser.
-3. Einen „Nächste Schritte"-Block mit 2–4 priorisierten Punkten, je ein Satz
-   Begründung.
-4. Ehrlich vermerken, was **nur Klaus am Tablet** prüfen kann.
+1. Diesen Brief fortschreiben. 2. Vollständig als Codeblock in die Chat-Antwort.
+3. „Nächste Schritte"-Block mit 2–4 Punkten. 4. Ehrlich vermerken, was nur Klaus
+am Tablet prüfen kann.

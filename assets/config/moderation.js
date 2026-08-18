@@ -58,6 +58,28 @@
      * zwischen zwei Auslieferungen zu sperren. */
     quelle: './sbkim/sperrliste.json',
 
+    /* ── Betreiber-Ausweis (Studio) ───────────────────────────────────────
+     * Wer dieses Brett betreibt, erkennbar an seinem öffentlichen Schlüssel.
+     * Nur wer DIESEN Schlüssel im Gerät hat, bekommt das Studio zu sehen
+     * (langer Druck auf das © in der Fußzeile).
+     *
+     * DAS IST KEIN TÜRSCHLOSS, und es soll auch keines vortäuschen. Der Wert
+     * steht öffentlich in dieser Datei; jeder kann sie lesen und das Studio
+     * mit einem Handgriff aufmachen. Was er dort NICHT kann, ist irgendetwas
+     * bewirken: jede Handlung des Studios ist ein signiertes Ereignis, und
+     * signieren kann sie nur, wer den PRIVATEN Schlüssel hat. Der liegt in
+     * genau einem Browser und verlässt ihn nie.
+     *
+     * Die Autorität sitzt also beim Relais und beim Schlüssel, nicht in der
+     * Oberfläche. Der Vergleich hier hält nur die App aufgeräumt — er hält
+     * niemanden auf, und er behauptet es auch nicht.
+     *
+     * Klaus trägt hier die Kennung ein, die im Siegel unter „Eigene Identität"
+     * steht. Solange sie fehlt, gibt es kein Studio (der lange Druck tut dann
+     * schlicht nichts). Ein Forker trägt seine eigene ein — oder lässt sie
+     * leer, wenn seine App kein Studio haben soll. */
+    betreiberSchluessel: null,
+
     /* Öffentlicher Schlüssel (Nostr, 64 Hex-Zeichen), mit dem eine nachgeladene
      * Liste signiert sein MUSS. Ohne diesen Wert wird nichts nachgeladen —
      * eine unsignierte Liste anzunehmen hieße, jedem zu glauben, der die Datei

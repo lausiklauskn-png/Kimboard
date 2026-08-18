@@ -1318,6 +1318,27 @@ async function buildEvent(content, extraTags = [], recipient = null) {
   const sig = toHex(await schnorr.sign(fromHex(id), priv));
   return { id, pubkey: pubHex, created_at, kind, tags, content: outContent, sig };
 }
+/* Ein beliebiges Ereignis signieren — allgemein, nicht auf kind 1 festgelegt.
+ * `buildEvent` oben ist der Weg für ZETTEL: es hängt Brett-Tag, Gerätename und
+ * Verschlüsselung an. Das Studio braucht etwas anderes — eine Sperr-Liste
+ * (kind 30078) und den Ausweis gegenüber dem eigenen Relais (kind 27235,
+ * NIP-98/86). Beides sind keine Zettel und dürfen nichts davon erben.
+ *
+ * Getrennte Funktion statt eines Schalters in `buildEvent`: dort hinge sonst an
+ * jedem Zettel ein Zweig, der nur für den Betreiber gilt. Hier ist der private
+ * Schlüssel im Scope, draußen ist er es nicht — deshalb liegt sie hier und
+ * nicht im Studio. */
+async function signiere({ kind, tags, content }) {
+  const created_at = Math.floor(Date.now() / 1000);
+  const roh = {
+    pubkey: pubHex, created_at,
+    kind: Number(kind), tags: tags || [], content: String(content == null ? '' : content)
+  };
+  const id = await eventId(roh);
+  const sig = toHex(await schnorr.sign(fromHex(id), priv));
+  return { ...roh, id, sig };
+}
+
 // Eine Notiz ist eine ANTWORT, wenn sie ein e-Tag trägt → die referenzierte Frage-id.
 function refOf(ev) {
   const e = (ev.tags || []).find((t) => t[0] === 'e');
@@ -4314,7 +4335,28 @@ window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubH
     ereignisse: [...sperrEreignisse.keys()],
     absender: [...sperrAbsender.keys()],
     stand: sperrQuelleStand
-  }) };
+  }),
+  /* ── Was das Studio aus dem Modul-Scope braucht ────────────────────────
+   * Das Studio (assets/studio.js) wird als gewöhnliches Skript nachgeladen und
+   * sieht deshalb NICHTS von hier drinnen — dieser Block ist die ganze Brücke.
+   *
+   * Er gibt bewusst KEINEN privaten Schlüssel heraus, nur `signiere`: eine
+   * Funktion, die mit ihm arbeitet. Damit kann das Studio Ereignisse
+   * ausstellen, aber den Schlüssel weder lesen noch weiterreichen.
+   *
+   * Und er kann weiterhin nur SPERREN, nicht lösen — `sperreJetzt` reicht in
+   * `sperrEintraegeAus` hinein, wo der erste Eintrag gewinnt und nichts je
+   * entfernt wird. Die Einbahnstraße gilt für das Studio genauso wie für alles
+   * andere; ein Betreiber-Werkzeug, das sie umginge, wäre ein Loch in genau der
+   * Regel, die es durchsetzen soll. Gelöst wird in der Datei. */
+  signiere,
+  relaisListe: () => activeRelays.slice(),
+  verbundeneRelais: () => liveSockets().map((w) => w.url),
+  zettel: () => [...qViews.values()].map((v) => ({
+    ev: v.qEv, antworten: (v.answers || []).map((a) => a && a.ev).filter(Boolean)
+  })).filter((z) => z.ev),
+  sperreJetzt: (liste) => { const n = sperrEintraegeAus(liste, 'studio'); if (n) wischeGesperrte(); return n; }
+};
 </script>
 
 <!-- ── SBKIM-Endknoten-Stack (byte-1:1-Kopien, Drift-Guard im Smoke-Test) ──
@@ -4463,5 +4505,66 @@ window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubH
   </a>
   <div class="fp-copy">&copy; 2026 Klaus Nitzsche &middot; kostenlos, ohne Konto, offline nutzbar</div>
 </div>
+
+<!-- ── STUDIO-ZUGANG (nur für den Betreiber dieses Bretts) ───────────────────
+     LANGER DRUCK (~1,5 s) auf das © holt `assets/studio.js` nach und öffnet das
+     Studio. Vorher wird die Datei NICHT geladen — sie ist Klaus' Werkzeug, kein
+     Teil der Seite; jeder Besucher lüde sonst Kilobytes für einen Knopf, den nur
+     einer je drückt. Muster 1:1 aus PWA-Toolpoint (`assets/app.js`,
+     `studioZugang()`), dort seit 2026-08-09 im Betrieb.
+
+     KEIN SCHUTZ, und es gibt sich auch nicht als einer aus: der lange Druck hält
+     nur die Seite aufgeräumt. Der Schutz sitzt woanders — jede Handlung des
+     Studios ist ein signiertes Ereignis, und signieren kann nur, wer den privaten
+     Schlüssel hat. Wer ihn nicht hat, sieht ein Fenster, das nichts bewirkt.
+
+     Ein Wischen bricht ab. Sonst löste jedes Scrollen über der Fußzeile das
+     Studio aus — der Fehler, der wie ein Geist aussieht.
+
+     Klassisches Skript, kein Modul: es läuft VOR dem Haupt-Modul und darf sich
+     deshalb hier auf nichts daraus verlassen. Es hängt nur den Lauscher an; alles
+     Weitere passiert beim Druck, wenn `window.__kb` längst steht. -->
+<script>
+(function () {
+  'use strict';
+  var ziel = document.querySelector('.fp-copy');
+  if (!ziel) return;
+  ziel.style.cursor = 'default';
+
+  var laeuft = false;
+  function holen() {
+    if (laeuft) return Promise.resolve();
+    laeuft = true;
+    return new Promise(function (fertig, schief) {
+      var s = document.createElement('script');
+      s.src = './assets/studio.js?v=1';
+      s.onload = fertig;
+      s.onerror = function () { laeuft = false; schief(new Error('studio.js')); };
+      document.head.appendChild(s);
+    });
+  }
+  function oeffnen() {
+    holen().then(function () {
+      if (window.KBStudio) window.KBStudio.umschalten();
+    }).catch(function () { /* fail-soft: nichts passiert, die Seite bleibt heil */ });
+  }
+
+  var uhr = null, sx = 0, sy = 0;
+  var stop = function () { if (uhr) { clearTimeout(uhr); uhr = null; } };
+  ziel.addEventListener('pointerdown', function (ev) {
+    sx = ev.clientX; sy = ev.clientY; stop();
+    uhr = setTimeout(function () { uhr = null; oeffnen(); }, 1500);
+  });
+  ziel.addEventListener('pointermove', function (ev) {
+    if (uhr && (Math.abs(ev.clientX - sx) > 10 || Math.abs(ev.clientY - sy) > 10)) stop();
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (n) {
+    ziel.addEventListener(n, stop);
+  });
+
+  /* Nur für die Prüfung — sie kann das Studio nicht 1,5 s lang drücken. */
+  window.__kbStudioOeffnen = oeffnen;
+})();
+</script>
 </body>
 </html>
