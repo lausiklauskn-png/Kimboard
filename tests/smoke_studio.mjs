@@ -94,7 +94,12 @@ async function neueSeite(browser, { mod, quelle, nip11, zaehleStudio } = {}) {
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Authorization, Content-Type, Accept'
     };
-    await p.route(/^https:\/\/relay\./, async (r) => {
+    /* ALLE fremden https-Ziele fangen, nicht nur `relay.*`: im Pool steht auch
+       `nos.lol`. Das Muster von zuvor ließ es durch, der echte Abruf scheiterte,
+       und aus dem Fall „alle antworten" wurde unbemerkt der gemischte — die
+       Prüfung maß etwas anderes, als sie behauptete. Die Seite selbst läuft auf
+       http://127.0.0.1 und ist davon nicht betroffen. */
+    await p.route(/^https:\/\//, async (r) => {
       const req = r.request();
       if (req.method() === 'OPTIONS') return r.fulfill({ status: 204, headers: frei, body: '' });
       if (req.method() === 'POST') {
@@ -755,19 +760,27 @@ try {
         () => /Software:|keine Auskunft/.test(document.getElementById('studio-fenster').innerText),
         null, { timeout: 20000 });
 
-      /* Auf den Dialog WARTEN, statt danach nachzusehen: der Handler feuert
-         asynchron, und ein Blick direkt nach dem Klick käme zu früh. */
-      const [dlg] = await Promise.all([
-        p.waitForEvent('dialog', { timeout: 15000 }),
-        p.evaluate(() => {
-          const b = [...document.querySelectorAll('#studio-fenster button')]
-            .find((x) => /Endgültig vom Relais/.test(x.textContent));
-          if (!b) throw new Error('kein Knopf „Endgültig vom Relais" gefunden');
-          b.click();
-        })
-      ]);
-      const gesehen = dlg.message();
-      await dlg.dismiss();
+      /* `alert` VORHER durch einen Rekorder ersetzen, statt Playwrights
+         Dialog-Weg zu benutzen.
+         WARUM SO UMSTÄNDLICH: `Promise.all([waitForEvent, evaluate])` ist ein
+         Deadlock. `waitForEvent` löst aus, sobald der Dialog erscheint — aber
+         `evaluate` kehrt erst zurück, wenn er geschlossen ist, und geschlossen
+         würde er erst NACH dem `Promise.all`. Die Probe stand deshalb
+         49 Minuten und gab 23 Bytes aus; sie war nicht langsam, sie hing.
+         So gemessen wird derselbe Text, den der Nutzer zu lesen bekäme, und
+         nichts kann blockieren. */
+      await p.evaluate(() => {
+        window.__gesehen = '';
+        window.alert = (t) => { window.__gesehen = String(t); };
+      });
+      await p.evaluate(() => {
+        const b = [...document.querySelectorAll('#studio-fenster button')]
+          .find((x) => /Endgültig vom Relais/.test(x.textContent));
+        if (!b) throw new Error('kein Knopf „Endgültig vom Relais" gefunden');
+        b.click();
+      });
+      await p.waitForFunction(() => !!window.__gesehen, null, { timeout: 10000 });
+      const gesehen = await p.evaluate(() => window.__gesehen);
       const fensterText = await text(p);
       await ctx.close();
       return { gesehen, fensterText };
