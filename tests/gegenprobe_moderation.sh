@@ -291,8 +291,8 @@ probe "ein belegtes Nein wird auch als solches benannt" smoke_studio.mjs \
 
 probe "ein unbrauchbarer Eintrag in der Betreiber-Liste fällt auf" smoke_studio.mjs \
   ersetze assets/config/moderation.js \
-  "      '7dee8dd9088022e0a9be3667ad6ed3551a68c263ce557f34907485075d2fd6a0'  // Klaus · Tablet" \
-  "      '7DEE8DD9088022E0A9BE3667AD6ED3551A68C263CE557F34907485075D2FD6A'  // Klaus · Tablet"
+  "      '7dee8dd9088022e0a9be3667ad6ed3551a68c263ce557f34907485075d2fd6a0',  // Klaus · Tablet" \
+  "      '7DEE8DD9088022E0A9BE3667AD6ED3551A68C263CE557F34907485075D2FD6A',  // Klaus · Tablet"
 
 # Eine Liste ist eine Liste — nicht der erste Eintrag. Prüfte das Studio nur
 # den ersten, käme das zweite Gerät nie hinein, und niemand sähe einen Fehler.
