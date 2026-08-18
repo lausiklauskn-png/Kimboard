@@ -114,6 +114,14 @@ korrekt `exit=1` zurück — hinter einer Pipe bekommst du den Rückgabewert von
   Damit beantwortet die App eine Frage, die aus einer Sitzung **nicht** zu beantworten
   ist: der Egress-Proxy sperrt beide Relais-Namen (403, `connect_rejected`).
 
+- **„Meine Kennung" ist NICHT die SBKIM-Spore.** Zwei Identitäten, zwei Schubladen:
+  der **Pinnwand-Schlüssel** (`localStorage`, signiert die Zettel, steht oben in der
+  Seite) und die **SBKIM-Spore** (Modul 02, IndexedDB `kimboard`, entsteht erst beim
+  ersten Netz-Verbinden — in einem frischen Browser gibt es sie nicht). Bis zum
+  2026-08-18 hieß beides „Spore"; die Schlüssel-Sicherung rettet aber **nur die erste**,
+  und an der alten Beschriftung war das nicht zu erkennen. `smoke_studio` bewacht die
+  Beschriftung samt Erklär-Blase.
+
 - **Der private Schlüssel liegt als Klartext in `localStorage`** und ist nur über die
   Sicherung zu retten (🔑, verschlüsselte Datei, PBKDF2 600k + AES-GCM). Sie hängt an
   **drei** Stellen, und jede hat ihren Grund:

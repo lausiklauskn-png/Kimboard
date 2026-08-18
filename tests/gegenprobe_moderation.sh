@@ -311,6 +311,19 @@ probe "ein einzelner Wert wird weiterhin angenommen (Fork-Fall)" smoke_studio.mj
   "    if (typeof roh === 'string') roh = [roh];" \
   "    if (typeof roh === 'string') roh = [];"
 
+# Die Beschriftung. Rutschte sie zurück auf „Meine Spore", verwechselte die
+# Seite wieder zwei Identitäten — und die Schlüssel-Sicherung daneben sähe aus,
+# als rettete sie beide.
+probe "die Kennung heisst nicht wieder Spore" smoke_studio.mjs \
+  ersetze index.html \
+  '<span class="pill">Meine Kennung: <code id="me"' \
+  '<span class="pill">Meine Spore: <code id="me"'
+
+probe "die Erklaer-Blase benennt den Unterschied zur Spore" smoke_studio.mjs \
+  ersetze assets/hilfe.js \
+  "Nicht zu verwechseln mit der SBKIM-Spore fürs Mycel" \
+  "Nicht zu verwechseln mit dem Anderen"
+
 probe "studio.js bleibt aus dem Offline-Vorrat heraus" smoke_studio.mjs \
   ersetze sw.js \
   '  "./assets/config/sperrliste.js",' \
