@@ -72,7 +72,7 @@ Kanonische Quelle der `modules/*.js`: `Sage-Protokol/src/modules/*` (bzw.
 ```bash
 npm install --no-save playwright-core   # einmalig je Container
 node tests/alle.mjs                     # ALLES — 28 Prüfungen
-bash tests/gegenprobe_moderation.sh     # 38 eingebaute Fehler, jeder muss fangen
+bash tests/gegenprobe_moderation.sh     # 40 eingebaute Fehler, jeder muss fangen
 ```
 
 > ⚠️ **`npm test` ist nicht „die Prüfung".** Es läuft `node --test` (Drift-Guard

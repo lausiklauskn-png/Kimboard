@@ -4625,7 +4625,7 @@ window.__kb = { dispatch, pinContact, contacts: () => dmContacts, me: () => pubH
     laeuft = true;
     return new Promise(function (fertig, schief) {
       var s = document.createElement('script');
-      s.src = './assets/studio.js?v=3';
+      s.src = './assets/studio.js?v=4';
       s.onload = fertig;
       s.onerror = function () { laeuft = false; schief(new Error('studio.js')); };
       document.head.appendChild(s);

@@ -162,8 +162,8 @@ echo "── Gegenprobe: Betreiber-Studio ──"
 # und die Prüfung, die das behauptet, muss das auch merken.
 probe "studio.js wird NICHT beim normalen Laden geholt" smoke_studio.mjs \
   ersetze index.html \
-  "    s.src = './assets/studio.js?v=3';" \
-  "    s.src = './assets/studio.js?v=3';\n  }\n  { var vorab = document.createElement('script'); vorab.src = './assets/studio.js?v=3'; document.head.appendChild(vorab);"
+  "    s.src = './assets/studio.js?v=4';" \
+  "    s.src = './assets/studio.js?v=4';\n  }\n  { var vorab = document.createElement('script'); vorab.src = './assets/studio.js?v=4'; document.head.appendChild(vorab);"
 
 probe "ein Wischen bricht den langen Druck ab" smoke_studio.mjs \
   ersetze index.html \
@@ -179,7 +179,7 @@ probe "ein kurzer Tipp öffnet nichts (die 1,5 s sind echt)" smoke_studio.mjs \
 # aber es sähe aus, als gehörte das Brett ihm.
 probe "ohne passenden Schlüssel gibt es kein Studio" smoke_studio.mjs \
   ersetze assets/studio.js \
-  "    if (!erwartet || String(meine).toLowerCase() !== erwartet) {" \
+  "    if (!liste.length || !istBetreiber(meine)) {" \
   "    if (false) {"
 
 probe "ohne Betreiber wird die eigene Kennung zum Eintragen gezeigt" smoke_studio.mjs \
@@ -276,10 +276,27 @@ probe "das Schlüssel-Fenster zeigt Fremden KEINE Sperr-Knöpfe" smoke_studio.mj
 
   window.KBStudio = {"
 
-probe "ein unbrauchbarer Betreiber-Schlüssel fällt auf" smoke_studio.mjs \
+probe "ein unbrauchbarer Eintrag in der Betreiber-Liste fällt auf" smoke_studio.mjs \
   ersetze assets/config/moderation.js \
-  "    betreiberSchluessel: '7dee8dd9088022e0a9be3667ad6ed3551a68c263ce557f34907485075d2fd6a0'," \
-  "    betreiberSchluessel: '7DEE8DD9088022E0A9BE3667AD6ED3551A68C263CE557F34907485075D2FD6A',"
+  "      '7dee8dd9088022e0a9be3667ad6ed3551a68c263ce557f34907485075d2fd6a0'  // Klaus · Tablet" \
+  "      '7DEE8DD9088022E0A9BE3667AD6ED3551A68C263CE557F34907485075D2FD6A'  // Klaus · Tablet"
+
+# Eine Liste ist eine Liste — nicht der erste Eintrag. Prüfte das Studio nur
+# den ersten, käme das zweite Gerät nie hinein, und niemand sähe einen Fehler.
+probe "jede Kennung der Liste gilt, nicht nur die erste" smoke_studio.mjs \
+  ersetze assets/studio.js \
+  "    return roh
+      .filter(function (k) { return typeof k === 'string' && HEX64.test(k.trim()); })
+      .map(function (k) { return k.trim().toLowerCase(); });" \
+  "    return roh
+      .filter(function (k) { return typeof k === 'string' && HEX64.test(k.trim()); })
+      .map(function (k) { return k.trim().toLowerCase(); })
+      .slice(0, 1);"
+
+probe "ein einzelner Wert wird weiterhin angenommen (Fork-Fall)" smoke_studio.mjs \
+  ersetze assets/studio.js \
+  "    if (typeof roh === 'string') roh = [roh];" \
+  "    if (typeof roh === 'string') roh = [];"
 
 probe "studio.js bleibt aus dem Offline-Vorrat heraus" smoke_studio.mjs \
   ersetze sw.js \
