@@ -578,11 +578,99 @@ kein Provisorium, sondern eine vertretbare Dauerlösung.
   gebraucht, an dem etwas verloren gehen kann, ohne etwas zu gewinnen.
   `pruefschluessel` steht weiterhin auf `null`, bis Klaus seine Kennung einträgt
   — sichtbar abgeschaltet statt still wirkungslos.
-- **Ein Prüf-Auftrag an `family-project/impressum.html`, Punkt 5.** Dort steht
-  „Netz-Inhalte sind Ende-zu-Ende verschlüsselt." Das trifft auf
-  Direktnachrichten und Gruppen zu; das **offene Brett** läuft im Klartext über
-  dasselbe Relais. Die Aussage ist damit möglicherweise zu weit gefasst — eigene
-  Entscheidung, eigener PR, erst belegen, dann formulieren.
+- ~~**Ein Prüf-Auftrag an `family-project/impressum.html`, Punkt 5.**~~
+  ✅ **erledigt 2026-08-19** (family-project PR #284). Dort stand „Netz-Inhalte
+  sind Ende-zu-Ende verschlüsselt." Belegt: family-project hat gar kein
+  Verschlüsselungs-Modul — Visitenkarte und Mycel-Fragen gehen im Klartext über
+  dasselbe Relais. Die Aussage stand an **acht** Stellen, eine davon als
+  Überschrift auf `netzwerk.html` („Netz-Inhalte kann selbst der Betreiber nicht
+  lesen"). Alle acht korrigiert; die Überschrift heißt jetzt „Kein Konto, kein
+  Profil, kein Vermittler" — das stimmt und sagt dasselbe Gute, ohne etwas zu
+  behaupten, was nicht gemessen ist.
+
+---
+
+## 6b. Die Grenzen am Relais — gesetzt 2026-08-19
+
+Beim Nachsehen wurde aus einer Frage ein Befund: `/opt/relay/config.toml` hatte
+**weder** einen `[authorization]`- **noch** einen `[limits]`-Abschnitt. Kein
+Schlüssel-Filter, keine Rate, keine Größenbeschränkung. Im Klartext: wer
+`wss://relay.family-projekt.de` kannte, konnte beliebig viel hineinschreiben —
+und die Adresse steht im öffentlichen Quelltext von 21 Apps. Die einzige Grenze
+war die Festplatte.
+
+Das ist der billigere Hebel als ein Anzeige-Filter in 21 Apps: **eine Stelle,
+zwei Wirkungen.** `tools/relais-grenzen.sh` setzt
+
+| Wert | Warum genau der |
+|---|---|
+| `messages_per_sec = 5` | server-weit, über eine Minute gemittelt = 300 je Minute. Das ganze Netz erzeugt eine Handvoll, ein Fluter Tausende. Die Vorlage von nostr-rs-relay nennt genau diese Zeile „highly recommended if your relay is public". |
+| `subscriptions_per_min = 30` | Die Vorlage empfiehlt 10; hier 30, weil mehrere Apps in mehreren Tabs offen sind und das nicht in eigene Bremsspuren laufen soll. |
+| `reject_future_seconds = 1800` | gegen Zettel, die sich mit falschem Datum dauerhaft oben festsetzen. **Vorher gemessen:** von 1623 Ereignissen lag **kein einziges** in der Zukunft, das neueste 167 467 Sekunden dahinter, Server-Uhr per NTP synchron. |
+
+**Zeitzonen können daran nichts verstellen.** Nostr-Zeitstempel sind
+Unix-Sekunden seit 1970 in UTC — eine **Zahl ohne Zone**. Eine Zeitzone
+erscheint erst beim Anzeigen. Nur eine wirklich falsch gehende Geräte-Uhr könnte
+den Riegel auslösen, und die gab es hier nie.
+
+**Bewusst nicht gesetzt**, und das steht auch im Skript, damit es niemand
+„nachholt":
+
+- `limit_scrapers` weist ungenaue Abfragen ab (nur Art, nur Absender). Die
+  Modul-23-Abfragen tragen alle einen Tag-Filter und wären sicher — aber es
+  wurde **nicht** jede Abfrage in 21 Apps geprüft. Ohne diese Prüfung nicht
+  anfassen.
+- `max_event_bytes` steht schon auf 128 KB. Kleiner schnitte Bilder auf der
+  Pinnwand ab.
+- `pubkey_whitelist` verböte Fremden das Andocken und machte genau das kaputt,
+  wofür dieses Relais da ist.
+
+### Vorgebaut, aber nicht aktiv — für ein geschlossenes Netz
+
+Klaus hat gefragt, ob sich die Schlüssel-Liste **vorbauen** lässt, ohne sie zu
+aktivieren. Ja — und genau so steht sie jetzt in der Konfig: ein vollständiger,
+**auskommentierter** `[authorization]`-Block mit Liste, `nip42_auth` und
+`nip42_dms`, daneben die Begründung, dass er an ein **zweites, eigenes** Relais
+gehört (gleiche Software, eigene Konfig, eigene Adresse — oder gleich auf der
+Maschine des Kunden), nicht hierher.
+
+`tests/smoke_relais_grenzen.mjs` prüft beides **gegeneinander**: der Block steht
+in der Datei, und der TOML-Leser sieht ihn nicht. Stünde er aktiv drin, wäre das
+öffentliche Relais ab sofort für alle Fremden dicht, und niemand hätte es
+gewollt.
+
+Und eine Falle steht gleich mit dabei: **die Liste allein hält Fremde vom
+Schreiben ab, nicht vom Lesen.** Wer „kein Fremder kommt rein" will, braucht
+beide Zeilen — die Liste **und** `nip42_auth`. Erst die zweite verlangt einen
+Nachweis, bevor jemand mitlesen darf.
+
+### Was das Werkzeug richtig macht
+
+- **Wiederholbar.** Läuft es zweimal, merkt es das und fasst nichts an. Ein
+  zweiter `[limits]`-Abschnitt wäre kaputtes TOML, und das Relais käme nicht mehr
+  hoch. Ein Werkzeug, das man nicht zweimal aufrufen darf, ist ein schlechtes.
+- **Sichert vorher, prüft nachher.** Nach dem Neustart wird die öffentliche
+  Adresse abgefragt; antwortet sie nicht, setzt sich das Skript selbst zurück.
+- **Die Probe liest echtes TOML** (`tomllib`), statt nach Zeichenketten zu
+  suchen. Eine Zeichenketten-Suche fände „`[limits]` steht drin" auch dann, wenn
+  die Datei daneben unlesbar wäre.
+
+**Lauf am 2026-08-19:** Sicherung `config.toml.bak-20260819-155344`, angehängt,
+neu gestartet, Relais antwortet, 1623 Zettel unverändert.
+
+**Die Gegenprobe war der eigentliche Punkt.** Das Skript sagt selbst: *„NOCH
+NICHT BEWIESEN: dass Schreiben weiterhin geht. Eine Grenze, die man nicht
+gegengeprüft hat, ist auch nur eine Behauptung."* Klaus hat danach in Kimboard
+einen Zettel geschrieben — er **erscheint** auf dem Brett, 17:58:04, `via
+relay.family-projekt.de`. Beides ist damit belegt: die Grenze steht, und sie
+bremst den normalen Betrieb nicht.
+
+**Eine Lehre aus dem Bau, die bleibt.** Die erste Probe prüfte, ob das Skript bei
+schreibgeschützter Konfig abbricht. Sie schlug fehl — zu Recht: das Skript läuft
+auf dem Server als `root`, und `root` darf immer schreiben. Der Riegel kann dort
+**nie** greifen. Eine Probe, die einen Fall misst, den es in der echten Umgebung
+nicht gibt, bewacht nichts. Geprüft wird jetzt der Fall, der wirklich vorkommt:
+falscher Pfad.
 
 ---
 
@@ -609,3 +697,5 @@ kein Provisorium, sondern eine vertretbare Dauerlösung.
 | Scharfer Gang (`SCHARF=ja`) | dieselbe Datei — Sicherung, Transaktion, Nachrechnen |
 | Probe dazu | `tests/smoke_relais_scharf.mjs` (38 Prüfungen, darunter zwei an einer absichtlich verbogenen Kopie) |
 | Gegenprobe dazu | `tests/gegenprobe_wache.sh` — 20 eingebaute Fehler; beim ersten Lauf blieben fünf ungefangen |
+| Grenzen am Relais (Flut-Bremse, Zukunfts-Riegel) | `tools/relais-grenzen.sh` — wiederholbar, sichert, prüft, nimmt sich zurück |
+| Probe dazu | `tests/smoke_relais_grenzen.mjs` (29 Prüfungen; liest das Ergebnis als echtes TOML) |

@@ -148,6 +148,26 @@ korrekt `exit=1` zurück — hinter einer Pipe bekommst du den Rückgabewert von
   nichts, bricht sie mit eigenem Rückgabewert ab, statt eine Null zu melden, die wie
   „nichts betroffen" aussieht.
 
+- **Das Relais hat seit dem 2026-08-19 Grenzen** (`tools/relais-grenzen.sh`):
+  `messages_per_sec = 5`, `subscriptions_per_min = 30`, `reject_future_seconds =
+  1800`. Davor hatte `/opt/relay/config.toml` **weder** `[authorization]` **noch**
+  `[limits]` — wer die Adresse kannte, konnte unbegrenzt schreiben, und sie steht
+  im öffentlichen Quelltext von 21 Apps. Das ist der billigere Hebel als ein
+  Anzeige-Filter in 21 Apps: eine Stelle, zwei Wirkungen.
+  Drei Dinge daran sind Absicht: das Skript ist **wiederholbar** (ein zweiter
+  `[limits]`-Abschnitt wäre kaputtes TOML und das Relais käme nicht mehr hoch —
+  es merkt das und fasst nichts an), der `[authorization]`-Block für ein
+  geschlossenes Netz steht **auskommentiert** dabei und gehört an ein *zweites*
+  Relais (die Probe prüft beides gegeneinander: er steht in der Datei, der
+  TOML-Leser sieht ihn nicht), und `limit_scrapers` bleibt **aus**, weil nicht
+  jede Abfrage in 21 Apps geprüft wurde.
+  **Eine Grenze ohne Gegenprobe ist eine Behauptung** — das Skript sagt das selbst
+  und verlangt einen Testzettel. Der kam am 2026-08-19 um 17:58 an.
+  Und die Probe dazu trägt ihre eigene Lehre: die erste Fassung prüfte den
+  Schreibschutz der Konfig und schlug fehl — zu Recht, das Skript läuft als
+  `root`, und `root` darf immer schreiben. **Ein Fall, den es in der echten
+  Umgebung nicht gibt, bewacht nichts.**
+
 - **Drei Fallen, jede beim Bauen einmal zugeschnappt:**
   · **`x'ABCD'` liest SQLite selbst schreibweise-unabhängig.** Wer nur gegen eine
     BLOB-Datenbank prüft, misst die Groß/klein-Behandlung gar nicht. Genau daran war

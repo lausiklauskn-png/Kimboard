@@ -1,6 +1,7 @@
 # Brief an die nächste Sitzung — Kimboard / „Löschen"
 
-**Stand: 2026-08-19, Ende der Sitzung „Relais-Wache + Pinnwand + erster echter Lauf".**
+**Stand: 2026-08-19, Ende der Sitzung „Relais-Wache + Pinnwand + erster echter
+Lauf + Server-Pflege + Relais-Grenzen".**
 `main` = `c22455b` (Kimboard) · `29afbf5` (Sage-Protokol).
 
 Lies zuerst diesen Brief, dann `CLAUDE.md`, dann `docs/MODERATION_UND_RECHT.md`.
@@ -21,6 +22,8 @@ gezielt mit Grep.
 | **Scharfer Gang** `SCHARF=ja` | ✅ 38 Proben · Gegenprobe 24/24 |
 | **Pinnwand** liest dieselbe Liste (Sage-Protokol) | ✅ 30 Proben |
 | Ein Lauf gegen die **echte** Datenbank auf dem Server | ✅ **2026-08-19 gelaufen** — 1 von 1624 → entfernt → 0 von 1623 |
+| **Relais-Grenzen** `tools/relais-grenzen.sh` (Flut-Bremse · Zukunfts-Riegel) | ✅ 29 Proben · **am 2026-08-19 gesetzt** · Schreiben gegengeprüft |
+| Server: Updates · Neustart · Rechte an `/opt/relay/db` · Sicherung weg | ✅ alles 2026-08-19 |
 | Die anderen 20 Apps (Anzeige-Filter) | ⬜ Richtungsentscheid für Klaus |
 
 Der Weg über NIP-86 ist **belegt tot** — weder `nostr-rs-relay` (Klaus' Server)
@@ -144,13 +147,81 @@ jeder Raum-Liste im ganzen Netz), Mycel-Frage, Antwort.
   eingesetzt (geprüft) — es ist eine **Moderations**lücke, keine
   Sicherheitslücke.
 
-**b) `family-project/impressum.html`, Punkt 5.** Dort steht „Netz-Inhalte sind
-Ende-zu-Ende verschlüsselt." Das trifft auf Direktnachrichten und Gruppen zu;
-das **offene Brett** und die **Mycel-Fragen** laufen im Klartext über dasselbe
-Relais. Eigener PR, erst belegen, dann formulieren.
+**b) ✅ erledigt — `family-project/impressum.html`, Punkt 5.** Dort stand
+„Netz-Inhalte sind Ende-zu-Ende verschlüsselt." Belegt: family-project hat gar
+kein Verschlüsselungs-Modul, Visitenkarte und Mycel-Fragen gehen im Klartext.
+Die Aussage stand an **acht** Stellen, eine davon als Überschrift auf
+`netzwerk.html` — alle korrigiert (PR #284).
 
-**c) Der Server meldet „System restart required"** und 10 Updates (Stand
-2026-08-18). Gehört Klaus gesagt, wenn ohnehin jemand per SSH dort ist.
+**c) ✅ erledigt — Server-Updates und Neustart.** 10 Pakete eingespielt, neu
+gestartet, beide Container kamen von allein zurück (`unless-stopped`), 1623
+Zettel unverändert. Zurückgehalten hat Ubuntu nur `grub-pc-bin` und
+`grub2-common` wegen „phasing" — das ist der Bootloader, nichts wird erzwungen
+(bleibt als Punkt 2 in der Stichtag-Liste stehen).
+
+---
+
+## 5. Relais-Grenzen — der billigere Hebel, gesetzt am 2026-08-19
+
+Aus der Frage unter „Was offen ist" wurde beim Nachsehen ein Befund:
+`/opt/relay/config.toml` hatte **weder** `[authorization]` **noch** `[limits]`.
+Kein Schlüssel-Filter, keine Rate, keine Größenbeschränkung. Im Klartext: wer
+`wss://relay.family-projekt.de` kannte, konnte beliebig viel hineinschreiben —
+und die Adresse steht im öffentlichen Quelltext von 21 Apps. Die einzige Grenze
+war die Festplatte.
+
+`tools/relais-grenzen.sh` setzt deshalb **eine Stelle statt 21 Apps**:
+
+| Wert | Warum genau der |
+|---|---|
+| `messages_per_sec = 5` | server-weit, über eine Minute gemittelt = 300/Minute. Das ganze Netz erzeugt eine Handvoll, ein Fluter Tausende. Die Vorlage von nostr-rs-relay nennt genau diese Zeile „highly recommended if your relay is public". |
+| `subscriptions_per_min = 30` | Die Vorlage empfiehlt 10; hier 30, weil Klaus mehrere Apps in mehreren Tabs offen hat und das nicht in eigene Bremsspuren laufen soll. |
+| `reject_future_seconds = 1800` | gegen Zettel, die sich mit falschem Datum oben festsetzen. **Vorher gemessen:** von 1623 Ereignissen lag **kein einziges** in der Zukunft, das neueste 167 467 Sekunden dahinter, Server-Uhr per NTP synchron. |
+
+**Zur Zeitzonen-Frage, die Klaus gestellt hat:** Nostr-Zeitstempel sind
+Unix-Sekunden in UTC — eine **Zahl ohne Zone**. Eine Zeitzone kann daran nichts
+verstellen; nur eine wirklich falsch gehende Geräte-Uhr könnte es, und die gab
+es hier nie.
+
+**Bewusst NICHT gesetzt** — und das steht auch im Skript, damit es niemand
+„nachholt": `limit_scrapers` (die Modul-23-Abfragen tragen alle einen Tag-Filter
+und wären sicher, aber es wurde **nicht** jede Abfrage in 21 Apps geprüft),
+`max_event_bytes` (steht schon auf 128 KB; kleiner schnitte Bilder auf der
+Pinnwand ab) und `pubkey_whitelist` (verbäte Fremden das Andocken und machte
+genau das kaputt, wofür dieses Relais da ist).
+
+**Klaus' zweite Frage — Schlüssel-Liste vorbauen, ohne sie zu aktivieren?** Ja,
+und genau so steht sie jetzt in der Konfig: ein vollständiger, **auskommentierter**
+`[authorization]`-Block mit Liste, `nip42_auth` und `nip42_dms`, daneben die
+Begründung, dass er an ein **zweites, eigenes** Relais gehört und nicht hierher.
+`smoke_relais_grenzen.mjs` prüft beides gegeneinander: der Block **steht in der
+Datei**, und der TOML-Leser **sieht ihn nicht**. Stünde er aktiv drin, wäre das
+öffentliche Relais ab sofort für alle Fremden dicht.
+Wichtig dabei: die Liste allein hält Fremde vom **Schreiben** ab, nicht vom
+**Lesen** — „kein Fremder kommt rein" braucht zusätzlich `nip42_auth`.
+
+**Das Skript ist wiederholbar.** Läuft es zweimal, merkt es das und fasst nichts
+an: ein zweiter `[limits]`-Abschnitt wäre kaputtes TOML und das Relais käme nicht
+mehr hoch. Es sichert vorher, prüft nachher gegen die öffentliche Adresse und
+nimmt sich bei einem Fehlschlag selbst zurück. Die Probe liest das Ergebnis als
+**echtes TOML** (`tomllib`), nicht als Zeichenkette.
+
+**Lauf am 2026-08-19:** Sicherung `config.toml.bak-20260819-155344`, angehängt,
+neu gestartet, Relais antwortet, 1623 Zettel unverändert.
+
+**Gegenprobe — und das war der Punkt.** Das Skript sagt selbst: *„NOCH NICHT
+BEWIESEN: dass Schreiben weiterhin geht. Eine Grenze, die man nicht
+gegengeprüft hat, ist auch nur eine Behauptung."* Klaus hat danach in Kimboard
+einen Zettel „Test 19.08." geschrieben — er **erscheint** auf dem Brett,
+17:58:04, `via relay.family-projekt.de`. Damit ist beides belegt: die Grenze
+steht, und sie bremst den normalen Betrieb nicht.
+
+**Und eine Lehre aus dem Bau:** die erste Probe prüfte, ob das Skript bei
+schreibgeschützter Konfig abbricht. Sie schlug fehl — zu Recht: das Skript läuft
+auf dem Server als `root`, und `root` darf immer schreiben. Der Riegel kann dort
+**nie** greifen. Eine Probe, die einen Fall misst, den es in der echten Umgebung
+nicht gibt, bewacht nichts. Geprüft wird jetzt der Fall, der wirklich vorkommt:
+falscher Pfad.
 
 ---
 
@@ -174,11 +245,11 @@ schade zum Vergessen.
 
 | # | Was | Wo | Warum es liegen blieb |
 |---|---|---|---|
-| 1 | Die **26-MB-Sicherung** löschen: `/opt/relay/db/nostr.db.sicherung-20260819-042201.db` | Server | Klaus soll erst zufrieden sein. Das Werkzeug räumt sie mit Absicht nicht weg. |
+| ~~1~~ | ~~Die **26-MB-Sicherung** löschen~~ | Server | ✅ **erledigt 2026-08-19**. `nostr.db.sicherung-20260819-042201.db` ist weg, 32 G frei. Klaus war zufrieden — der dritte Lauf hatte belegt, dass der Zettel wirklich fort ist. |
 | 2 | **`grub-pc-bin` + `grub2-common`** nachziehen | Server | Am 2026-08-19 von Ubuntu wegen „phasing" zurückgehalten. Kommen von allein — hier steht nur, dass jemand nachsehen soll, ob sie durch sind. Grub ist der Bootloader; nichts erzwingen. |
-| 3 | **`/opt/relay/db` steht auf `0777`** | Server | Kein akutes Loch (nur `root` meldet sich an). ABER: erst **messen**, unter welcher Kennung der Container schreibt (`docker inspect relay -f '{{.Config.User}}'`), sonst nimmt man dem Relais das Schreibrecht. Eigener Tag, nicht neben einem Neustart. |
+| ~~3~~ | ~~`/opt/relay/db` steht auf `0777`~~ | Server | ✅ **erledigt 2026-08-19**. Erst gemessen, dann angefasst — und gut so: der Ordner gehörte `root`, die Datenbank aber der Kennung 1000, unter der der Container läuft. `chmod 755` allein hätte dem Relais das Schreibrecht genommen. Richtig war `chown 1000:1000` **und** `chmod 755`; danach Schreibprobe im Container, Relais lebt, 1623 Zettel unverändert. |
 | ~~4~~ | ~~`family-project/impressum.html`, Punkt 5~~ | — | ✅ **erledigt 2026-08-19** (family-project PR #284). Belegt: family-project hat gar kein Verschlüsselungs-Modul; Visitenkarte und Mycel-Fragen gehen im Klartext. Die Aussage stand an **acht** Stellen, darunter als Überschrift auf `netzwerk.html` — alle korrigiert. |
-| 5 | **Anzeige-Filter für die anderen 20 Apps** | Sage, Modul 23 | Bewusst vertagt (Klaus 2026-08-19). Heute gäbe es nichts zu filtern — auf dem Relais liegen nur Klaus' eigene Testfragen. Wieder aufnehmen, sobald zum ersten Mal jemand anderes etwas hinschreibt. Vorher lohnt eine andere Frage mehr: **nimmt das Relais überhaupt Zettel von Fremden an?** (`/opt/relay/config.toml`) |
+| 5 | **Anzeige-Filter für die anderen 20 Apps** | Sage, Modul 23 | Bewusst vertagt (Klaus 2026-08-19) — heute gäbe es nichts zu filtern, auf dem Relais liegen nur Klaus' eigene Testfragen. **Die Vorfrage ist beantwortet:** das Relais nahm Zettel von jedem an — `config.toml` hatte weder `[authorization]` noch `[limits]`, die einzige Grenze war die Festplatte. Der billigere Hebel ist deshalb **gesetzt** (siehe § Relais-Grenzen): eine Stelle statt 21 Apps. Der Anzeige-Filter bleibt offen für den Tag, an dem zum ersten Mal jemand Fremdes schreibt. |
 
 ---
 
@@ -190,6 +261,7 @@ npm install --no-save playwright-core   # einmalig je Container
 node tests/alle.mjs                     # ALLES (~5 Min) — 30 Prüfungen
 bash tests/gegenprobe_wache.sh          # 24 eingebaute Fehler, Sekunden
 bash tests/gegenprobe_moderation.sh     # 40 eingebaute Fehler
+node tests/smoke_relais_grenzen.mjs     # 29 Prüfungen, ohne Docker und ohne Netz
 
 # Sage-Protokol
 npm install && node tests/run_alle.mjs  # 78 Proben
