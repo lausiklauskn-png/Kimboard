@@ -332,6 +332,35 @@ try {
       '…und die Kennung des Ereignisses selbst taucht nirgends auf');
   }
 
+  /* ═══ 7b3. LEER HEISST AUS — und die Probe greift nicht ins Netz ═══
+     Hier steckte der Fehler, der diese ganze Datei zeitweise wertlos machte.
+     `${X:-vorgabe}` setzt die Vorgabe auch bei LEEREM X ein. Die Proben
+     setzten `LISTE_JSON=''`, um die zweite Quelle stillzulegen — und holten in
+     Wahrheit weiter die echte Liste von GitHub. Solange die Datei auf `main`
+     nicht existierte, kam nichts zurück und alles war grün: grün, weil ein
+     Abruf ins Leere lief, nicht weil die Abschaltung wirkte.
+
+     Nach `-` statt `:-` schaltet leer wirklich ab. Diese Prüfung hält es fest —
+     denn eine Probe, die still ins Netz greift, misst irgendwann etwas anderes
+     als das, was sie zu messen glaubt. */
+  {
+    const leer = join(arbeit, 'aus.js');
+    writeFileSync(leer, listeJs([], []));
+    const r = lauf(db1, leer, '');
+    ok(/Signiert: {2}— \(nicht vorhanden\)/.test(r.aus),
+      'LISTE_JSON=\'\' schaltet die zweite Quelle WIRKLICH ab');
+    ok(!/raw\.githubusercontent\.com/.test(r.aus),
+      'DIE PROBE GREIFT NICHT INS NETZ (keine GitHub-Adresse in der Ausgabe)');
+    ok(/Sperr-Liste ist leer/.test(r.aus),
+      '…und die leere Liste bleibt leer, statt von außen befüllt zu werden');
+
+    /* Und die Gegenrichtung: gar nicht gesetzt → die Vorgabe greift. Ohne diese
+       Zeile könnte man `-` gegen „immer leer" tauschen und bliebe grün. */
+    const ohne = execFileSync('bash', ['-c',
+      'grep -c "LISTE_JSON=\\"\\${LISTE_JSON-" ' + JSON.stringify(SKRIPT)], { encoding: 'utf8' }).trim();
+    ok(ohne === '1', 'die Vorgabe-Adresse steht mit EINEM Bindestrich da (nicht `:-`)');
+  }
+
   /* ═══ 7c. Die ECHTE Datei aus diesem Repo ═══
      Nicht nur eine nachgebaute — die, die wirklich ausgeliefert wird. Sonst
      prüfte die Probe ein Muster und nicht den Ernstfall. */

@@ -157,6 +157,13 @@ korrekt `exit=1` zurück — hinter einer Pipe bekommst du den Rückgabewert von
     hohe Zahl; im scharfen Gang hätte es die Schlussrechnung umgeworfen und einen
     **richtigen** Lauf als Fehlschlag gemeldet. Heute zählt **eine** Abfrage über
     beide Sorten.
+  · **`${X:-vorgabe}` greift auch bei LEEREM X.** Die Proben setzten
+    `LISTE_JSON=''`, um die zweite Quelle stillzulegen — und holten in Wahrheit
+    weiter die echte Liste von GitHub. Solange die Datei auf `main` nicht
+    existierte, kam nichts zurück und alles war grün: **grün, weil ein Abruf ins
+    Leere lief, nicht weil die Abschaltung wirkte.** Für „leer heißt aus" braucht
+    es `${X-vorgabe}` mit EINEM Bindestrich. Eine Probe, die still ins Netz
+    greift, misst irgendwann etwas anderes als das, was sie zu messen glaubt.
   · **Eine Nachrechnung lässt sich nicht beweisen, solange nichts falsch ist.** Die
     Gegenprobe baute sie aus — alles blieb grün. Deshalb machen zwei Prüfungen das
     Werkzeug an einer **gepatchten Kopie** absichtlich falsch und bestehen darauf,

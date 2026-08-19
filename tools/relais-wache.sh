@@ -68,8 +68,19 @@ DB="${DB:-/opt/relay/db/nostr.db}"
 # erzeugt. Läge hier nur die erste, bliebe genau das liegen, was Klaus zuletzt
 # gesperrt hat — der Zettel wäre in jedem Kimboard unsichtbar und auf dem
 # Server weiter da. (Befund 2026-08-18, beim ersten echten Eintrag.)
-LISTE="${LISTE:-https://raw.githubusercontent.com/lausiklauskn-png/Kimboard/main/assets/config/sperrliste.js}"
-LISTE_JSON="${LISTE_JSON:-https://raw.githubusercontent.com/lausiklauskn-png/Kimboard/main/sbkim/sperrliste.json}"
+# ── EIN ZEICHEN, DAS EINEN UNTERSCHIED MACHT: `-` STATT `:-` ────────────────
+# `${X:-vorgabe}` setzt die Vorgabe auch dann ein, wenn X auf LEER steht.
+# `${X-vorgabe}`  setzt sie nur ein, wenn X GAR NICHT gesetzt ist.
+#
+# Hier muss es das zweite sein, damit `LISTE_JSON=''` die Quelle wirklich
+# abschaltet. Mit dem Doppelpunkt tat es das NICHT — die Proben setzten sie auf
+# leer, um sie stillzulegen, und holten in Wahrheit weiter die echte Liste aus
+# dem Netz. Solange die Datei auf `main` noch nicht existierte, kam nichts
+# zurück und alles war grün: grün, weil ein Abruf ins Leere lief, nicht weil die
+# Abschaltung wirkte. (Aufgefallen 2026-08-19, als der erste echte Eintrag
+# dastand.)
+LISTE="${LISTE-https://raw.githubusercontent.com/lausiklauskn-png/Kimboard/main/assets/config/sperrliste.js}"
+LISTE_JSON="${LISTE_JSON-https://raw.githubusercontent.com/lausiklauskn-png/Kimboard/main/sbkim/sperrliste.json}"
 SCHARF="${SCHARF:-nein}"
 STOPPEN="${STOPPEN:-nein}"
 SICHERUNG="${SICHERUNG:-}"
@@ -358,7 +369,12 @@ if ! sqlite3 "$DB" "PRAGMA busy_timeout=15000;
 BEGIN IMMEDIATE;
 DELETE FROM tag WHERE event_id IN (SELECT id FROM event WHERE $wo);
 DELETE FROM event WHERE $wo;
-COMMIT;" 2>/dev/null; then
+COMMIT;" >/dev/null 2>&1; then
+  # `>/dev/null`, weil `PRAGMA busy_timeout=…` seinen gesetzten Wert ZURÜCKGIBT.
+  # Beim ersten scharfen Lauf am Server stand deshalb eine nackte „15000"
+  # mitten im Lösch-Schritt — harmlos, aber eine unerklärte Zahl an genau der
+  # Stelle, an der man jede Zahl liest und deutet. Über Erfolg entscheidet hier
+  # ohnehin nur der Rückgabewert, nicht die Ausgabe.
   fehler "Entfernen fehlgeschlagen. Die Transaktion ist zurückgerollt — der Stand"
   fehler "ist unverändert. Die Sicherung liegt trotzdem: $SICHERUNG"
   wieder_an
