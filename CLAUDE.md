@@ -55,6 +55,27 @@ falschen Grund. Seit dem 2026-08-17 wartet sie auf `window.__hilfe`. Jedes
 `waitForTimeout` mit einer runden Zahl ist ein Rennen, das irgendwann verloren
 geht; verloren heißt hier nicht „falsch", sondern **stumm**.
 
+**Aber es gibt zwei Sorten Warten, und die zweite ist gefährlicher** (Befund
+2026-08-19 in Sage, gilt hier genauso). Die Regel oben deckt nur die erste ab:
+
+| Sorte | Wartet darauf, dass … | Zu kurze Frist ergibt |
+|---|---|---|
+| **A** | etwas **kommt** | falsches **ROT** — laut, aber irreführend |
+| **B** | etwas **ausbleibt** | falsches **GRÜN** — still |
+
+Sorte A gehört auf die **Bedingung** (`waitForFunction`, `warteBis`). Sorte B
+**braucht** eine verstreichende Frist — dort macht eine kurze Zahl die Probe
+nicht flatterhaft, sondern **nachsichtig**. In Sages `smoke_bau05_nostr.mjs`
+stand für „nach einem Replay darf KEINE zweite Antwort kommen" eine Frist von
+50 ms: käme sie nach 60 ms, hätte die Probe grün gemeldet und der kaputte
+Replay-Schutz wäre niemandem aufgefallen. Belegt in
+[`Sage-Protokol/tests/gegenprobe_bau05_warten.mjs`](https://github.com/lausiklauskn-png/Sage-Protokol/blob/main/tests/gegenprobe_bau05_warten.mjs).
+
+**Wer hier eine Wartezeit sieht, fragt also zuerst, worauf sie wartet.** Und:
+dieser Befund kam aus einem Lauf, der sich **nicht reproduzieren ließ** (25 von
+25 grün einzeln, einmal rot im vollen Lauf). Nicht reproduzierbar ist kein
+Freispruch — die Ursache stand im Code.
+
 **Und: `| tail` ist zum Lesen da, nicht zum Urteilen.** Der Läufer gibt bei Rot
 korrekt `exit=1` zurück — hinter einer Pipe bekommst du den Rückgabewert von
 `tail`.
