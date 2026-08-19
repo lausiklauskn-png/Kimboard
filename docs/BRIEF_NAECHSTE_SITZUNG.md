@@ -154,6 +154,34 @@ Relais. Eigener PR, erst belegen, dann formulieren.
 
 ---
 
+## ⏰ Kleinigkeiten mit Stichtag — bitte ab **2026-09-02** ansprechen
+
+Klaus am 2026-08-19: *„merke dir das, was noch ist, erinnere mich nach
+gegebener Zeit — nach zwei oder drei Sitzungen."*
+
+**Sitzungen lassen sich nicht zählen** — eine neue Sitzung weiß nicht, die
+wievielte sie ist. Das Datum kennt sie. Deshalb steht hier ein Stichtag statt
+einer Anzahl.
+
+**Was eine Sitzung damit tut:** ist heute **der 2026-09-02 oder später** und
+steht hier noch etwas offen, dann sprich Klaus **von dir aus** darauf an — kurz,
+in einem Absatz, ohne Drängen. Er hat ausdrücklich darum gebeten. Ist ein Punkt
+erledigt, streiche ihn hier und lass die Liste schrumpfen. Ist sie leer, kommt
+der ganze Abschnitt weg.
+
+**Nichts davon eilt.** Keiner dieser Punkte gefährdet etwas; sie sind nur zu
+schade zum Vergessen.
+
+| # | Was | Wo | Warum es liegen blieb |
+|---|---|---|---|
+| 1 | Die **26-MB-Sicherung** löschen: `/opt/relay/db/nostr.db.sicherung-20260819-042201.db` | Server | Klaus soll erst zufrieden sein. Das Werkzeug räumt sie mit Absicht nicht weg. |
+| 2 | **`grub-pc-bin` + `grub2-common`** nachziehen | Server | Am 2026-08-19 von Ubuntu wegen „phasing" zurückgehalten. Kommen von allein — hier steht nur, dass jemand nachsehen soll, ob sie durch sind. Grub ist der Bootloader; nichts erzwingen. |
+| 3 | **`/opt/relay/db` steht auf `0777`** | Server | Kein akutes Loch (nur `root` meldet sich an). ABER: erst **messen**, unter welcher Kennung der Container schreibt (`docker inspect relay -f '{{.Config.User}}'`), sonst nimmt man dem Relais das Schreibrecht. Eigener Tag, nicht neben einem Neustart. |
+| 4 | **`family-project/impressum.html`, Punkt 5** | family-project | Dort steht „Netz-Inhalte sind Ende-zu-Ende verschlüsselt". Das trifft auf Direktnachrichten und Gruppen zu; das **offene Brett** und die **Mycel-Fragen** laufen im Klartext über dasselbe Relais. Erst belegen, dann formulieren, eigener PR. |
+| 5 | **Anzeige-Filter für die anderen 20 Apps** | Sage, Modul 23 | Bewusst vertagt (Klaus 2026-08-19). Heute gäbe es nichts zu filtern — auf dem Relais liegen nur Klaus' eigene Testfragen. Wieder aufnehmen, sobald zum ersten Mal jemand anderes etwas hinschreibt. Vorher lohnt eine andere Frage mehr: **nimmt das Relais überhaupt Zettel von Fremden an?** (`/opt/relay/config.toml`) |
+
+---
+
 ## Wie geprüft wird
 
 ```bash
