@@ -1,7 +1,7 @@
 # Brief an die nächste Sitzung — Kimboard / „Löschen"
 
-**Stand: 2026-08-18, Ende der Sitzung „Relais-Wache + Pinnwand".**
-`main` = `3dd1e9a` (Kimboard) · `29afbf5` (Sage-Protokol).
+**Stand: 2026-08-19, Ende der Sitzung „Relais-Wache + Pinnwand + erster echter Lauf".**
+`main` = `c22455b` (Kimboard) · `29afbf5` (Sage-Protokol).
 
 Lies zuerst diesen Brief, dann `CLAUDE.md`, dann `docs/MODERATION_UND_RECHT.md`.
 Danach nur den Code-Bereich, an dem du arbeitest — `index.html` ist groß, lies
@@ -18,9 +18,9 @@ gezielt mit Grep.
 | Studio 🔧 (sperren · Liste signieren · Schlüssel sichern) | ✅ |
 | **Erste echte Sperre** im Repo | ✅ `701a5834…` (Testsperrung) |
 | **Nachsehen-Gang** `tools/relais-wache.sh` | ✅ 41 Proben |
-| **Scharfer Gang** `SCHARF=ja` | ✅ 38 Proben · Gegenprobe 23/23 |
+| **Scharfer Gang** `SCHARF=ja` | ✅ 38 Proben · Gegenprobe 24/24 |
 | **Pinnwand** liest dieselbe Liste (Sage-Protokol) | ✅ 30 Proben |
-| Ein Lauf gegen die **echte** Datenbank auf dem Server | ⬜ **das fehlt als Erstes** |
+| Ein Lauf gegen die **echte** Datenbank auf dem Server | ✅ **2026-08-19 gelaufen** — 1 von 1624 → entfernt → 0 von 1623 |
 | Die anderen 20 Apps (Anzeige-Filter) | ⬜ Richtungsentscheid für Klaus |
 
 Der Weg über NIP-86 ist **belegt tot** — weder `nostr-rs-relay` (Klaus' Server)
@@ -29,30 +29,44 @@ der steht jetzt in beiden Gängen.
 
 ---
 
-## 1. Der nächste Schritt — drei Befehle, ungefährlich
+## 1. ✅ ERLEDIGT — die Kette ist am echten Relais belegt (2026-08-19)
 
-Das Werkzeug ist **nie gegen `/opt/relay/db/nostr.db` gelaufen**. Es misst gegen
-echte SQLite-Datenbanken im richtigen Zuschnitt (BLOB **und** Text), aber die
-echte hat es noch nie gesehen. Der erste Aufruf **liest nur**:
+Klaus hat sie per Termux durchgespielt. Damit ist das Vorhaben „Löschen"
+geschlossen:
+
+| Lauf | Ergebnis |
+|---|---|
+| Nachsehen | `Betroffen sind 1 von 1624` · Schema selbst erkannt (`event_hash` BLOB) · **beide** Listen gelesen, der Eintrag kam aus der signierten |
+| Entfernen | Sicherung `nostr.db.sicherung-20260819-042201.db` (1624 Ereignisse) · `vorher 1624 · betroffen 1 · nachher 1623 (erwartet 1623)` |
+| Nachsehen | `Betroffen sind 0 von 1623` · `· 701a5834… nicht im Speicher` |
+
+**Der dritte Lauf ist der Beweis:** was weg ist, findet das Werkzeug nicht mehr.
+Das kann es nur sagen, weil es nach der **Kennung** greift statt nach dem
+Brett-Tag — deshalb deckt es auch den Verkehr der anderen Apps ab.
+
+**Die Sicherung liegt noch dort** (26 MB, neben der Datenbank). Klaus nimmt sie
+weg, wenn er zufrieden ist. Das Werkzeug räumt sie nicht auf — das wäre der
+eine Griff, der sich nicht zurücknehmen lässt.
+
+**Was dieser Lauf ans Licht gebracht hat** — der wichtigste Fund des Tages:
+`${LISTE_JSON:-vorgabe}` setzt die Vorgabe **auch bei leerem Wert** ein. Die
+Proben setzten `LISTE_JSON=''`, um die zweite Quelle stillzulegen, und holten in
+Wahrheit weiter die echte Liste von GitHub. Solange die Datei auf `main` nicht
+existierte, kam nichts zurück und alles war grün: **grün, weil ein Abruf ins
+Leere lief, nicht weil die Abschaltung wirkte.** Seit `-` statt `:-` heißt leer
+wirklich aus, und drei Prüfungen halten fest, dass keine Probe mehr unbemerkt
+ins Netz greift.
+
+**So wird es aufgerufen** — ohne eine Datei aufs Tablet zu holen:
 
 ```bash
-# alle drei vom Tablet aus, in Termux:
-ssh root@167.233.204.72 'bash -s' < tools/relais-wache.sh
-# erwartet: „Betroffen sind 1 von ~1623"
-
-ssh root@167.233.204.72 'SCHARF=ja bash -s' < tools/relais-wache.sh
-# sichert zuerst, entfernt dann, rechnet nach
-
-ssh root@167.233.204.72 'bash -s' < tools/relais-wache.sh
-# erwartet: „Betroffen sind 0 von ~1622"
+ssh root@167.233.204.72 'curl -sSL -o /tmp/wache.sh https://raw.githubusercontent.com/lausiklauskn-png/Kimboard/main/tools/relais-wache.sh && bash /tmp/wache.sh'
+ssh root@167.233.204.72 'SCHARF=ja bash /tmp/wache.sh'
 ```
 
-**Der dritte Aufruf ist der eigentliche Beweis:** was weg ist, findet der
-Nachsehen-Gang nicht mehr. Erst danach ist die Kette von der Oberfläche bis in
-den Speicher belegt statt geglaubt.
-
-Meldet der erste Aufruf **0 statt 1**, ist das ein Befund und kein Grund
-weiterzumachen: dann liest das Werkzeug die Liste nicht, die es lesen soll.
+Der Umweg über `< tools/relais-wache.sh` scheitert in Termux, sobald man nicht
+im Kimboard-Ordner steht — und das ist der Normalfall. Der Server holt sich das
+Skript deshalb selbst; das Repo ist öffentlich.
 
 ---
 
@@ -101,6 +115,11 @@ Gegenprobe baute sie aus, und alles blieb grün. Seitdem machen zwei Prüfungen
 das Werkzeug an einer **gepatchten Kopie** absichtlich falsch und bestehen
 darauf, dass es das bemerkt.
 
+**`${X:-vorgabe}` greift auch bei LEEREM X.** Für „leer heißt aus" braucht es
+`${X-vorgabe}` mit EINEM Bindestrich. Eine Probe, die still ins Netz greift,
+misst irgendwann etwas anderes als das, was sie zu messen glaubt — und bleibt
+so lange grün, wie der Abruf ins Leere läuft.
+
 Dazu zweimal dieselbe alte Bekannte: **`indexOf` gibt −1 zurück, und −1 ist
 kleiner als alles.** Eine Reihenfolge-Prüfung ohne vorherige Existenz-Prüfung
 gibt recht, ohne etwas gemessen zu haben.
@@ -141,7 +160,7 @@ Relais. Eigener PR, erst belegen, dann formulieren.
 # Kimboard
 npm install --no-save playwright-core   # einmalig je Container
 node tests/alle.mjs                     # ALLES (~5 Min) — 30 Prüfungen
-bash tests/gegenprobe_wache.sh          # 23 eingebaute Fehler, Sekunden
+bash tests/gegenprobe_wache.sh          # 24 eingebaute Fehler, Sekunden
 bash tests/gegenprobe_moderation.sh     # 40 eingebaute Fehler
 
 # Sage-Protokol
