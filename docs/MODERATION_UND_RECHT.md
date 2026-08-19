@@ -528,6 +528,39 @@ weil **eine Nachrechnung sich nicht beweisen lässt, solange nichts falsch ist**
 Seitdem gibt es zwei Prüfungen, die das Werkzeug an einer gepatchten Kopie
 absichtlich falsch machen und darauf bestehen, dass es das **bemerkt**.
 
+### ✅ Am 2026-08-19 am ECHTEN Relais gelaufen (Klaus, per Termux)
+
+Die Kette ist damit belegt statt geglaubt — vom Studio bis in den Speicher:
+
+| Lauf | Ergebnis |
+|---|---|
+| Nachsehen | `Betroffen sind 1 von 1624` · Schema selbst erkannt (`event_hash` BLOB) · **beide** Listen gelesen, der Eintrag kam aus der signierten |
+| Entfernen | Sicherung `nostr.db.sicherung-20260819-042201.db` mit 1624 Ereignissen · `vorher 1624 · betroffen 1 · nachher 1623 (erwartet 1623)` |
+| Nachsehen | `Betroffen sind 0 von 1623` · `· 701a5834… nicht im Speicher` |
+
+**Der dritte Lauf ist der eigentliche Beweis.** Was weg ist, findet das Werkzeug
+nicht mehr — das kann es nur sagen, weil es nach der **Kennung** greift und
+nicht nach dem Brett-Tag.
+
+Aufgerufen wurde es, ohne eine Datei aufs Tablet zu holen: der Server holt sich
+das Skript selbst.
+
+```bash
+ssh root@167.233.204.72 'curl -sSL -o /tmp/wache.sh https://raw.githubusercontent.com/lausiklauskn-png/Kimboard/main/tools/relais-wache.sh && bash /tmp/wache.sh'
+ssh root@167.233.204.72 'SCHARF=ja bash /tmp/wache.sh'
+```
+
+**Und der Lauf hat einen Fehler ans Licht gebracht, den keine Probe sah.** Im
+Lösch-Schritt stand eine nackte `15000` — die Rückgabe von `PRAGMA
+busy_timeout`. Beim Wegräumen fiel der eigentliche auf: die Vorgabe-Adressen
+standen als `${LISTE_JSON:-…}` da. **`:-` setzt die Vorgabe auch bei LEEREM
+Wert ein.** Die Proben setzten `LISTE_JSON=''`, um die zweite Quelle
+stillzulegen — und holten in Wahrheit weiter die echte Liste von GitHub.
+Solange die Datei auf `main` nicht existierte, kam nichts zurück und alles war
+grün: **grün, weil ein Abruf ins Leere lief, nicht weil die Abschaltung
+wirkte.** Seit `-` statt `:-` schaltet leer wirklich ab; zwei Prüfungen halten
+fest, dass keine GitHub-Adresse mehr in der Ausgabe auftaucht.
+
 **Was weiterhin fehlt:** ein **Takt**. Heute läuft der Gang auf Zuruf. Ein
 Dienst, der ungefragt löscht, braucht mehr Vertrauen als einer, den man aufruft
 — und weil Kimboards Sperr-Liste **nur nach oben** geht, ist der Zuruf-Betrieb

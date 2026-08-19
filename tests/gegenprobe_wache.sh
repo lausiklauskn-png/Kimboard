@@ -143,6 +143,14 @@ probe "beide Listen werden VEREINIGT, nicht ersetzt" \
   '  { kennungen "$roh_js" "$1"; kennungen "$roh_json" "$1"; } | sort -u' \
   '  { kennungen "$roh_js" "$1"; } | sort -u'
 
+# `:-` statt `-`: dann schaltet LISTE_JSON='' die Quelle NICHT ab, und die
+# Proben greifen still ins Netz. Genau so waren sie zeitweise grün — nicht weil
+# die Abschaltung wirkte, sondern weil der Abruf ins Leere lief.
+probe "leer schaltet die zweite Quelle wirklich ab" \
+  ersetze tools/relais-wache.sh \
+  'LISTE_JSON="${LISTE_JSON-https' \
+  'LISTE_JSON="${LISTE_JSON:-https'
+
 # DER GEFÄHRLICHE. Ohne den Doppelpunkt-Anker liest das Werkzeug den Umschlag
 # des signierten Ereignisses mit — bei alphabetisch sortierten Feldern wäre das
 # Klaus' EIGENER Schlüssel als gesperrter Absender.
