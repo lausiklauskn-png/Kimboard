@@ -21,6 +21,7 @@ gezielt mit Grep.
 | **Nachsehen-Gang** `tools/relais-wache.sh` | ✅ 41 Proben |
 | **Scharfer Gang** `SCHARF=ja` | ✅ 38 Proben · Gegenprobe 24/24 |
 | **Pinnwand** liest dieselbe Liste (Sage-Protokol) | ✅ 30 Proben |
+| **Pinnwand** hat den Melde-Weg ⚑ (Art. 16 DSA) | ✅ **2026-08-19 nachgezogen** (Sage PR #892) · 53 + 20 Proben · Gegenprobe 26/26 |
 | Ein Lauf gegen die **echte** Datenbank auf dem Server | ✅ **2026-08-19 gelaufen** — 1 von 1624 → entfernt → 0 von 1623 |
 | **Relais-Grenzen** `tools/relais-grenzen.sh` (Flut-Bremse · Zukunfts-Riegel) | ✅ 29 Proben · **am 2026-08-19 gesetzt** · Schreiben gegengeprüft |
 | Server: Updates · Neustart · Rechte an `/opt/relay/db` · Sicherung weg | ✅ alles 2026-08-19 |
@@ -158,6 +159,34 @@ gestartet, beide Container kamen von allein zurück (`unless-stopped`), 1623
 Zettel unverändert. Zurückgehalten hat Ubuntu nur `grub-pc-bin` und
 `grub2-common` wegen „phasing" — das ist der Bootloader, nichts wird erzwungen
 (bleibt als Punkt 2 in der Stichtag-Liste stehen).
+
+---
+
+## 4b. Der Melde-Weg der Pinnwand — nachgezogen am 2026-08-19
+
+Beim Nachsehen, ob die Pinnwand mit allem parallel läuft, blieb ein Punkt übrig:
+sie las zwar dieselbe Sperr-Liste, hatte aber **keinen Melde-Knopf**. Gegen
+fremde Inhalte gab es dort damit gar nichts — das ✕ blendet nur beim Melder aus,
+und NIP-09 kann nur der Verfasser für seinen eigenen Zettel. Dabei stand im
+Quelltext der Pinnwand selbst, dass es um genau dieses Verfahren geht.
+
+Der ⚑-Knopf hängt jetzt an jeder Frage und jeder Antwort, nach demselben Muster
+wie hier. **Gesperrt wird weiter in Kimboard** — der Betreiber-Bereich dort
+reicht nur die Kennungen heraus, damit es einen Ort der Wahrheit gibt statt
+zweier, die auseinanderlaufen.
+
+**Zwei Funde daraus, beide übertragbar:**
+
+- **`Math.max(1700, …)` lässt sich nicht messen**, solange die Wartezeit
+  dasteht: echte und behauptete Zahl sind dann gleich. Gefährlich ist die
+  **Kombination** — nimmt später jemand die Wartezeit heraus, meldet die App
+  eine Zahl, die sie nie gemessen hat. Genau so ist es hier passiert. Was man
+  nicht messen kann, schreibt man fest: dort steht jetzt ein Quelltext-Wächter.
+- **Die Knopf-Lage war falsch gerechnet.** `.q-del` sagt kein `box-sizing`, eine
+  allgemeine `button`-Regel legt Innenabstand dazu — beide Knöpfe werden 32 px
+  breit statt 24. Mit `right: 40px` überlappten sie sich um 2 px. Gefunden hat
+  das erst das **Ausmessen im echten Chromium**, kein Nachrechnen. Wer hier
+  einen Knopf neben einen anderen setzt, misst nach.
 
 ---
 
