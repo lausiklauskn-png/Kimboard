@@ -55,6 +55,15 @@
 
 var CACHE_VERSION = "kimboard-v64";
 
+
+/* ⚠ NUR EIGENE VORRAETE AUFRAEUMEN — `caches` gehoert dem URSPRUNG, nicht dem
+ * Pfad. Auf lausiklauskn-png.github.io liegen rund zwanzig Apps; ein Filter,
+ * der nur "ist nicht meiner" fragt, laesst ALLE fremden durch und loescht sie.
+ * Gemessen am 2026-09-08 an zwei echten Apps
+ * (Sage-Protokol/tests/vorrat_wirkung.mjs). Praefix ABGELESEN aus der
+ * Vorrat-Konstante, nicht geraten. Muster aus Tomys-Hub/bookledger/sw.js.
+ * Es muss BEIDES tun: fremde stehen lassen UND eigene alte weiter wegraeumen. */
+var VORRAT_PRAEFIX = "kimboard-";
 // Die App-Schale. Absichtlich NICHT enthalten: "./" und "./index.html"
 // (dieselbe Datei wie die Navigation, nur unter anderer Adresse) sowie
 // icon-192/icon-512 (holt das Betriebssystem beim Installieren). Siehe Kopf.
@@ -111,7 +120,7 @@ self.addEventListener("activate", function (event) {
   event.waitUntil(
     caches.keys().then(function (keys) {
       return Promise.all(keys.map(function (k) {
-        if (k !== CACHE_VERSION) return caches.delete(k);
+        if (k.startsWith(VORRAT_PRAEFIX) && k !== CACHE_VERSION) return caches.delete(k);
       }));
     }).then(function () { return self.clients.claim(); })
   );
