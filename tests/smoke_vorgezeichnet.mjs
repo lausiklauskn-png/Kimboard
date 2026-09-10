@@ -79,6 +79,36 @@ pool.forEach((url, i) => {
 ok(textOk, 'Beschriftung + Reihenfolge stimmen mit RELAY_POOL überein');
 ok(zustandOk, 'die ersten ' + anZahl + ' sind als „an" gezeichnet, der Rest als „aus"');
 
+/* ── 1b) Die zweite eigene Tür (Klaus 2026-09-10) ──────────────────────────
+ *
+ * `relay.pwa-toolpoint.de` liegt seit dem 2026-08-11 als zweiter Caddy-Block
+ * auf DEMSELBEN Relais-Container wie relay.family-projekt.de. Es gehört in die
+ * Liste — aber NICHT in den Default-Aktiv-Satz: der zählt fünf VERSCHIEDENE
+ * Speicher, und daraus vier zu machen und weiter „fünf gestreut" zu schreiben
+ * wäre eine Zahl, die etwas anderes verspricht, als sie hält. */
+const TOOLPOINT = 'wss://relay.pwa-toolpoint.de';
+ok(pool.includes(TOOLPOINT), 'das Toolpoint-Relais steht in RELAY_POOL');
+ok(pool.indexOf(TOOLPOINT) >= anZahl,
+  'es ist NICHT voreingestellt an — zwei Namen sind keine zweite Poststelle');
+/* Der Grund muss DASTEHEN. Ohne ihn zieht die nächste Sitzung es nach vorn,
+   weil „Klaus' eigenes gehört zuerst" — und der Default-Satz schrumpft still
+   von fünf Speichern auf vier. */
+ok(/ZWEI NAMEN SIND KEINE ZWEITE POSTSTELLE/.test(html),
+  'und der Grund steht daneben (zwei Namen, ein Speicher)');
+ok(!/Erster Eintrag: Klaus' EIGENES, log-freies, neutrales Toolpoint-Relay/.test(html),
+  'die überholte Toolpoint-Behauptung im Kopf ist weg');
+
+/* Beide eigenen Türen tragen „(eigenes)" im Heim-Wähler. Ein Vergleich mit
+   HOME_RELAY allein liesse die zweite wie eine fremde aussehen. */
+const eigeneRoh = /const EIGENE_RELAIS = \[([^\]]*)\]/.exec(html);
+const eigene = eigeneRoh ? Array.from(eigeneRoh[1].matchAll(/'(wss:\/\/[^']+)'/g)).map((m) => m[1]) : [];
+ok(eigene.length === 2 && eigene.includes(TOOLPOINT),
+  `beide eigenen Poststellen sind benannt (${eigene.map((u) => u.replace('wss://', '')).join(', ')})`);
+ok(/EIGENE_RELAIS\.includes\(url\) \? ' \(eigenes\)'/.test(html),
+  'der Heim-Wähler markiert BEIDE als „(eigenes)", nicht nur das Heim-Relais');
+ok(eigene.every((u) => pool.includes(u)),
+  'und jede davon steht auch wirklich im Pool');
+
 /* ── 2) Heim-Relais-Hinweis ───────────────────────────────────────────────── */
 // Den Text so zusammensetzen, wie heimStatus() ihn im Normalfall erzeugt.
 const heimRoh = /const HOME_RELAY = '(wss:\/\/[^']+)'/.exec(html);
