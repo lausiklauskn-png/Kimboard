@@ -50,8 +50,10 @@ const pool = poolRoh
   : [];
 ok(pool.length > 0, `RELAY_POOL gefunden (${pool.length} Relais)`);
 
-// Wie viele sind voreingestellt an? Steht im Code als RELAY_POOL.slice(0, N).
-const sliceRoh = /activeRelays = RELAY_POOL\.slice\(0,\s*(\d+)\)/.exec(html);
+// Wie viele sind voreingestellt an? Steht im Code als benannte Konstante,
+// aus der der Satz geschnitten wird — seit dem 2026-09-10 nicht mehr als Zahl
+// im Schnitt selbst (die lief mit der Rotations-Automatik auseinander).
+const sliceRoh = /const VORGEWAEHLT = (\d+);/.exec(html);
 const anZahl = sliceRoh ? Number(sliceRoh[1]) : null;
 ok(anZahl !== null, `Voreinstellung im Code gefunden: die ersten ${anZahl} sind an`);
 
@@ -87,14 +89,51 @@ ok(zustandOk, 'die ersten ' + anZahl + ' sind als „an" gezeichnet, der Rest al
  * Speicher, und daraus vier zu machen und weiter „fünf gestreut" zu schreiben
  * wäre eine Zahl, die etwas anderes verspricht, als sie hält. */
 const TOOLPOINT = 'wss://relay.pwa-toolpoint.de';
+const HEIM_TUER = 'wss://relay.family-projekt.de';
 ok(pool.includes(TOOLPOINT), 'das Toolpoint-Relais steht in RELAY_POOL');
-ok(pool.indexOf(TOOLPOINT) >= anZahl,
-  'es ist NICHT voreingestellt an — zwei Namen sind keine zweite Poststelle');
-/* Der Grund muss DASTEHEN. Ohne ihn zieht die nächste Sitzung es nach vorn,
-   weil „Klaus' eigenes gehört zuerst" — und der Default-Satz schrumpft still
-   von fünf Speichern auf vier. */
+ok(pool.indexOf(TOOLPOINT) < anZahl,
+  'es ist voreingestellt AN (Klaus 2026-09-10: „mach den Default-Satz auf sechs")');
+
+/* ⚠ DER KERN: die Streuung darf dabei NICHT geschrumpft sein.
+ *
+ * relay.pwa-toolpoint.de und relay.family-projekt.de sind zwei Türen in
+ * DENSELBEN Nachrichten-Speicher (zweiter Caddy-Block auf demselben Container,
+ * family-project/Caddyfile.example). Wer die zweite Tür in einen Fünfer-Satz
+ * schiebt, hat vier verschiedene Speicher und schreibt weiter „fünf" — deshalb
+ * ist der Satz auf sechs gehoben. Gemessen wird genau das: wie viele
+ * VERSCHIEDENE Speicher im Default-Satz stehen. */
+const zweiteTuer = (u) => (u === TOOLPOINT ? HEIM_TUER : u);
+const speicher = new Set(pool.slice(0, anZahl).map(zweiteTuer));
+ok(speicher.size === 5,
+  `der Default-Satz deckt weiter fünf verschiedene Speicher ab (${speicher.size} bei ${anZahl} Pillen)`);
+ok(pool.slice(0, anZahl).includes(HEIM_TUER),
+  'und das Heim-Relais ist darunter');
+
+/* ⚠ UND DIE ZAHL DARF NUR EINMAL DASTEHEN.
+ *
+ * Am 2026-09-10 ist der Default-Satz auf sechs gestiegen — und die
+ * Rotations-Automatik behielt ihre eigene, abgeschriebene 5. Damit hätte ihr
+ * Einschalten wieder EIN Relais gekostet, also genau Klaus' Befund vom
+ * 2026-07-28 zurückgeholt. Gefunden hat es `smoke_rotation_ui.mjs` im
+ * Browser; hier wird es ohne Browser festgenagelt: die Automatik LIEST die
+ * Zahl, sie schreibt sie nicht ab. */
+ok(anZahl === 6, `VORGEWAEHLT steht auf sechs (gemessen: ${anZahl})`);
+ok(/activeRelays = RELAY_POOL\.slice\(0, VORGEWAEHLT\)/.test(html),
+  'der Default-Satz wird daraus geschnitten, nicht aus einer zweiten Zahl');
+ok(/const ROT_COUNT_DEFAULT = VORGEWAEHLT;/.test(html),
+  'die Rotations-Automatik liest dieselbe Konstante ab, statt sie abzuschreiben');
+ok(!/const ROT_COUNT_DEFAULT = \d/.test(html),
+  'und trägt keine eigene Zahl mehr (die lief am 2026-09-10 auseinander)');
+
+/* Der Grund muss DASTEHEN — sonst kürzt die nächste Sitzung den Satz wieder
+   auf fünf, „weil da eine Dopplung drin ist", und nimmt dabei einen echten
+   Speicher mit. */
 ok(/ZWEI NAMEN SIND KEINE ZWEITE POSTSTELLE/.test(html),
   'und der Grund steht daneben (zwei Namen, ein Speicher)');
+ok(/DESHALB SIND ES SECHS UND NICHT FÜNF/.test(html),
+  'samt der Begründung, warum der Satz sechs zählt und nicht fünf');
+ok(!/Default: 5 gestreut/.test(html),
+  'die alte Angabe „5 gestreut" steht nirgends mehr — sie wäre jetzt falsch');
 ok(!/Erster Eintrag: Klaus' EIGENES, log-freies, neutrales Toolpoint-Relay/.test(html),
   'die überholte Toolpoint-Behauptung im Kopf ist weg');
 
