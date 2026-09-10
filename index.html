@@ -453,8 +453,8 @@
          Karte 171 px zu kurz war; sobald die Pillen kamen, rutschte alles
          darunter nach unten. Das war der größte Teil des gemessenen Sprungs
          (Cumulative Layout Shift 0,433).
-         Hier steht der VOREINGESTELLTE Zustand: alle neun Relais aus
-         RELAY_POOL, die ersten fünf an (= RELAY_POOL.slice(0, 5)). Genau das
+         Hier steht der VOREINGESTELLTE Zustand: alle zehn Relais aus
+         RELAY_POOL, die ersten SECHS an (= RELAY_POOL.slice(0, 6)). Genau das
          baut relayPills() gleich darauf nochmal — mit Klick-Verhalten und, wenn
          gespeichert, mit der eigenen Auswahl des Nutzers. Wer eine abweichende
          Auswahl gespeichert hat, sieht dabei noch eine kleine Korrektur; das
@@ -464,6 +464,7 @@
          beiden geändert wird und das andere nicht. -->
     <div class="row" id="relays" style="margin-top: 10px;">
       <span class="pill" style="cursor:pointer;opacity:1;" title="aktiv — klicken zum Abschalten"><span class="dot try"></span>relay.family-projekt.de</span>
+      <span class="pill" style="cursor:pointer;opacity:1;" title="aktiv — klicken zum Abschalten"><span class="dot try"></span>relay.pwa-toolpoint.de</span>
       <span class="pill" style="cursor:pointer;opacity:1;" title="aktiv — klicken zum Abschalten"><span class="dot try"></span>relay.damus.io</span>
       <span class="pill" style="cursor:pointer;opacity:1;" title="aktiv — klicken zum Abschalten"><span class="dot try"></span>nos.lol</span>
       <span class="pill" style="cursor:pointer;opacity:1;" title="aktiv — klicken zum Abschalten"><span class="dot try"></span>relay.nostr.band</span>
@@ -472,7 +473,6 @@
       <span class="pill" style="cursor:pointer;opacity:0.45;" title="aus — klicken zum Zuschalten"><span class="dot"></span>+ nostr.mom</span>
       <span class="pill" style="cursor:pointer;opacity:0.45;" title="aus — klicken zum Zuschalten"><span class="dot"></span>+ offchain.pub</span>
       <span class="pill" style="cursor:pointer;opacity:0.45;" title="aus — klicken zum Zuschalten"><span class="dot"></span>+ relay.mostr.pub</span>
-      <span class="pill" style="cursor:pointer;opacity:0.45;" title="aus — klicken zum Zuschalten"><span class="dot"></span>+ relay.pwa-toolpoint.de</span>
     </div>
     <div class="row" style="margin-top: 8px; gap: 8px; align-items:center; flex-wrap:wrap;">
       <label for="heim-relay" style="opacity:.85;">🏠 Heim-Relais:</label>
@@ -702,26 +702,31 @@ const TAG = 'sbkim-frage-antwort-test';
 // „Toolpoint-Relay"). Steht so in `family-project/Caddyfile.example`.
 //
 // ⚠ ZWEI NAMEN SIND KEINE ZWEITE POSTSTELLE. Beide Türen führen in denselben
-// Nachrichten-Speicher — anzuhaken bringt also KEINE zusätzliche Reichweite und
-// keine zusätzliche Ausfallsicherheit. Deshalb ist Toolpoint NICHT im
-// Default-Aktiv-Satz: der zählt fünf VERSCHIEDENE Speicher, und daraus vier zu
-// machen und weiter „fünf gestreut" zu schreiben wäre eine Zahl, die etwas
-// anderes verspricht, als sie hält.
+// Nachrichten-Speicher — anzuhaken bringt KEINE zusätzliche Reichweite und
+// keine zusätzliche Ausfallsicherheit gegen einen Ausfall des Relais selbst.
+// Doppelt ankommende Zettel sind unkritisch: `seen.has(ev.id)` verwirft sie.
 //
-// WOFÜR ES DANN DA IST: als WÄHLBARE Tür. Wer über PWA Toolpoint kommt, will
-// unter dem Namen senden, den er kennt; und fällt ein Name einmal weg (DNS,
-// Zertifikat), trägt der andere. Doppelt ankommende Zettel sind unkritisch —
-// `seen.has(ev.id)` verwirft sie (unten in onEvent).
+// ⚠ UND DESHALB SIND ES SECHS UND NICHT FÜNF (Klaus 2026-09-10, ausdrücklich
+// entschieden). Der Default-Satz zählt fünf VERSCHIEDENE Speicher. Die zweite
+// Tür einfach hineinzuschieben hätte daraus vier gemacht, während die
+// Oberfläche weiter „fünf gestreut" sagt — eine Zahl, die etwas anderes
+// verspricht, als sie hält. Der Satz wurde deshalb auf SECHS gehoben: fünf
+// Speicher wie vorher, plus die zweite Tür des ersten. Die Streuung schrumpft
+// dadurch nicht.
+//
+// WOFÜR DIE ZWEITE TÜR GUT IST: wer über PWA Toolpoint kommt, sendet unter dem
+// Namen, den er kennt — und fällt ein NAME weg (DNS, Zertifikat), trägt der
+// andere. Gegen einen Ausfall des Relais hilft sie nicht; dafür stehen die
+// vier fremden daneben.
 //
 // (Hier stand bis zum 2026-09-10, der erste Eintrag sei das „Toolpoint-Relay"
 //  und verwies auf `docs/discovery/notiz-toolpoint-relay.md`. Der erste Eintrag
 //  ist relay.family-projekt.de, und die Notiz gibt es in diesem Depot nicht.)
 const RELAY_POOL = [
-  'wss://relay.family-projekt.de',
+  'wss://relay.family-projekt.de', 'wss://relay.pwa-toolpoint.de',
   'wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.nostr.band',
   'wss://relay.primal.net', 'wss://relay.snort.social', 'wss://nostr.mom',
   'wss://offchain.pub', 'wss://relay.mostr.pub',
-  'wss://relay.pwa-toolpoint.de',
 ];
 // Klaus' eigene Poststellen — für die Beschriftung im Heim-Relais-Wähler.
 // Eine LISTE, kein Vergleich mit HOME_RELAY: sonst trüge nur das Heim-Relais
@@ -764,7 +769,14 @@ try {
   const saved = JSON.parse(localStorage.getItem(LS_RELAYS) || 'null');
   activeRelays = (Array.isArray(saved) && saved.length) ? saved.filter((u) => RELAY_POOL.includes(u)) : null;
 } catch { activeRelays = null; }
-if (!activeRelays || !activeRelays.length) activeRelays = RELAY_POOL.slice(0, 5); // Default: 5 gestreut
+// Default: SECHS Pillen = fünf verschiedene Speicher (zwei davon sind zwei
+// Türen desselben). Siehe die Begründung über RELAY_POOL.
+// ⚠ EINE ZAHL, EINE STELLE. Die Rotations-Automatik richtet ihre Vorgabe
+// danach (ROT_COUNT_DEFAULT weiter unten). Stünde die Zahl zweimal da, liefe
+// sie auseinander — und das Einschalten der Automatik wäre wieder ein
+// Rückschritt bei der Ausfallsicherheit, genau Klaus' Befund vom 2026-07-28.
+const VORGEWAEHLT = 6;
+if (!activeRelays || !activeRelays.length) activeRelays = RELAY_POOL.slice(0, VORGEWAEHLT);
 function saveRelays() { try { localStorage.setItem(LS_RELAYS, JSON.stringify(activeRelays)); } catch { /* */ } }
 
 /* ---- Identität: der PINNWAND-Schlüssel ------------------------------------
@@ -3912,10 +3924,13 @@ function renderContactCard(container, card, absender) {
 // EHRLICH: Zweck ist Ausfallsicherheit + Metadaten nicht an EINEM Relais bündeln,
 // NICHT Zensur-Umgehung und keine Tarnung (die Relais-Liste ist öffentlich).
 const LS_ROT = 'sbkim_pinnwand_rotation';
-// Standard-Anzahl = so viele, wie ohne Automatik ohnehin laufen (RELAY_POOL.slice(0,5)),
-// damit das Einschalten der Automatik nie ein Rückschritt bei der Ausfallsicherheit ist
-// (Klaus' Befund 2026-07-28: Auswahl war auf 4 gedeckelt, obwohl 9 im Pool sind).
-const ROT_COUNT_DEFAULT = 5;
+// Standard-Anzahl = so viele, wie ohne Automatik ohnehin laufen — ABGELESEN,
+// nicht abgeschrieben: dieselbe Konstante, die den Default-Satz aufspannt.
+// Damit ist das Einschalten der Automatik nie ein Rückschritt bei der
+// Ausfallsicherheit (Klaus' Befund 2026-07-28: Auswahl war auf 4 gedeckelt,
+// obwohl 9 im Pool sind). Am 2026-09-10 hat genau dieser Wächter zugeschlagen,
+// als der Default-Satz auf sechs stieg und hier eine 5 stehen blieb.
+const ROT_COUNT_DEFAULT = VORGEWAEHLT;
 let rot = { on: false, secret: '', periodMs: 900000, count: ROT_COUNT_DEFAULT, manual: null };
 try { const s = JSON.parse(localStorage.getItem(LS_ROT) || 'null'); if (s && typeof s === 'object') rot = Object.assign(rot, s); } catch { /* fail-soft */ }
 let rotTimer = null;
