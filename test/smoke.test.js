@@ -72,7 +72,8 @@ test("App-Schale ist vollständig (self-contained PWA)", () => {
   for (const f of ["index.html", "manifest.json", "sw.js", "impressum.html", "sicherheit.html",
                    "icon-192.png", "icon-512.png",
                    "assets/storage-init.js", "assets/rendezvous-init.js", "assets/nostr-listen-init.js",
-                   "assets/schutz-init.js", "assets/siegel-inhalt.js"]) {
+                   "assets/schutz-init.js", "assets/siegel-inhalt.js",
+                   "assets/sbkim-andock-wizard.js"]) {
     assert.ok(readFileSync(join(ROOT, f)).length > 0, `${f} vorhanden + nicht leer`);
   }
   const html = readFileSync(join(ROOT, "index.html"), "utf8");
@@ -106,6 +107,10 @@ test("Pinnwand-Funktion erhalten + Endknoten-Stack vorhanden", () => {
   }
   assert.match(html, /assets\/rendezvous-init\.js/, "Rendezvous-Init (🌐 Mit dem Netz verbinden) eingebunden");
   assert.match(html, /assets\/siegel-inhalt\.js/, "Siegel-Andock-Werkzeug eingebunden");
+  /* ⚠ Seit A18 (2026-09-14) sind es ZWEI Dateien: die Identitaet dieses Knotens
+     und der netzweit byte-gleiche Kanon. Wer nur die erste prueft, merkt
+     nicht, dass das Werkzeug selbst fehlt — der Knopf waere dann weg. */
+  assert.match(html, /assets\/sbkim-andock-wizard\.js/, "Kanon-Wizard eingebunden");
 });
 
 test("Gerätename verdrahtet (Anzeige-Name im Raum + nick-Tag am Brett)", () => {
