@@ -49,7 +49,7 @@ const EXPECTED_SHA256 = {
   "21_spracheingabe.js": "020ca26ff52f2ed726f6344bd3ac55eb52e3472a7f97bdd41bdd0d54132777ba",
   "17_floating_widget.js": "3f757b35cea544b1ee84c1cbe8e0f6dbb653ddaa319cd99433be76c0958a44e5",
   "23_rendezvous.js": "3caa0bb1fbe7bf5293c90b6a59a74cccf8600bff45095a892b1f048244c61fcf",
-  "23_rendezvous_ui.js": "709c4364026ed2c3647aa613c05296b18a2a761e382b18b86074493916e28b2e",
+  "23_rendezvous_ui.js": "1c41206c87e17d00ff73e2b100ff80ff6dae44ac7a7a2cf1f41b32f77314836a",
   "24_ocr_eingabe.js": "c0d616ff763cae409f4ec3dd943326b04c8ec0275b404ddfac348dc4c402077e",
   "noble-secp256k1.js": "8f3879ca422c4fdfe7ca0361688636fa7cc550a59bd94d512ed6ec79aa3d55d1",
   "dm_crypto.js": "e9c973f0459c5f03fa80b47d3cd4505ef6d4bd689e409569370a59db2586ba63",
