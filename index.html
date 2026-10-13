@@ -603,6 +603,7 @@
 <!-- Identitäts-Isolierung: eigenes DB-Suffix global setzen, BEVOR irgendein
      SBKIM-Modul lädt (Modul 01 liest window.SBKIM_DB_SUFFIX beim Laden). -->
 <script>window.SBKIM_DB_SUFFIX="kimboard";</script>
+<script>/* Sprachmodell vom eigenen Server (Klaus 2026-10-13, Weg A: die App setzt die Adresse, Modul 03 bleibt neutral). Antwortet er nicht, nimmt Modul 03 Hugging Face. */window.SBKIM_MODEL_ROOT=window.SBKIM_MODEL_ROOT||"https://family-projekt.de/models/";</script>
 <script type="module">
 import { schnorr, utils } from './modules/noble-secp256k1.js';
 import { isAuthentic, eventId } from './modules/echtheit.js';
