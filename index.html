@@ -3679,9 +3679,12 @@ function openKontaktSenden() {
   box.id = 'kontakt-senden';
   box.style.cssText = 'background:var(--card,#1c1a17);color:var(--fg,#eee);border:1px solid var(--acc,#c9a961);border-radius:14px;max-width:460px;width:100%;max-height:82vh;overflow:auto;padding:16px 18px;font-size:.92rem;';
   box.innerHTML = '<h3 style="margin:.1em 0 .5em">👤 Kontakt senden</h3>' +
-    '<p style="opacity:.8;margin:.2em 0 .8em">Gib einen deiner Kontakte an <b>' +
-    (empfaenger.length === 1 ? contactName(empfaenger[0]) : empfaenger.length + ' Kontakte') +
-    '</b> weiter. Die Visitenkarte geht <b>verschlüsselt</b> — und wird beim Empfänger erst nach seiner Zustimmung gespeichert.</p>';
+    '<p style="opacity:.8;margin:.2em 0 .8em">Gib einen deiner Kontakte an <b data-kontakt-an></b>' +
+    ' weiter. Die Visitenkarte geht <b>verschlüsselt</b> — und wird beim Empfänger erst nach seiner Zustimmung gespeichert.</p>';
+  // Der Name kann aus einer angenommenen Gruppeneinladung stammen, also von
+  // einem Fremden — er ist Text, nie HTML (Befund Sage 2026-10-14).
+  box.querySelector('[data-kontakt-an]').textContent =
+    empfaenger.length === 1 ? contactName(empfaenger[0]) : empfaenger.length + ' Kontakte';
   if (!keys.length) {
     const p = document.createElement('p');
     p.style.opacity = '.75';
