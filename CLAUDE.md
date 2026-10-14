@@ -260,3 +260,18 @@ Hard-Reload, Service-Worker und HTTP-Cache sind hartnäckig.
 
 Keine echten personenbezogenen Fremddaten in Commits, kein privater Schlüssel, kein
 Passwort, kein Token im Repo. Klaus' eigenes Impressum/Copyright ist gewollt.
+
+## 🛡 Prüfliste vor dem KI-Richter (Sage Bau 04.J, 2026-10-14)
+
+Fragen und Antworten auf dem Brett schreiben **Fremde**. Der eigene Richter (⚖️ Richter anwenden) gab sie bis hierher ungeprüft an eine KI. Jetzt läuft er wie die Pinnwand in Sage, über den Block `RICHTER-PRÜFUNG` in `index.html`:
+
+- Ohne Prüfliste (`modules/pruefer-mail.js`, byte-1:1, gepinnt im Drift-Guard) startet er nicht.
+- Eine Frage mit Anweisung an eine KI wird nicht gesendet.
+- Eine Antwort mit Anweisung geht nicht an die KI. Sie steht mit **⚠ nicht an die KI** und Grund da (`data-ausgeschlossen`).
+- Der Prompt nennt Frage und Antworten DATEN.
+
+Modul 04 und Modul 24 kommen neu aus dem Kanon. Die Texterkennung hält bei verstecktem Text und bei einer Anweisung im erkannten Text einmal an. Die Liste lädt in der Kette direkt nach 04 und steht im Vorrat.
+
+Gemessen: `tests/smoke_richter_pruefung.mjs` 15 grün. Von Hand gegengeprüft: drei Sabotagen ergeben je eine rote Zeile, eine vierte war blind und ist geschärft. `node tests/alle.mjs`: 32 von 32 grün. Cache v88.
+
+Am Tablet nicht gemessen, ebenso nicht mit einer echten KI.

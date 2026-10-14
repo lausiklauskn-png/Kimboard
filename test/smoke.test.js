@@ -39,7 +39,7 @@ const EXPECTED_SHA256 = {
   "01_storage.js": "5a5a4bf64dfcc107da7ed70fb755d7db5cce7d80e963b3e2fbc2004537747820",
   "02_spore.js": "6789fe6e903ad2e53f39b2dee576c640698555ef71ef4e9134eb75573fdb7d68",
   "03_embedding.js": "a6ac64d7536da3fa5cc426d0f7db9440fdaf5ab4460f0bdc66a10eb8203b1b68",
-  "04_match.js": "df367d113e3de250a27ab6268d20527ea6ef7eb52b7787f6832513b994a5cbb3",
+  "04_match.js": "721eecc3c0d6ea4c259259e6071215ec1cd16f1c43c87b42ce9e72e9a0b5e41c",
   "05_anastomose.js": "255ac79aeb3b0203e92f0cebd0a905e47c488b43efe18f41332a7d35520bbf23",
   "05b_nostr_relay.js": "37eee5b196b3efad57131edd1cc3c0ee23acb97b5ca40740d6a0771db4b4a421",
   "07_apoptose.js": "0acdd6ab2d95e131fa6953061cc0e95a2396e05fff091a7dc690b2668a4c035a",
@@ -50,8 +50,9 @@ const EXPECTED_SHA256 = {
   "17_floating_widget.js": "e4ee076c1295910d0e83470ebda327e7419f29bc06f6718148369c8369e1a5ce",
   "23_rendezvous.js": "9464fba75e5a4ed46ebabcd05b2b62f118a5a056f10ebf929421b282d4f6631f",
   "23_rendezvous_ui.js": "a81fc9081271544e94ee8921ea692ebe1dc7ee9ab8a59f2c6a3187871f7b45c3",
-  "24_ocr_eingabe.js": "c0d616ff763cae409f4ec3dd943326b04c8ec0275b404ddfac348dc4c402077e",
+  "24_ocr_eingabe.js": "f638f1cf4aaaa22e91186249f91cb1d4ac630f44a374a3de08192ea144948faa",
   "noble-secp256k1.js": "8f3879ca422c4fdfe7ca0361688636fa7cc550a59bd94d512ed6ec79aa3d55d1",
+  "pruefer-mail.js": "cdf3ca7881bfa68763a2c0be7436d35a65bea4dbd03f606e02eaec5c613632d7", // Prüfliste (Auslieferungsprüfer, über Sage assets/), Bau 04.J
   "dm_crypto.js": "e9c973f0459c5f03fa80b47d3cd4505ef6d4bd689e409569370a59db2586ba63",
   // — Kimboard-eigen (dürfen wachsen, Wert bewusst nachtragen) —
   "echtheit.js": "14c164b2585fea56d082b17ede24933838a45fd8ac55d05818b5e45ef8d7fac3",

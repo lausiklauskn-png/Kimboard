@@ -53,7 +53,7 @@
  */
 "use strict";
 
-var CACHE_VERSION = "kimboard-v87";
+var CACHE_VERSION = "kimboard-v88";
 
 
 /* ⚠ NUR EIGENE VORRAETE AUFRAEUMEN — `caches` gehoert dem URSPRUNG, nicht dem
@@ -89,6 +89,7 @@ var APP_SHELL = [
   "./modules/02_spore.js",
   "./modules/03_embedding.js",
   "./modules/04_match.js",
+  "./modules/pruefer-mail.js",
   "./modules/05_anastomose.js",
   "./modules/05b_nostr_relay.js",
   "./modules/07_apoptose.js",
