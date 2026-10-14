@@ -275,3 +275,7 @@ Modul 04 und Modul 24 kommen neu aus dem Kanon. Die Texterkennung hält bei vers
 Gemessen: `tests/smoke_richter_pruefung.mjs` 15 grün. Von Hand gegengeprüft: drei Sabotagen ergeben je eine rote Zeile, eine vierte war blind und ist geschärft. `node tests/alle.mjs`: 32 von 32 grün. Cache v88.
 
 Am Tablet nicht gemessen, ebenso nicht mit einer echten KI.
+
+### Nachgesehen: kein weiterer KI-Weg (2026-10-14, Sitzung 3 von 4)
+
+Gelesen auf `main` (`6372299`), nicht vermutet: `callJudge`/`callWebllmJudge` laufen nur über `getVerdicts`, und das ruft allein der Richter (seit #150 geprüft). Die Texterkennung geht über Modul 24 in der Kanon-Fassung (24.R: nie das Original, versteckter Text hält an, Anweisung im erkannten Text hält an). Die übrigen `fetch`-Aufrufe gehen an den Melde-Dienst (ohne den beanstandeten Text), an die Sperr-Liste und an die Modell-Listen der Anbieter (nur der Schlüssel, kein Inhalt). **Deshalb ist hier nichts gebaut.**
