@@ -53,7 +53,7 @@
  */
 "use strict";
 
-var CACHE_VERSION = "kimboard-v96";
+var CACHE_VERSION = "kimboard-v97";
 
 
 /* ⚠ NUR EIGENE VORRAETE AUFRAEUMEN — `caches` gehoert dem URSPRUNG, nicht dem
