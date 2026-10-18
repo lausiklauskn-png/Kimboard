@@ -30,6 +30,7 @@
     'tb-zoom':    ['🔍 Text vergrößern', 'Macht die Schrift der ganzen Seite größer oder wieder kleiner. Ändert nichts an deinen Daten — reine Ansichtssache.'],
     'tb-full':    ['🔳 Vollbild', 'Blendet die Leisten des Browsers aus, damit die Pinnwand den ganzen Bildschirm nutzt. Nochmal tippen beendet es.'],
     'tb-reload':  ['🔄 Neu laden', 'Lädt die Seite frisch und wirft den Zwischenspeicher weg. Immer dann nützlich, wenn du eine neue Version bekommen hast und noch die alte siehst.'],
+    'installieren': ['⬇ Installieren', 'Legt Kimboard als eigene App aufs Gerät. Bietet der Browser es an, öffnet ein Tipp seinen Dialog; sonst sagt der Tipp, warum nicht und wie es von Hand geht. Läuft Kimboard schon als App, ist der Knopf weg.'],
     'hilfe-btn':  ['❓ Hilfe', 'Öffnet die Anleitung und den Schalter für diese Erklär-Blasen.'],
     // Fehlte, seit es den Schalter gibt — die Probe `smoke_hilfe` hat es
     // gemeldet („jedes sichtbare Bedien-Element hat eine Erklärung"). Der Text

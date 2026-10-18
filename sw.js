@@ -53,7 +53,7 @@
  */
 "use strict";
 
-var CACHE_VERSION = "kimboard-v100";
+var CACHE_VERSION = "kimboard-v101";
 
 
 /* ⚠ NUR EIGENE VORRAETE AUFRAEUMEN — `caches` gehoert dem URSPRUNG, nicht dem
@@ -81,6 +81,7 @@ var APP_SHELL = [
   "./assets/siegel-inhalt.js",
   "./assets/sbkim-andock-wizard.js",
   "./assets/hilfe.js",
+  "./assets/installieren.js",
   "./modules/noble-secp256k1.js",
   "./modules/dm_crypto.js",
   "./modules/echtheit.js",
