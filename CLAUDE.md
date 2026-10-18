@@ -228,6 +228,15 @@ korrekt `exit=1` zurück — hinter einer Pipe bekommst du den Rückgabewert von
   ein Fehler im Code, sondern jedes Mal eine Prüfung, die nie verlangt hatte,
   wovon sie handelte.
 
+## ⬇ Installieren-Knopf (2026-10-18, Klaus: „In jede App“)
+
+`assets/installieren.js` ist byte-1:1 aus Sage-Protokol (SHA-256 `e0644084…c3`) — nie hier abwandeln. Kimboard hat keine
+Einstellungen, also steht der Knopf in der Werkzeugleiste vor 🔄 (`data-vor="tb-reload"`); als installierte App verschwindet
+er. Er trägt eine id, also braucht er einen Eintrag in `assets/hilfe.js` (`smoke_hilfe` verlangt das). Im Vorrat ohne `?v=`,
+weil `npm test` die Pfade aus `APP_SHELL` als Dateien liest; Cache v101. Gemessen im Browser: sichtbar, als App weg, Meldung
+lesbar, `getInstallabilityErrors` leer, App-Id `/Kimboard/`, 360 px ohne Überlauf. `node tests/alle.mjs` 33 von 33 grün.
+Am Tablet nicht gemessen.
+
 ## Selbst-Merge-Freibrief
 
 Die Sitzung merget ihre **eigenen** PRs selbstständig nach `main`, sobald sie getestet,
